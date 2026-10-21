@@ -54,6 +54,8 @@ def test_extract_number_and_year() -> None:
     assert extract_number("Anayasa") is None
     assert extract_year("Aile Yasası", "34/2015") == 2015
     assert extract_year("1962 tarihli karar", None) == 1962
+    assert extract_year("Yargıtay Hukuk", "E.35/19085") is None
+    assert extract_year("Telekomünikasyon Yasası", "20/81988") is None
 
 
 def test_split_articles_removes_toc_and_keeps_body() -> None:

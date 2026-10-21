@@ -654,10 +654,11 @@ def extract_number(title: str) -> Optional[str]:
 
 def extract_year(title: str, number: Optional[str]) -> Optional[int]:
     if number and "/" in number:
-        try:
-            return int(number.split("/")[1])
-        except (ValueError, IndexError):
-            pass
+        year_part = number.rsplit("/", 1)[1].strip()
+        # Case numbers such as "E.35/19085" or typos like "20/81988" are not
+        # years; only accept a four-digit 19xx/20xx suffix.
+        if re.fullmatch(r"(?:19|20)\d{2}", year_part):
+            return int(year_part)
     match = re.search(r"\b(19|20)\d{2}\b", title or "")
     return int(match.group(0)) if match else None
 
