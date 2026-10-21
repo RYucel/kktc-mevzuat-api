@@ -1,0 +1,12 @@
+node_modules
+.git
+.github
+dist
+crawler
+data/catalog
+data/text
+data/raw
+data/*.log
+*.log
+__pycache__
+.venv

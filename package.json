@@ -1,0 +1,25 @@
+{
+  "name": "kktc-mevzuat-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "KKTC güncel yasa, tüzük ve mahkeme kararları için LLM-dostu arama API'si",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:node": "npm --workspace apps/node run dev",
+    "dev:worker": "npm --workspace apps/worker run dev",
+    "build": "npm --workspace apps/node run build",
+    "start": "npm --workspace apps/node run start",
+    "deploy:worker": "npm --workspace apps/worker run deploy",
+    "smoke": "node scripts/smoke.mjs",
+    "db:local": "npm --workspace apps/worker run db:local",
+    "typecheck": "npm --workspace packages/core run typecheck && npm --workspace apps/node run typecheck && npm --workspace apps/worker run typecheck"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

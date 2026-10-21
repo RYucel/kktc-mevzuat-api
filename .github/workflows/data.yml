@@ -1,0 +1,123 @@
+name: Refresh data
+
+on:
+  schedule:
+    # Her pazartesi 03:00 UTC
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      full_text:
+        description: "Mahkemeler yasa/tüzük PDF'lerini de indir (uzun sürer)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PYTHONIOENCODING: utf-8
+      KKTC_CONTACT: ${{ github.server_url }}/${{ github.repository }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: crawler/requirements.txt
+
+      - name: Install crawler dependencies
+        run: python -m pip install -r crawler/requirements.txt
+
+      - name: Restore text cache
+        uses: actions/cache@v4
+        with:
+          path: data/text
+          key: kktc-text-v3-${{ github.run_id }}
+          restore-keys: |
+            kktc-text-v3-
+
+      - name: Crawl catalogues
+        working-directory: crawler
+        run: python -m kktc crawl
+
+      - name: Download consolidated government texts
+        working-directory: crawler
+        run: python -m kktc fetch-text --source gov
+
+      - name: Download mahkemeler law texts
+        if: ${{ inputs.full_text == true }}
+        working-directory: crawler
+        run: python -m kktc fetch-text --source mahkemeler --type yasa
+
+      - name: Download mahkemeler regulation texts
+        if: ${{ inputs.full_text == true }}
+        working-directory: crawler
+        run: python -m kktc fetch-text --source mahkemeler --type tuzuk --min-year 2015
+
+      - name: Build SQLite + D1 export
+        working-directory: crawler
+        run: python -m kktc build
+
+      - uses: actions/setup-node@v4
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install Node dependencies
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        run: npm ci
+
+      - name: Point Wrangler at the D1 database
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          D1_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+        run: |
+          python - <<'PY'
+          import os, pathlib, re
+          path = pathlib.Path("apps/worker/wrangler.toml")
+          text = path.read_text(encoding="utf-8")
+          text = re.sub(r'database_id\s*=\s*"[^"]*"', f'database_id = "{os.environ["D1_ID"]}"', text)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Import schema and data into D1
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute kktc-mevzuat --remote --yes --file=dist/d1/001-schema.sql
+          npx wrangler d1 execute kktc-mevzuat --remote --yes --file=dist/d1/002-reset.sql
+          while IFS= read -r file; do
+            [[ -z "$file" || "$file" == \#* ]] && continue
+            [[ "$file" == "001-schema.sql" || "$file" == "002-reset.sql" ]] && continue
+            echo "::group::Import $file"
+            npx wrangler d1 execute kktc-mevzuat --remote --yes --file="dist/d1/$file"
+            echo "::endgroup::"
+          done < <(grep -vE '^\s*(#|$)' dist/d1/import-order.txt)
+
+      - name: Verify D1 counts
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        run: npx wrangler d1 execute kktc-mevzuat --remote --command "SELECT type, COUNT(*) AS n FROM documents GROUP BY type ORDER BY n DESC"
+
+      - name: Deploy Worker
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        run: npm --workspace apps/worker run deploy
+
+      - name: Warn when Cloudflare secrets are missing
+        if: ${{ env.CLOUDFLARE_API_TOKEN == '' }}
+        run: |
+          echo "::warning::CLOUDFLARE_API_TOKEN yok; veri üretildi ancak D1/Worker dağıtımı atlandı."
