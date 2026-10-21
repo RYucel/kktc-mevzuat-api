@@ -131,7 +131,9 @@ export const STATS_SQL = {
           FROM documents GROUP BY type ORDER BY documents DESC`,
   years: `SELECT year, COUNT(*) AS documents FROM documents
           WHERE year IS NOT NULL GROUP BY year ORDER BY year DESC LIMIT 30`,
-  sources: `SELECT source, COUNT(*) AS documents FROM documents GROUP BY source ORDER BY documents DESC`,
+  sources: `SELECT source, COUNT(*) AS documents,
+                   SUM(CASE WHEN text_status = 'full' THEN 1 ELSE 0 END) AS full_text
+            FROM documents GROUP BY source ORDER BY documents DESC`,
   status: `SELECT text_status, COUNT(*) AS documents FROM documents GROUP BY text_status`,
   latest: `SELECT type, MAX(date) AS latest_date FROM documents
            WHERE date IS NOT NULL GROUP BY type ORDER BY type`,

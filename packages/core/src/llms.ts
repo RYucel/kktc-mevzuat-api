@@ -17,6 +17,16 @@ function typeTable(stats: Record<string, unknown>): string {
     .join("\n");
 }
 
+function sourceCoverage(stats: Record<string, unknown>): string {
+  const rows = stats.by_source;
+  if (!Array.isArray(rows)) return "";
+  const gov = rows.find((entry) => (entry as Record<string, unknown>).source === "gov") as
+    | Record<string, unknown>
+    | undefined;
+  if (!gov) return "";
+  return `- Güncel birleştirilmiş metin (\`gov\`): ${num(gov.documents)} belge, ${num(gov.full_text)} tam metin`;
+}
+
 export function llmsText(origin: string, stats: Record<string, unknown>): string {
   const documents = num(stats.document_count);
   const chunks = num(stats.chunk_count);
@@ -51,6 +61,7 @@ Her JSON yanıtında \`_meta.hint\` ve \`_meta.docs\` alanları bu talimatlara g
 - İndekslenen karakter: **${chars}**
 
 ${typeTable(stats)}
+${sourceCoverage(stats)}
 
 Kaynaklar:
 - https://mevzuat.gov.ct.tr — Merkezi Mevzuat Dairesi, birleştirilmiş/güncel metinler (öncelikli)
