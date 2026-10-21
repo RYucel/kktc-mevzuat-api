@@ -63,6 +63,20 @@ _TOC_ENTRY_RE = re.compile(r"(?m)^[ \t]*(?:MADDE|Madde)[ \t]+\d{1,4}[A-Z]?\b[^\n
 _TITLE_NUM_RE = re.compile(
     r"(?m)^[ \t]*(?P<title>[A-ZÇĞİÖŞÜ][^\n]{1,80}?)[ \t]+(?P<num>\d{1,4})(?P<suf>[A-Z])?\.[ \t]+(?P<rest>[^\n]*)$"
 )
+# Heading + number where the body starts on the next (possibly blank) line:
+#   "Kısa İsim 1.\n\nBu Yasa ..."
+_TITLE_BARE_NUM_RE = re.compile(
+    r"(?m)^[ \t]*(?P<title>[A-ZÇĞİÖŞÜ][^\n]{1,80}?)[ \t]+(?P<num>\d{1,4})(?P<suf>[A-Z])?\.[ \t]*(?:\n[ \t]*)+(?=[A-ZÇĞİÖŞÜ(])"
+)
+# Heading printed with a full stop before the number ("Kısa isim. 1. ...").
+_TITLE_PERIOD_NUM_RE = re.compile(
+    r"(?m)^[ \t]*(?P<title>[A-ZÇĞİÖŞÜ][^\n.]{1,80}?)\.[ \t]+(?P<num>\d{1,4})(?P<suf>[A-Z])?\.[ \t]+(?P<rest>[A-ZÇĞİÖŞÜ(][^\n]*)$"
+)
+# PDF extraction may join the heading to the previous sentence:
+#   "... aşağıdaki Tüzüğü yapar: Kısa İsim 1. Bu Tüzük ..."
+_JOINED_TITLE_NUM_RE = re.compile(
+    r"(?m)(?:^|[.:;]\s+)(?P<title>[A-ZÇĞİÖŞÜ][^\n:;]{1,80}?)[ \t]+(?P<num>\d{1,4})(?P<suf>[A-Z])?\.[ \t]+(?P<rest>[A-ZÇĞİÖŞÜ(][^\n]*)$"
+)
 # Amendment footnotes printed between an article heading and its number, e.g.
 # "Hayvanın Tutsak Edilmesi 9(2).17/2025 383. ...".
 _TITLE_FOOTNOTE_SUFFIX_RE = re.compile(
@@ -80,7 +94,7 @@ _FOOTNOTE_NUM_RE = re.compile(
 # Some PDFs put the number alone on its line, with the heading above and the
 # body text below: "Yasaları Bilmemek\n7.\nYasaları bilmeme, ...".
 _BARE_NUM_RE = re.compile(
-    r"(?m)^[ \t]*(?P<num>\d{1,4})(?P<suf>[A-Z])?\.[ \t]*\n(?=[A-ZÇĞİÖŞÜ(])"
+    r"(?m)^[ \t]*(?P<num>\d{1,4})(?P<suf>[A-Z])?\.[ \t]*(?:\n[ \t]*)+(?=[A-ZÇĞİÖŞÜ(])"
 )
 _AMENDMENT_REF_RE = re.compile(r"^\s*\d{1,3}\s*/\s*\d{4}\b")
 _LAW_PREAMBLE_RE = re.compile(r"Kuzey Kıbrıs Türk Cumhuriyeti Cumhuriyet Meclisi", re.I)
@@ -342,6 +356,26 @@ def _article_candidates(text: str) -> list[dict]:
             continue
         add(m.start(), int(m.group("num")), m.group("suf") or "", title, 1)
 
+    for m in _TITLE_BARE_NUM_RE.finditer(text):
+        title = _TITLE_FOOTNOTE_SUFFIX_RE.sub("", m.group("title").strip()).strip()
+        if not _looks_like_title(title):
+            continue
+        add(m.start(), int(m.group("num")), m.group("suf") or "", title, 1)
+
+    for m in _TITLE_PERIOD_NUM_RE.finditer(text):
+        rest = (m.group("rest") or "").strip()
+        title = m.group("title").strip()
+        if _AMENDMENT_REF_RE.match(rest) or not _looks_like_title(title):
+            continue
+        add(m.start(), int(m.group("num")), m.group("suf") or "", title, 1)
+
+    for m in _JOINED_TITLE_NUM_RE.finditer(text):
+        rest = (m.group("rest") or "").strip()
+        title = m.group("title").strip()
+        if _AMENDMENT_REF_RE.match(rest) or not _looks_like_title(title):
+            continue
+        add(m.start("title"), int(m.group("num")), m.group("suf") or "", title, 1)
+
     for m in _NUM_RE.finditer(text):
         rest = (m.group("rest") or "").strip()
         if _AMENDMENT_REF_RE.match(rest):
@@ -552,6 +586,15 @@ def _strip_toc_run(text: str) -> str:
         return text
 
     removed_start = best[0][0]
+    # A TOC often starts with a bare-number entry ("1. Kısa İsim") before the
+    # first "Madde 2." line; include it so it does not become article 1.
+    window_start = max(0, removed_start - 300)
+    window = text[window_start:removed_start]
+    prior = list(
+        re.finditer(r"(?m)^[ \t]*\d{1,4}\.\s+[A-ZÇĞİÖŞÜ][^\n]{0,80}$", window)
+    )
+    if prior:
+        removed_start = window_start + prior[-1].start()
     tail_start = best[-1][1]
     candidates = _article_candidates(text[tail_start:])
     if not candidates:

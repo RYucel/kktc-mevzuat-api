@@ -157,6 +157,7 @@ Hayvanın Tutsak Edilmesi 9(2).17/2025 3. Yürürlükteki kurallar saklıdır.
 def test_split_articles_handles_number_alone_on_its_line() -> None:
     text = """Birinci Madde
 1.
+
 Birinci maddenin metni.
 
 İkinci Madde 2. İkinci maddenin metni.
@@ -165,6 +166,30 @@ Birinci maddenin metni.
     assert [c.ref for c in chunks] == ["Madde 1", "Madde 2"]
     assert chunks[0].text.startswith("Birinci Madde\n1.")
     assert "İkinci maddenin metni" not in chunks[0].text
+
+
+def test_split_articles_handles_heading_joined_to_preamble() -> None:
+    text = """Kuzey Kıbrıs Türk Cumhuriyeti Cumhuriyet Meclisi aşağıdaki Yasayı yapar: Kısa İsim 1. Bu Yasa Bilgi Yasası olarak isimlendirilir.
+
+Tefsir 2. Bu Yasa'da kullanılan terimler aşağıda tanımlanmıştır.
+
+Amaç 3. Bu Yasa bilgi edinme hakkını düzenler.
+"""
+    chunks = split_articles(clean_text(text))
+    assert [c.ref for c in chunks] == ["Madde 1", "Madde 2", "Madde 3"]
+    assert chunks[0].text.startswith("Kısa İsim 1. Bu Yasa Bilgi Yasası")
+
+
+def test_split_articles_handles_heading_with_period_and_blank_line() -> None:
+    text = """Kısa isim. 1. Bu Yasa Çocuklar Yasası olarak isimlendirilir.
+
+Yorum. 2. Bu Yasa'da geçen terimler aşağıda tanımlanmıştır.
+
+Amaç 3. Bu Yasa çocukların korunmasını düzenler.
+"""
+    chunks = split_articles(clean_text(text))
+    assert [c.ref for c in chunks] == ["Madde 1", "Madde 2", "Madde 3"]
+    assert chunks[0].text.startswith("Kısa isim. 1. Bu Yasa")
 
 
 def test_split_articles_returns_empty_for_plain_prose() -> None:
