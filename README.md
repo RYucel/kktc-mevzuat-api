@@ -72,7 +72,8 @@ Tek komutla güncelleme:
 
 ```bash
 cd crawler
-python -m kktc update            # crawl + fetch-text + build + export
+python -m kktc update            # crawl + yalnızca gov metinleri + build + export
+python -m kktc update --full-text  # mahkemeler yasa/tüzük PDF'lerini de indir (yavaş)
 python -m kktc stats             # kapsam raporu
 ```
 

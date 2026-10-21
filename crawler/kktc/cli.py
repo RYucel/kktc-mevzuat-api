@@ -149,7 +149,15 @@ def cmd_update(args: argparse.Namespace) -> None:
     cmd_crawl(crawl_args)
     if not args.no_text:
         text_args = argparse.Namespace(
-            type=None, source=None, limit=args.text_limit, after=0, force=False, min_year=0
+            type=None,
+            # Default refresh is gov-only: mevzuat.gov.ct.tr carries the
+            # consolidated, currently in-force texts. Mahkemeler PDFs are
+            # archived/scanned and take hours, so they are opt-in.
+            source="mahkemeler" if args.full_text else "gov",
+            limit=args.text_limit,
+            after=0,
+            force=False,
+            min_year=0,
         )
         cmd_fetch_text(text_args)
     build_args = argparse.Namespace(db=str(DB_PATH), out=str(DIST_DIR / "d1"), no_export=args.no_export)
@@ -203,6 +211,11 @@ def main(argv: list[str] | None = None) -> None:
 
     update = sub.add_parser("update", help="crawl, fetch text, build and export")
     update.add_argument("--text-limit", type=int, default=0)
+    update.add_argument(
+        "--full-text",
+        action="store_true",
+        help="also fetch mahkemeler yasa/tuzuk PDFs (slow; gov is the default)",
+    )
     update.add_argument("--no-text", action="store_true")
     update.add_argument("--no-export", action="store_true")
     update.set_defaults(func=cmd_update)
