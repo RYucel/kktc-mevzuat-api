@@ -3,6 +3,9 @@
 Kuzey Kıbrıs Türk Cumhuriyeti'nin **yürürlükteki yasaları, tüzükleri, anayasa metinleri ve
 mahkeme kararları** için anahtarsız, salt-okunur ve LLM-dostu bir arama API'si.
 
+**Canlı API:** <https://kktc-mevzuat-api.stevevaius.workers.dev><br>
+**LLM rehberi:** <https://kktc-mevzuat-api.stevevaius.workers.dev/llms.txt>
+
 - Türkçe diakritikten bağımsız tam metin arama (SQLite FTS5, `ı/i`, `ş/s`, `ğ/g`, `ü/u`, `ö/o`, `ç/c`)
 - Madde bazlı erişim: `GET /v1/documents/yasa-1-1998/articles/4`
 - LLM'ler için Markdown çıktısı, `llms.txt`, OpenAPI 3.1 ve MCP araçları
@@ -104,15 +107,18 @@ kurulu değilse belge künye + resmî dosya bağlantısıyla indekslenir (`text_
 
 ## API
 
-Canlı örnekler (yerel):
+Canlı API örnekleri:
 
 ```bash
-curl "http://localhost:8787/v1/search?q=nafaka&limit=5"
-curl "http://localhost:8787/v1/documents/yasa-1-1998?format=markdown"
-curl "http://localhost:8787/v1/documents/yasa-1-1998/articles/4"
-curl "http://localhost:8787/v1/recent?type=karar&limit=10"
-curl "http://localhost:8787/v1/stats"
+BASE=https://kktc-mevzuat-api.stevevaius.workers.dev
+curl "$BASE/v1/search?q=nafaka&limit=5"
+curl "$BASE/v1/documents/yasa-1-1998?format=markdown"
+curl "$BASE/v1/documents/yasa-1-1998/articles/4"
+curl "$BASE/v1/recent?type=karar&limit=10"
+curl "$BASE/v1/stats"
 ```
+
+Yerel geliştirmede adres `http://localhost:8787` olur.
 
 | Uç | Açıklama |
 | --- | --- |

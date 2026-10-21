@@ -9,4 +9,4 @@ enabled = true
 [[d1_databases]]
 binding = "DB"
 database_name = "kktc-mevzuat"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "315e78ee-3d0c-4736-8385-108e5c0d7358"
