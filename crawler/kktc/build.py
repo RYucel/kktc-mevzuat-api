@@ -107,6 +107,22 @@ def _unique_id(base: str, used: set[str], pkey: Any) -> str:
     return final
 
 
+def _valid_year(doc: dict[str, Any]) -> Optional[int]:
+    """Normalise the year; case numbers and source typos are not years."""
+    try:
+        year = int(doc.get("year"))
+    except (TypeError, ValueError):
+        year = None
+    if year is not None and 1800 <= year <= 2100:
+        return year
+    date = str(doc.get("date") or "")
+    if len(date) >= 4 and date[:4].isdigit():
+        candidate = int(date[:4])
+        if 1800 <= candidate <= 2100:
+            return candidate
+    return None
+
+
 def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[str, Any]:
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -149,7 +165,7 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
                 title,
                 normalize_title(title),
                 doc.get("number"),
-                doc.get("year"),
+                _valid_year(doc),
                 doc.get("date"),
                 doc.get("language") or "tr",
                 doc.get("source") or "gov",
