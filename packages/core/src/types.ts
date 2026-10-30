@@ -53,6 +53,7 @@ export interface SearchResult {
   date: string | null;
   source: string;
   court: string | null;
+  citation: string;
   matched_ref: string | null;
   matched_kind: string;
   snippet: string;
@@ -75,6 +76,7 @@ export interface DocumentSummary {
   pdf_url: string | null;
   court: string | null;
   chamber: string | null;
+  citation: string;
   parties: string | null;
   subject: string | null;
   summary: string | null;

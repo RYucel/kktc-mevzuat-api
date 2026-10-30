@@ -48,7 +48,8 @@ MCP: ${origin}/mcp (Streamable HTTP, POST)
    Sonuçlardaki \`snippet\`, \`matched_ref\` ve \`id\` alanlarını okuyun.
 2. **Tam metni alın.** \`/v1/documents/{id}?format=markdown\` ile belgenin tam metnini alın.
 3. **Tek maddeye gidin.** \`/v1/documents/{id}/articles/12\` (veya \`30A\`) ile ilgili maddeyi alın.
-4. **Atıf yapın.** Yanıtınızda belgenin \`title\`, \`number\`, \`date\` ve \`source_url\` alanlarını belirtin.
+4. **Atıf yapın.** Her sonuçtaki hazır \`citation\` alanını aynen kullanın (ör. mahkeme, E./D. no, tarih);
+   künyeyi kendiniz oluşturmayın. Yanına \`source_url\` bağlantısını ekleyin.
 5. **Emin değilseniz arayın.** Metinde olmayan bir hüküm uydurmayın; \`text_status\` değeri
    \`metadata\` ise tam metin indekslenmemiştir, yalnızca künye ve resmî PDF bağlantısı vardır.
 
@@ -87,7 +88,7 @@ Parametreler:
 - \`type\`: ${DOC_TYPES.map((type) => `\`${type}\``).join(", ")}.
 - \`year\`: 4 haneli yıl (ör. 1998).
 - \`source\`: \`gov\` (güncel birleştirilmiş metin; yasa/tüzükte tercih edin) veya \`mahkemeler\`.
-- \`court\`: mahkeme adı (ör. \`Yüksek Mahkeme\`).
+- \`court\`: mahkeme adı içinde geçen ifade (ör. \`Yargıtay\`); \`GET /v1/stats\` → \`courts\` listesinde tüm adlar var.
 - \`limit\`: 1–50 (varsayılan 10).
 - \`offset\`: 0–1000 (varsayılan 0).
 
@@ -194,7 +195,10 @@ Sunucu: \`${origin}/mcp\` — Streamable HTTP, \`POST\` JSON-RPC 2.0.
 \`\`\`
 
 Araçlar:
-- \`search_mevzuat\` — \`{ query, type?, year?, mode?, limit?, offset? }\`
+- \`search_mevzuat\` — \`{ query, type?, year?, source?, court?, mode?, limit?, offset? }\`
+- \`ictihat_ara\` — \`{ ifade, mahkeme?, yil?, mod?, adet?, sayfa? }\` — yalnız mahkeme kararları; sonuçlarda hazır \`citation\`
+- \`karar_getir\` — \`{ id }\` — kararın künyesi, atfı ve tam metni (Markdown)
+- \`list_courts\` — \`{}\` — mahkemeler, karar sayıları, yıl aralığı
 - \`get_document\` — \`{ id, format? }\`
 - \`get_article\` — \`{ id, ref }\`
 - \`list_document_articles\` — \`{ id }\`
