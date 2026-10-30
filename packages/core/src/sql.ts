@@ -11,7 +11,7 @@ const FILTER_TYPES: Record<string, string> = {
   type: "d.type = ?",
   year: "d.year = ?",
   source: "d.source = ?",
-  court: "d.court = ?",
+  court: "d.court LIKE ?",
 };
 
 function filters(params: SearchParams): { sql: string[]; binds: unknown[] } {
@@ -31,7 +31,7 @@ function filters(params: SearchParams): { sql: string[]; binds: unknown[] } {
   }
   if (params.court) {
     sql.push(FILTER_TYPES.court);
-    binds.push(params.court);
+    binds.push(`%${params.court}%`);
   }
   return { sql, binds };
 }
@@ -138,4 +138,7 @@ export const STATS_SQL = {
   latest: `SELECT type, MAX(date) AS latest_date FROM documents
            WHERE date IS NOT NULL GROUP BY type ORDER BY type`,
   meta: `SELECT key, value FROM meta`,
+  courts: `SELECT court, COUNT(*) AS documents, MIN(year) AS first_year, MAX(year) AS last_year,
+                  SUM(CASE WHEN text_status = 'full' THEN 1 ELSE 0 END) AS full_text
+           FROM documents WHERE type = 'karar' GROUP BY court ORDER BY documents DESC`,
 };

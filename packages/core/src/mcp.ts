@@ -42,12 +42,51 @@ const TOOLS = [
           enum: ["yasa", "tuzuk", "karar", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"],
         },
         year: { type: "integer", minimum: 1900, maximum: 2100 },
+        source: { type: "string", enum: ["gov", "mahkemeler"], description: "gov = güncel birleştirilmiş resmî metin." },
+        court: { type: "string", description: "Mahkeme adı içinde geçen ifade (yalnız kararlar)." },
         mode: { type: "string", enum: ["all", "any", "phrase"] },
         limit: { type: "integer", minimum: 1, maximum: 50 },
         offset: { type: "integer", minimum: 0, maximum: 1000 },
       },
       required: ["query"],
     },
+  },
+  {
+    name: "ictihat_ara",
+    description:
+      "Yalnızca KKTC mahkeme kararlarında (içtihat) arama yapar. Her sonuç hazır bir `citation` " +
+      "(atıf) taşır; karara atıf yaparken künyeyi kendin oluşturma, bu alanı aynen kullan. " +
+      "Mahkeme adlarını görmek için list_courts çağır. Tam metin için karar_getir.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ifade: { type: "string", description: "Aranacak sözcükler; tırnak içinde tam ifade." },
+        mahkeme: {
+          type: "string",
+          description: "Mahkeme adı içinde geçen ifade, ör. 'Yargıtay', 'Anayasa', 'İdare'. Boş = tümü.",
+        },
+        yil: { type: "integer", minimum: 1900, maximum: 2100 },
+        mod: { type: "string", enum: ["all", "any", "phrase"] },
+        adet: { type: "integer", minimum: 1, maximum: 50 },
+        sayfa: { type: "integer", minimum: 1, maximum: 50, description: "1'den başlar." },
+      },
+      required: ["ifade"],
+    },
+  },
+  {
+    name: "karar_getir",
+    description:
+      "Bir mahkeme kararının künyesini, hazır atfını ve resmî tam metnini Markdown olarak getirir.",
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string", description: "ictihat_ara sonucundaki id, ör. karar-e-5-1990-17712." } },
+      required: ["id"],
+    },
+  },
+  {
+    name: "list_courts",
+    description: "Veritabanındaki mahkemeleri karar sayısı ve yıl aralığıyla listeler.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "get_document",
@@ -150,10 +189,46 @@ async function callTool(
         mode: (strArg(args, "mode") as SearchParams["mode"]) ?? "all",
         type: strArg(args, "type"),
         year: intArg(args, "year"),
+        source: strArg(args, "source"),
+        court: strArg(args, "court"),
         limit: Math.min(50, Math.max(1, intArg(args, "limit", 10) ?? 10)),
         offset: Math.min(1000, Math.max(0, intArg(args, "offset", 0) ?? 0)),
       };
       return textResult(await searchDocuments(store, params, origin));
+    }
+    case "ictihat_ara": {
+      const query = strArg(args, "ifade") ?? strArg(args, "query") ?? "";
+      if (!query.trim()) throw new ApiError(400, "missing_query", "ifade zorunludur.");
+      const limit = Math.min(50, Math.max(1, intArg(args, "adet", 10) ?? 10));
+      const page = Math.min(50, Math.max(1, intArg(args, "sayfa", 1) ?? 1));
+      const response = await searchDocuments(
+        store,
+        {
+          q: query,
+          mode: (strArg(args, "mod") as SearchParams["mode"]) ?? "all",
+          type: "karar",
+          year: intArg(args, "yil"),
+          court: strArg(args, "mahkeme") || undefined,
+          limit,
+          offset: Math.min(1000, (page - 1) * limit),
+        },
+        origin,
+      );
+      return textResult(response);
+    }
+    case "karar_getir": {
+      const id = strArg(args, "id");
+      if (!id) throw new ApiError(400, "missing_id", "id zorunludur.");
+      const response = await getDocument(store, id, origin);
+      if (!response) throw new ApiError(404, "document_not_found", `Karar bulunamadı: ${id}`);
+      if (response.document.type !== "karar") {
+        throw new ApiError(400, "not_a_decision", `${id} bir mahkeme kararı değil; get_document kullanın.`);
+      }
+      return textResult(documentMarkdown(response.document, origin), false);
+    }
+    case "list_courts": {
+      const stats = await getStats(store, origin);
+      return textResult({ courts: stats.stats.courts });
     }
     case "get_document": {
       const id = strArg(args, "id");
@@ -207,10 +282,12 @@ async function handleOne(
         return rpcResult(id, {
           protocolVersion: supported.includes(requested) ? requested : PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "kktc-mevzuat", version: "1.0.0" },
+          serverInfo: { name: "kktc-mevzuat", version: "1.1.0" },
           instructions:
-            "KKTC güncel mevzuatı. Önce search_mevzuat ile arayın; sonuç id'siyle get_document " +
-            "veya get_article çağırın. Yanıtlarda source_url verin; bağlayıcı metin resmî kaynaktır. " +
+            "KKTC güncel mevzuatı ve içtihadı. Mevzuat için search_mevzuat, mahkeme kararları için " +
+            "ictihat_ara kullanın; sonuç id'siyle get_document/get_article veya karar_getir çağırın. " +
+            "Atıf yaparken sonuçtaki citation alanını aynen kullanın, künye uydurmayın. " +
+            "Yanıtlarda source_url verin; bağlayıcı metin resmî kaynaktır. " +
             "Tam talimatlar: " + origin + "/llms.txt",
         });
       }

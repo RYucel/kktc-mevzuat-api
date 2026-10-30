@@ -8,6 +8,7 @@ import {
   recentSql,
   STATS_SQL,
 } from "./sql.js";
+import { buildCitation } from "./citation.js";
 import { baseArticleRef, buildMatch, makeSnippet, normalizeArticleRef, truncate } from "./text.js";
 import {
   type ApiMeta,
@@ -63,7 +64,8 @@ function parseJson(value: unknown): unknown {
 
 export function mapSummary(row: StoreRow, origin: string): DocumentSummary {
   const id = String(row.id);
-  return {
+  const extra = parseJson(row.extra_json);
+  const summary = {
     id,
     type: String(row.type),
     subtype: asString(row.subtype),
@@ -84,10 +86,11 @@ export function mapSummary(row: StoreRow, origin: string): DocumentSummary {
     chunk_count: Number(row.chunk_count ?? 0),
     text_status: String(row.text_status ?? "metadata"),
     updated_at: asString(row.updated_at),
-    extra: parseJson(row.extra_json),
+    extra,
     sources: parseJson(row.sources_json),
     url: `${origin}/v1/documents/${encodeURIComponent(id)}`,
   };
+  return { ...summary, citation: buildCitation(summary) };
 }
 
 export async function searchDocuments(
@@ -129,6 +132,7 @@ export async function searchDocuments(
       date: summary.date,
       source: summary.source,
       court: summary.court,
+      citation: summary.citation,
       matched_ref: asString(row.matched_ref),
       matched_kind: String(row.matched_kind ?? ""),
       snippet: makeSnippet(String(row.chunk_text ?? ""), params.q),
@@ -279,13 +283,14 @@ export async function listRecent(
 }
 
 export async function getStats(store: Store, origin: string): Promise<StatsResponse> {
-  const [metaRows, types, years, sources, status, latest] = await Promise.all([
+  const [metaRows, types, years, sources, status, latest, courts] = await Promise.all([
     store.all(STATS_SQL.meta),
     store.all(STATS_SQL.types),
     store.all(STATS_SQL.years),
     store.all(STATS_SQL.sources),
     store.all(STATS_SQL.status),
     store.all(STATS_SQL.latest),
+    store.all(STATS_SQL.courts),
   ]);
   const meta: Record<string, unknown> = {};
   for (const row of metaRows) {
@@ -303,6 +308,7 @@ export async function getStats(store: Store, origin: string): Promise<StatsRespo
       by_source: sources,
       text_status: status,
       latest_by_type: latest,
+      courts,
       type_labels: TYPE_LABELS,
     },
     _meta: apiMeta(origin),
@@ -312,6 +318,7 @@ export async function getStats(store: Store, origin: string): Promise<StatsRespo
 export function documentMarkdown(doc: DocumentDetail, origin: string): string {
   const label = TYPE_LABELS[doc.type] ?? doc.type;
   const lines = [`# ${doc.title}`, ""];
+  lines.push(`- **Atıf:** ${doc.citation}`);
   lines.push(`- **Tür:** ${label}`);
   if (doc.number) lines.push(`- **Sayı:** ${doc.number}`);
   if (doc.date) lines.push(`- **Tarih:** ${doc.date}`);
