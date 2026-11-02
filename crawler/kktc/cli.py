@@ -99,7 +99,7 @@ def cmd_fetch_text(args: argparse.Namespace) -> None:
             break
         checked += 1
         client = gov_client if "gov.ct.tr" in url else mah_client
-        payload = fetch_text_for(doc, client, force=args.force)
+        payload = fetch_text_for(doc, client, force=args.force, revalidate=getattr(args, "revalidate", False))
         if payload.get("text"):
             done += 1
             log.info(
@@ -173,6 +173,7 @@ def cmd_update(args: argparse.Namespace) -> None:
             after=0,
             force=False,
             min_year=0,
+            revalidate=not args.full_text,
         )
         cmd_fetch_text(text_args)
     build_args = argparse.Namespace(db=str(DB_PATH), out=str(DIST_DIR / "d1"), no_export=args.no_export, history=str(HISTORY_PATH), no_history=False)
@@ -211,6 +212,11 @@ def main(argv: list[str] | None = None) -> None:
         help="only fetch documents from this year onwards (older PDFs are often scans)",
     )
     text.add_argument("--force", action="store_true")
+    text.add_argument(
+        "--revalidate",
+        action="store_true",
+        help="HEAD cached files and re-download those changed on the server (same name, new content)",
+    )
     text.set_defaults(func=cmd_fetch_text)
 
     build = sub.add_parser("build", help="build the SQLite FTS database")

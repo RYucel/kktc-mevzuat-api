@@ -67,7 +67,7 @@ jobs:
 
       - name: Download consolidated government texts
         working-directory: crawler
-        run: python -m kktc fetch-text --source gov
+        run: python -m kktc fetch-text --source gov --revalidate
 
       - name: Download mahkemeler law texts
         if: ${{ inputs.full_text == true }}

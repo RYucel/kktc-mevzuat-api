@@ -486,11 +486,54 @@ def _extract_legacy_doc(url: str, data: bytes) -> dict[str, Any]:
     return {"status": "unsupported", "method": None, "text": ""}
 
 
+# HTTP validators compared on revalidation, strongest first.
+_VALIDATORS = ("etag", "last-modified", "content-length")
+
+
+def _validators(headers: Any) -> dict[str, str]:
+    return {key: str(headers.get(key)) for key in _VALIDATORS if headers.get(key)}
+
+
+def validators_changed(old: dict[str, str], new: dict[str, str]) -> bool:
+    """True when the strongest validator both responses carry differs."""
+    for key in _VALIDATORS:
+        if old.get(key) and new.get(key):
+            return old[key] != new[key]
+    return False
+
+
+def _revalidate(url: str, cached: dict[str, Any], client: HttpClient) -> bool:
+    """HEAD the file; True when it changed since the cached copy was made.
+
+    mevzuat.gov.ct.tr normally puts the consolidation date in the file name, so
+    an amendment arrives under a new URL. This catches the case where a file is
+    replaced under the same name. A cache entry without validators (made before
+    revalidation existed) only records them; it is compared from the next run.
+    """
+    try:
+        response = client.request("HEAD", url, allow_redirects=True)
+    except Exception as exc:  # pragma: no cover - network failures
+        log.warning("revalidate failed for %s: %s; keeping cached text", url, exc)
+        return False
+    current = _validators(response.headers)
+    previous = cached.get("validators")
+    if not previous:
+        if current:
+            cached["validators"] = current
+            _write_text_cache(url, cached)
+        return False
+    if validators_changed(previous, current):
+        log.info("changed on server: %s (%s -> %s)", url, previous, current)
+        return True
+    return False
+
+
 def fetch_text_for(
     doc: dict[str, Any],
     client: HttpClient,
     *,
     force: bool = False,
+    revalidate: bool = False,
     max_bytes: int = 80 * 1024 * 1024,
 ) -> dict[str, Any]:
     url = doc.get("pdf_url") or doc.get("source_url") or ""
@@ -499,7 +542,8 @@ def fetch_text_for(
     if not force:
         cached = _read_text_cache(url)
         if cached is not None:
-            return cached
+            if not (revalidate and cached.get("text") and _revalidate(url, cached, client)):
+                return cached
     try:
         response = client.get(url)
         if len(response.content) > max_bytes:
@@ -507,6 +551,9 @@ def fetch_text_for(
         else:
             payload = extract_document_text(url, response.content)
             payload["bytes"] = len(response.content)
+        validators = _validators(response.headers)
+        if validators:
+            payload["validators"] = validators
         _write_text_cache(url, payload)
         return payload
     except Exception as exc:  # pragma: no cover - network failures
