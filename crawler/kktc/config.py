@@ -27,6 +27,9 @@ CONTACT = os.getenv("KKTC_CONTACT", "https://github.com/kktc-mevzuat/kktc-mevzua
 
 REQUEST_DELAY = float(os.getenv("KKTC_REQUEST_DELAY", "1.0"))
 TIMEOUT = float(os.getenv("KKTC_TIMEOUT", "90"))
+# mevzuat.gov.ct.tr renders its DNN listing pages slowly: about 60 s from a US
+# server and over 110 s from Cyprus on 2026-11-02, so 90 s timed out in CI
+GOV_TIMEOUT = float(os.getenv("KKTC_GOV_TIMEOUT", "240"))
 MAX_RETRIES = int(os.getenv("KKTC_MAX_RETRIES", "3"))
 
 # Public "login without registration" guest account published by the site's

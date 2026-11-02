@@ -35,8 +35,10 @@ class FetchError(RuntimeError):
 
 
 class HttpClient:
-    def __init__(self, base_url: str, *, verify: bool = True, delay: float = REQUEST_DELAY):
+    def __init__(self, base_url: str, *, verify: bool = True, delay: float = REQUEST_DELAY,
+                 timeout: float = TIMEOUT):
         self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
         self.verify = verify
         self.delay = delay
         self.session = requests.Session()
@@ -61,7 +63,7 @@ class HttpClient:
     def request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
         if not url.startswith("http"):
             url = f"{self.base_url}/{url.lstrip('/')}"
-        kwargs.setdefault("timeout", TIMEOUT)
+        kwargs.setdefault("timeout", self.timeout)
         kwargs.setdefault("verify", self.verify)
         last_error: Optional[Exception] = None
         for attempt in range(MAX_RETRIES + 1):

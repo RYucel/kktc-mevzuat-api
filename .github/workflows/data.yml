@@ -49,6 +49,16 @@ jobs:
           restore-keys: |
             kktc-text-v3-
 
+      # The last good catalogues stand in when a source site does not answer
+      # (mevzuat.gov.ct.tr timed out on 2026-11-02); see cmd_crawl
+      - name: Restore catalogue cache
+        uses: actions/cache@v4
+        with:
+          path: data/catalog
+          key: kktc-catalog-v1-${{ github.run_id }}
+          restore-keys: |
+            kktc-catalog-v1-
+
       - name: Crawl catalogues
         working-directory: crawler
         run: python -m kktc crawl

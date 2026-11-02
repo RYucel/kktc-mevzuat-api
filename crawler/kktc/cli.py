@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from .build import build_database, export_d1, read_stats
-from .config import DB_PATH, DIST_DIR, MAHKEMELER_BASE, GOV_BASE, ensure_dirs
-from .http import HttpClient, MahkemelerClient
+from .config import DB_PATH, DIST_DIR, MAHKEMELER_BASE, GOV_BASE, GOV_TIMEOUT, ensure_dirs
+from .http import FetchError, HttpClient, MahkemelerClient
 from .sources import (
     ACTIVE_GOV_CATEGORIES,
     _read_text_cache,
@@ -51,9 +51,16 @@ def cmd_crawl(args: argparse.Namespace) -> None:
     ensure_dirs()
     sources = args.source
     if sources in ("all", "gov"):
-        client = HttpClient(GOV_BASE, verify=False)
-        docs = crawl_gov(client)
-        save_catalog("gov", docs)
+        client = HttpClient(GOV_BASE, verify=False, timeout=GOV_TIMEOUT)
+        try:
+            save_catalog("gov", crawl_gov(client))
+        except FetchError as exc:
+            # A build without gov documents would reset D1 to a partial corpus, so
+            # only a previous catalog (restored from the CI cache) may stand in
+            previous = load_catalog("gov")
+            if not previous:
+                raise
+            log.warning("gov site unavailable (%s); keeping the previous catalog of %d documents", exc, len(previous))
     if sources in ("all", "mahkemeler"):
         client = MahkemelerClient(MAHKEMELER_BASE)
         if args.only in ("all", "yasa"):
@@ -68,7 +75,7 @@ def cmd_fetch_text(args: argparse.Namespace) -> None:
     ensure_dirs()
     docs = merge_documents(_catalogs())
     types = set(args.type.split(",")) if args.type else None
-    gov_client = HttpClient(GOV_BASE, verify=False)
+    gov_client = HttpClient(GOV_BASE, verify=False, timeout=GOV_TIMEOUT)
     mah_client = MahkemelerClient(MAHKEMELER_BASE)
     done = 0
     checked = 0

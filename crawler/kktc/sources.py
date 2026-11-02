@@ -21,6 +21,7 @@ from .config import (
     CATALOG_DIR,
     GOV_BASE,
     GOV_CATEGORIES,
+    GOV_TIMEOUT,
     MAHKEMELER_BASE,
     RAW_DIR,
     TEXT_DIR,
@@ -109,7 +110,7 @@ def _source_date_from_filename(url: str) -> Optional[str]:
 
 
 def crawl_gov(client: Optional[HttpClient] = None, *, categories: Iterable[str] = ACTIVE_GOV_CATEGORIES) -> list[dict[str, Any]]:
-    client = client or HttpClient(GOV_BASE, verify=False)
+    client = client or HttpClient(GOV_BASE, verify=False, timeout=GOV_TIMEOUT)
     docs: list[dict[str, Any]] = []
     for category in categories:
         url = GOV_BASE + urllib.parse.quote(GOV_CATEGORY_URLS[category])
