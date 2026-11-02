@@ -12,7 +12,8 @@ on:
         default: false
 
 permissions:
-  contents: read
+  # write: history.db is kept as an asset of the "history" release
+  contents: write
 
 concurrency:
   group: data-refresh
@@ -27,6 +28,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       PYTHONIOENCODING: utf-8
+      GH_TOKEN: ${{ github.token }}
       KKTC_CONTACT: ${{ github.server_url }}/${{ github.repository }}
 
     steps:
@@ -77,9 +79,38 @@ jobs:
         working-directory: crawler
         run: python -m kktc fetch-text --source mahkemeler --type tuzuk --min-year 2015
 
+      # Version history is the only state that must survive between runs. It
+      # lives as an asset of the "history" release (not the cache, which can be
+      # evicted). If the asset exists but cannot be downloaded the job stops,
+      # so an empty history never overwrites the real one.
+      - name: Restore version history
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          if gh release view history --json assets --jq '.assets[].name' 2>/dev/null | grep -qx history.db; then
+            gh release download history --pattern history.db --dir data --clobber
+            cp data/history.db data/history-prev.db
+            echo "history.db restored ($(du -h data/history.db | cut -f1))"
+          else
+            echo "::notice::history.db bulunamadı; bu çalıştırma sürüm takibinin başlangıcı (baseline) olacak."
+          fi
+
       - name: Build SQLite + D1 export
         working-directory: crawler
         run: python -m kktc build
+
+      - name: Save version history
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view history >/dev/null 2>&1; then
+            gh release create history --title "Sürüm geçmişi (history.db)" --latest=false \
+              --notes "Mevzuat sürüm geçmişi. Veri yenileme iş akışı her çalıştırmada history.db dosyasını günceller; history-prev.db bir önceki kopyadır. Elle silmeyin."
+          fi
+          files=(data/history.db)
+          [[ -f data/history-prev.db ]] && files+=(data/history-prev.db)
+          gh release upload history "${files[@]}" --clobber
 
       - uses: actions/setup-node@v4
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}

@@ -246,6 +246,16 @@ npm run smoke
 - `.github/workflows/data.yml` — haftalık kazıma, D1'e aktarım ve Worker dağıtımı
   (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID` secret'ları gerekir).
 
+## Sürüm geçmişi
+
+Her build, güncel birleştirilmiş metinleri (`source=gov`) `data/history.db` içindeki son sürümle karşılaştırır. Metin değişmişse yeni sürüm saklanır; fark madde madde (eklenen / kaldırılan / değişen) ve değişen maddelerin içinde kelime bazında kaydedilir.
+
+- Takip ilk build ile başlar; o çalıştırma yalnızca başlangıç sürümünü (baseline) kaydeder. Öncesindeki değişiklikler bilinmez.
+- Bir çalıştırmada kaynağı alınamayan belgeler değişiklik sayılmaz; öncekinin %40'ından kısa çıkan metinler bozuk çıkarım kabul edilip atlanır.
+- `history.db` build'ler arasında korunması gereken tek durumdur. GitHub Actions'ta `history` adlı release'in eki olarak saklanır (`history-prev.db` bir önceki kopyadır). Yerelde `data/history.db` dosyasını silmeyin.
+- `python -m kktc build --no-history` yeni sürüm kaydetmeden derler.
+- Saptanma tarihi değişikliğin kaynakta görüldüğü haftadır, yürürlük tarihi değildir.
+
 ## Sınırlamalar
 
 - Taranmış (OCR gerektiren) PDF'lerde metin eksik olabilir; `text_status` alanına bakın.

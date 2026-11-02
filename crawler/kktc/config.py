@@ -12,6 +12,8 @@ RAW_DIR = DATA_DIR / "raw"
 TEXT_DIR = DATA_DIR / "text"
 DIST_DIR = ROOT / "dist"
 DB_PATH = Path(os.getenv("KKTC_DB_PATH", DATA_DIR / "kktc.db"))
+# Persistent version history; the only state that must survive between builds.
+HISTORY_PATH = Path(os.getenv("KKTC_HISTORY_PATH", DATA_DIR / "history.db"))
 
 GOV_BASE = "https://mevzuat.gov.ct.tr"
 MAHKEMELER_BASE = "https://mevzuat.mahkemeler.net"

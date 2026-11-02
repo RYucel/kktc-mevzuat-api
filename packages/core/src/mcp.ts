@@ -10,6 +10,7 @@ import {
   searchDocuments,
 } from "./operations.js";
 import type { SearchParams, Store } from "./types.js";
+import { changesMarkdown, getDocumentChanges, listChanges } from "./changes.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
 
@@ -87,6 +88,34 @@ const TOOLS = [
     name: "list_courts",
     description: "Veritabanındaki mahkemeleri karar sayısı ve yıl aralığıyla listeler.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "son_degisiklikler",
+    description:
+      "Güncel birleştirilmiş mevzuatta saptanan son değişiklikleri listeler (hangi yasanın hangi " +
+      "maddeleri eklendi/değişti/kaldırıldı). Takip başlangıcından öncesi kayıtlı değildir.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: { type: "string", description: "YYYY-AA-GG; bu tarihten sonra saptananlar." },
+        type: { type: "string", enum: ["yasa", "tuzuk", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"] },
+        limit: { type: "integer", minimum: 1, maximum: 200 },
+      },
+    },
+  },
+  {
+    name: "degisiklikleri_getir",
+    description:
+      "Bir yasa/tüzüğün sürüm geçmişini getirir: her değişen maddenin önceki ve yeni metni. " +
+      "Bir maddenin güncel olup olmadığını ya da yakın zamanda değişip değişmediğini sorarken kullanın.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Belge id, ör. yasa-1-1998." },
+        version: { type: "integer", minimum: 2, description: "Yalnız bu sürüme geçişteki değişiklikler." },
+      },
+      required: ["id"],
+    },
   },
   {
     name: "get_document",
@@ -230,6 +259,26 @@ async function callTool(
       const stats = await getStats(store, origin);
       return textResult({ courts: stats.stats.courts });
     }
+    case "son_degisiklikler": {
+      return textResult(
+        await listChanges(
+          store,
+          {
+            since: strArg(args, "since"),
+            type: strArg(args, "type"),
+            limit: Math.min(200, Math.max(1, intArg(args, "limit", 30) ?? 30)),
+          },
+          origin,
+        ),
+      );
+    }
+    case "degisiklikleri_getir": {
+      const id = strArg(args, "id");
+      if (!id) throw new ApiError(400, "missing_id", "id zorunludur.");
+      const response = await getDocumentChanges(store, id, origin, intArg(args, "version"));
+      if (!response) throw new ApiError(404, "document_not_found", `Belge bulunamadı: ${id}`);
+      return textResult(changesMarkdown(response), false);
+    }
     case "get_document": {
       const id = strArg(args, "id");
       if (!id) throw new ApiError(400, "missing_id", "id zorunludur.");
@@ -282,11 +331,12 @@ async function handleOne(
         return rpcResult(id, {
           protocolVersion: supported.includes(requested) ? requested : PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "kktc-mevzuat", version: "1.1.0" },
+          serverInfo: { name: "kktc-mevzuat", version: "1.2.0" },
           instructions:
             "KKTC güncel mevzuatı ve içtihadı. Mevzuat için search_mevzuat, mahkeme kararları için " +
             "ictihat_ara kullanın; sonuç id'siyle get_document/get_article veya karar_getir çağırın. " +
             "Atıf yaparken sonuçtaki citation alanını aynen kullanın, künye uydurmayın. " +
+            "Bir maddenin yakın zamanda değişip değişmediği için degisiklikleri_getir kullanın. " +
             "Yanıtlarda source_url verin; bağlayıcı metin resmî kaynaktır. " +
             "Tam talimatlar: " + origin + "/llms.txt",
         });
