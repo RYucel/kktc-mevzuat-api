@@ -177,8 +177,12 @@ jobs:
             echo "::endgroup::"
           done < <(grep -vE '^\s*(#|$)' dist/d1/import-order.txt)
 
+      # Informational only. It reads D1, so on a day the free-tier read quota is
+      # already used up it fails; that must not stop the Worker deploy and the
+      # vector index steps below (2026-11-03).
       - name: Verify D1 counts
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        continue-on-error: true
         run: npx wrangler d1 execute kktc-mevzuat --remote --command "SELECT type, COUNT(*) AS n FROM documents GROUP BY type ORDER BY n DESC"
 
       # The Worker binds a Vectorize index for semantic search. Create it on
