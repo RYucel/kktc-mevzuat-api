@@ -147,6 +147,10 @@ Yerel geliştirmede adres `http://localhost:8787` olur.
 | `GET /openapi.json` | OpenAPI 3.1 |
 | `POST /mcp` | MCP Streamable HTTP (JSON-RPC 2.0) |
 
+> D1 ücretsiz katmanının günlük satır okuma sınırı dolarsa API `503 d1_quota_exceeded`
+> döner ve `retry_at` alanında kotanın sıfırlanacağı zamanı (00:00 UTC) bildirir.
+> `/v1/search`, `/v1/answer` ve `/v1/stats` yanıtları 120 saniye edge cache'lenir.
+
 Her JSON yanıtında şu alan bulunur:
 
 ```json

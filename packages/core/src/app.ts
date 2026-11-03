@@ -80,6 +80,30 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
 
   app.use("*", cors({ origin: "*", allowMethods: ["GET", "POST", "OPTIONS"], allowHeaders: ["Content-Type", "Accept", "Mcp-Session-Id"] }));
 
+  // Cache the read-heavy endpoints at the edge. This keeps repeated LLM/tool
+  // calls from consuming D1 row reads; it is a no-op on the Node target.
+  const cacheable = new Set(["/v1/search", "/v1/answer", "/v1/stats"]);
+  app.use("*", async (c, next) => {
+    if (c.req.method !== "GET" || !cacheable.has(new URL(c.req.url).pathname)) {
+      return next();
+    }
+    const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
+    if (!cache) return next();
+    const key = new Request(c.req.url, { method: "GET" });
+    const hit = await cache.match(key);
+    if (hit) return hit;
+    await next();
+    if (c.res.status === 200) {
+      c.header("cache-control", "public, max-age=120");
+      try {
+        c.executionCtx.waitUntil(cache.put(key, c.res.clone()));
+      } catch {
+        // Node/Hono adapters without an execution context.
+      }
+    }
+    return;
+  });
+
   app.get("/health", (c) =>
     c.json({ status: "ok", runtime, time: new Date().toISOString() }),
   );
@@ -351,6 +375,24 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
           _meta: apiMeta(requestOrigin(c)),
         },
         err.status as 400,
+      );
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    if (/daily row read limit|exceeded D1/i.test(message)) {
+      const retry = new Date();
+      retry.setUTCHours(24, 0, 0, 0);
+      return c.json(
+        {
+          error: {
+            code: "d1_quota_exceeded",
+            message:
+              "D1 ücretsiz katmanının günlük satır okuma sınırı doldu. " +
+              "Kota 00:00 UTC'de sıfırlanır; bu süre içinde arama yapılamaz.",
+            retry_at: retry.toISOString(),
+          },
+          _meta: apiMeta(requestOrigin(c)),
+        },
+        503,
       );
     }
     console.error(err);
