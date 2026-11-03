@@ -10,7 +10,8 @@ değişiklikleri izlemesi için tasarlandı. Her JSON yanıtında `_meta.hint`, 
 KKTC mevzuatı sorularında önce https://<alan-adı>/llms.txt adresini oku.
 Arama için GET /v1/search?q=..., tam metin için GET /v1/documents/{id}?format=markdown,
 tek madde için GET /v1/documents/{id}/articles/{ref} kullan.
-Yasa ve tüzüklerde source=gov olan birleştirilmiş güncel metni tercih et; mahkemeler kaydı arşivdir.
+Yasa ve tüzüklerde önce source=gov olan birleştirilmiş metni ara; yoksa mahkemeler
+kaynağındaki birleştirilmiş metni kullan ve consolidated_through alanına bak.
 Atıf için sonuçtaki citation alanını aynen kullan; mahkeme veya esas/karar numarası uydurma.
 Yanıtlarında belgenin title, number, date ve source_url alanlarını ver.
 Bir maddenin yakın zamanda değişip değişmediğini merak ediyorsan /v1/documents/{id}/changes kullan.
@@ -22,12 +23,14 @@ Bağlayıcı metin için resmî kaynağa (source_url) yönlendir.
 
 1. **Ara**
    ```http
-   GET /v1/search?q=nafaka&type=yasa&source=gov&limit=5
+   GET /v1/search?q=nafaka&type=yasa&limit=5
    ```
-   Yasa ve tüzüklerde `source=gov` filtresi güncel birleştirilmiş metne daraltır. Sonuçlardaki
-   `id`, `matched_ref`, `snippet`, `citation` ve `score` alanlarını incele. `score` büyük olan
-   daha iyidir. Sonuç yoksa filtreyi kaldır; eş anlamlıları ve daha kısa kökleri dene
-   (`nafaka`, `nafakasının`, `iştirak nafakası`, `tedbir nafakası`).
+   Sonuçlardaki `id`, `matched_ref`, `snippet`, `citation`, `consolidated_through` ve `score`
+   alanlarını incele. `score` büyük olan daha iyidir. `source=gov` filtresi yalnızca resmî
+   sitedeki metinlere daraltır; Gelir Vergisi, KDV ve Sosyal Sigortalar gibi yalnızca
+   `mahkemeler` kataloğunda bulunan yasalar bu filtreyle görünmez. Önce filtresiz ara,
+   sonra `consolidated_through` dolu olan sonucu tercih et. Sonuç yoksa eş anlamlıları ve
+   daha kısa kökleri dene (`nafaka`, `nafakasının`, `iştirak nafakası`, `tedbir nafakası`).
 
 2. **Tam metni al**
    ```http
@@ -80,7 +83,8 @@ Bağlayıcı metin için resmî kaynağa (source_url) yönlendir.
 | `title`, `number`, `year`, `date` | Künye; atıf için |
 | `citation` | Hazır atıf; **aynen kullanın**, kendiniz birleştirmeyin |
 | `source_url`, `pdf_url` | Resmî kaynak ve PDF |
-| `source` | `gov` (birleştirilmiş güncel metin; yasa/tüzükte tercih edin) veya `mahkemeler` |
+| `source` | `gov` (resmî birleştirilmiş metin) veya `mahkemeler` (katalog, birleştirilmiş Word metinleri ve kararlar) |
+| `consolidated_through` | Metnin içerdiği son değişiklik (`25/2026` gibi); boşsa birleştirme bilgisi yoktur |
 | `text_status` | `full`, `partial`, `metadata` |
 | `matched_ref` | Eşleşmenin bulunduğu madde (varsa) |
 | `snippet` | Türkçe özgün metinden pencere |
@@ -91,9 +95,9 @@ açıkça söylemeli, metin varmış gibi davranmamalıdır.
 
 ## Değişiklikler ve sürüm geçmişi
 
-Güncel birleştirilmiş metinler (`source=gov`) her hafta önceki sürümle karşılaştırılır. Metin
-değişmişse yeni sürüm saklanır; fark madde madde (eklenen / kaldırılan / değişen) ve değişen
-maddenin içinde kelime bazında kaydedilir.
+Güncel birleştirilmiş metinler (`source=gov` ve `mahkemeler` kaynağındaki Word yasaları) her
+hafta önceki sürümle karşılaştırılır. Metin değişmişse yeni sürüm saklanır; fark madde madde
+(eklenen / kaldırılan / değişen) ve değişen maddenin içinde kelime bazında kaydedilir.
 
 - `GET /v1/changes?since=YYYY-AA-GG&type=yasa&limit=50`
   Belge başına sürüm geçişlerini listeler. Yanıttaki `tracking_since` takibin başladığı tarihtir.
@@ -199,7 +203,8 @@ takip başlangıç tarihini belirt. Saptanma tarihinin yürürlük tarihi olmad�
 - [ ] Her hüküm için `id`, madde numarası ve `source_url` verildi mi?
 - [ ] `citation` alanı aynen kullanıldı mı; mahkeme/esas/karar numarası uydurulmadı mı?
 - [ ] `text_status=metadata` olan belgeler için "tam metin yok" denildi mi?
-- [ ] Birden çok kaynak çelişiyorsa `source=gov` olan (birleştirilmiş resmî metin) tercih edildi mi?
+- [ ] Birden çok kaynak çelişiyorsa `source=gov` olan (birleştirilmiş resmî metin), yoksa
+      `consolidated_through` dolu `mahkemeler` metni tercih edildi mi?
 - [ ] Karar tarihi ve esas numarası doğru mu?
 - [ ] Değişiklik iddiası varsa `tracking_since` ve `detected_at` tarihleri doğru aktarıldı mı?
 - [ ] Cevap, "resmî/bağlayıcı metin için kaynağa bakın" uyarısını içeriyor mu?
