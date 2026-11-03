@@ -21,12 +21,23 @@ import { openapiDocument } from "./openapi.js";
 import { handleMcp } from "./mcp.js";
 import { SEMANTIC_DIMS, SEMANTIC_MODEL, type VectorUnit, type VectorWriter } from "./semantic.js";
 
+export const DECISION_MODELS = {
+  clef: "@cf/cloudflare/clef",
+  "clef-flash": "@cf/cloudflare/clef-flash",
+} as const;
+export type DecisionModel = keyof typeof DECISION_MODELS;
+
 export interface AppOptions {
   store: Store;
   /** Vector write side for /admin/vectors/* (Worker only). */
   vectors?: VectorWriter;
   /** Bearer token for /admin/vectors/*; the endpoints are disabled without it. */
   adminToken?: string;
+  /**
+   * Decision-model passthrough for /admin/decide (Worker only), used by the
+   * Clef evaluation workflow. Admin-only; not part of the public API.
+   */
+  decide?: (model: DecisionModel, input: Record<string, unknown>) => Promise<unknown>;
   /** Optional label shown by /health, e.g. "cloudflare-d1" or "node-sqlite". */
   runtime?: string;
 }
@@ -80,7 +91,7 @@ function typeParam(value: string | undefined): string | undefined {
   return value;
 }
 
-export function createApp({ store, runtime = "unknown", vectors, adminToken }: AppOptions): Hono {
+export function createApp({ store, runtime = "unknown", vectors, adminToken, decide }: AppOptions): Hono {
   const app = new Hono();
 
   app.use("*", cors({ origin: "*", allowMethods: ["GET", "POST", "OPTIONS"], allowHeaders: ["Content-Type", "Accept", "Mcp-Session-Id"] }));
@@ -370,6 +381,35 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken }: A
       throw new ApiError(400, "invalid_ids", "ids 1-1000 öğe olmalıdır.");
     }
     return c.json({ deleted: await writer.remove(ids) });
+  });
+
+  // Clef decision-model passthrough for the measurement workflow
+  // (.github/workflows/eval-clef.yml). Same admin token as the vector sync.
+  app.post("/admin/decide", async (c) => {
+    if (!decide || !adminToken) {
+      throw new ApiError(501, "decide_unavailable", "Karar modeli bu çalışma ortamında yok.");
+    }
+    const header = c.req.header("authorization");
+    if (!header || !timingSafeEqual(header, `Bearer ${adminToken}`)) {
+      throw new ApiError(401, "unauthorized", "Yetkisiz.");
+    }
+    const body = (await c.req.json()) as { model?: string; input?: Record<string, unknown> };
+    const model = body.model as DecisionModel;
+    if (!model || !(model in DECISION_MODELS)) {
+      throw new ApiError(400, "invalid_model", `model şunlardan biri olmalı: ${Object.keys(DECISION_MODELS).join(", ")}`);
+    }
+    const input = body.input;
+    if (!input || typeof input !== "object" || JSON.stringify(input).length > 64_000) {
+      throw new ApiError(400, "invalid_input", "input bir nesne olmalı (en fazla 64 KB).");
+    }
+    const started = Date.now();
+    try {
+      const output = await decide(model, input);
+      return c.json({ model: DECISION_MODELS[model], ms: Date.now() - started, output });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return c.json({ error: "model_error", message, ms: Date.now() - started }, /quota|neuron|limit|429/i.test(message) ? 429 : 502);
+    }
   });
 
   app.post("/mcp", async (c) => {

@@ -1,0 +1,87 @@
+name: Measure Clef
+
+# Measurement only: does Cloudflare Clef (a fast decision model) rank the
+# right statute article higher, and is its probability a better "is this the
+# answer?" confidence than the API's current one? Nothing in the API uses Clef.
+#
+# Clef calls go through the Worker's admin-only /admin/decide endpoint (Workers
+# AI binding), so no extra token permission is needed. They count against the
+# Workers AI daily allocation shared with embeddings: a full run is about
+# questions x (TOP_K + 1) calls per model. Run it after a vector sync, not
+# before, and start with clef-flash.
+
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Modeller (virgülle): clef-flash, clef"
+        default: "clef-flash"
+      modes:
+        description: "Yöntem: point (aday başına evet/hayır), list (tek seçim)"
+        default: "point,list"
+      top_k:
+        description: "Soru başına aday sayısı"
+        default: "10"
+      instr_lang:
+        description: "Talimat dili (tr / en)"
+        default: "tr"
+      max_cases:
+        description: "En fazla soru (0 = hepsi)"
+        default: "0"
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      BASE: ${{ vars.WORKER_URL || 'https://kktc-mevzuat-api.stevevaius.workers.dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Derive admin token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN gizli değişkeni yok."
+            exit 1
+          fi
+          ADMIN=$(python3 -c "import hashlib,os;print(hashlib.sha256((os.environ['CLOUDFLARE_API_TOKEN']+':kktc-vectors').encode()).hexdigest())")
+          echo "::add-mask::$ADMIN"
+          echo "ADMIN_TOKEN=$ADMIN" >> "$GITHUB_ENV"
+
+      - name: Check the Worker
+        run: |
+          curl -fsS "$BASE/health" | head -c 400; echo
+          code=$(curl -s -o /tmp/decide.json -w '%{http_code}' -X POST "$BASE/admin/decide" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' \
+            -d '{"model":"clef-flash","input":{"state":"Kira sözleşmesi feshedildi.","questions":{"ok":{"type":"noul","instructions":"Metin bir sözleşmeden söz ediyor mu?"}}}}')
+          echo "decide probe HTTP $code"; cat /tmp/decide.json; echo
+          if [ "$code" != "200" ]; then
+            echo "::error::/admin/decide çalışmıyor (HTTP $code). Worker güncel kodla dağıtılmış ve VECTOR_ADMIN_TOKEN ayarlanmış olmalı."
+            exit 1
+          fi
+
+      - name: Measure
+        env:
+          MODELS: ${{ inputs.models }}
+          MODES: ${{ inputs.modes }}
+          TOP_K: ${{ inputs.top_k }}
+          INSTR_LANG: ${{ inputs.instr_lang }}
+          MAX_CASES: ${{ inputs.max_cases }}
+          OUT: eval-clef.json
+        run: node scripts/eval-clef.mjs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-clef
+          path: eval-clef.json
+          if-no-files-found: ignore
