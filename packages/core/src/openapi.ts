@@ -72,6 +72,13 @@ export function openapiDocument(origin: string): Record<string, unknown> {
             { name: "source", in: "query", schema: { type: "string", enum: ["gov", "mahkemeler"] } },
             { name: "court", in: "query", description: "Mahkeme adı içinde geçen ifade.", schema: { type: "string" } },
             {
+              name: "semantic",
+              in: "query",
+              description:
+                "0: yalnız anahtar kelime (BM25). Varsayılan: doğal dil mevzuat sorularında BM25 + vektör (RRF).",
+              schema: { type: "string", enum: ["0", "1"] },
+            },
+            {
               name: "prefer",
               in: "query",
               description: "mevzuat: yasa/tüzük/anayasayı öne çıkarır; ictihat: kararları öne çıkarır.",

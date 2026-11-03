@@ -4,6 +4,8 @@ import {
   buildCountSql,
   buildSearchSql,
   ARTICLE_PAIRS_PER_QUERY,
+  CHUNK_PAIRS_PER_QUERY,
+  chunkRowsSql,
   chunksForArticlesSql,
   chunksSql,
   documentSql,
@@ -13,6 +15,7 @@ import {
 } from "./sql.js";
 import { buildCitation } from "./citation.js";
 import { conceptMatch, matchConcepts } from "./legal-concepts.js";
+import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
 import {
   baseArticleRef,
   buildMatch,
@@ -105,6 +108,7 @@ const LEGISLATION_TYPES = new Set([
 ]);
 const MATCHED_TEXT_LIMIT = 8000;
 const CONCEPT_BOOST = 8;
+const SEMANTIC_TOP_K = 30;
 
 function capText(text: string, limit: number): { text: string; truncated: boolean } {
   if (text.length <= limit) return { text, truncated: false };
@@ -288,14 +292,73 @@ export async function searchDocuments(
     // Canonical statutes are an editorial decision, not a BM25 accident.
     byId.set(id, { row, score: 120 });
   }
-  const deduped = [...byId.values()].sort((a, b) => {
+  const byScore = (a: { row: StoreRow; score: number }, b: { row: StoreRow; score: number }) => {
     const difference = b.score - a.score;
     if (difference !== 0) return difference;
     return (
       (primaryOrder.get(String(a.row.id)) ?? 999) -
       (primaryOrder.get(String(b.row.id)) ?? 999)
     );
-  });
+  };
+  let deduped = [...byId.values()].sort(byScore);
+
+  // Hybrid ranking: fuse the lexical order with the vector index (articles of
+  // legislation only). Canonical statutes keep their editorial top place.
+  const semanticInfo = { available: !!store.semantic, used: false, hits: 0, documents: 0 };
+  const legislationScope = !params.type || LEGISLATION_TYPES.has(params.type);
+  if (
+    store.semantic &&
+    params.semantic !== false &&
+    legislationScope &&
+    params.prefer !== "ictihat" &&
+    !params.court &&
+    !params.doc_ids?.length &&
+    wantsSemantic(params.q, requestedMode)
+  ) {
+    let hits: SemanticHit[] = [];
+    try {
+      hits = await store.semantic.query(params.q, { topK: SEMANTIC_TOP_K, type: params.type });
+    } catch (error) {
+      // The index is optional (e.g. not filled yet); lexical search still works.
+      console.warn("semantic search unavailable:", error instanceof Error ? error.message : error);
+    }
+    const bestHit = new Map<string, SemanticHit>();
+    for (const hit of hits) if (!bestHit.has(hit.doc_id)) bestHit.set(hit.doc_id, hit);
+    if (bestHit.size) {
+      // Rows for documents the lexical channel missed, or only matched by title.
+      const needed = [...bestHit.values()].filter((hit) => {
+        const existing = byId.get(hit.doc_id);
+        return !existing || String(existing.row.matched_kind) === "title";
+      });
+      for (let i = 0; i < needed.length; i += CHUNK_PAIRS_PER_QUERY) {
+        const query = chunkRowsSql(
+          needed.slice(i, i + CHUNK_PAIRS_PER_QUERY).map((hit) => ({ docId: hit.doc_id, ord: hit.ord })),
+        );
+        for (const row of await store.all(query.sql, query.binds)) {
+          if (params.year && Number(row.year) !== params.year) continue;
+          if (params.source && String(row.source) !== params.source) continue;
+          if (params.type && String(row.type) !== params.type) continue;
+          const id = String(row.id);
+          const existing = byId.get(id);
+          byId.set(id, { row, score: existing?.score ?? 0 });
+        }
+      }
+      const lexicalOrder = deduped.map(({ row }) => String(row.id));
+      const semanticOrder = [...bestHit.keys()].filter((id) => byId.has(id));
+      const fused = reciprocalRankFusion([lexicalOrder, semanticOrder]);
+      const primaryIdSet = new Set(primaryRows.map((row) => String(row.id)));
+      deduped = [...byId.values()]
+        .map(({ row }) => {
+          const id = String(row.id);
+          // RRF on a 0-100-ish scale; canonical statutes stay at 120.
+          return { row, score: primaryIdSet.has(id) ? 120 : Number(((fused.get(id) ?? 0) * 3000).toFixed(3)) };
+        })
+        .sort(byScore);
+      semanticInfo.used = true;
+      semanticInfo.hits = hits.length;
+      semanticInfo.documents = semanticOrder.length;
+    }
+  }
   const conceptDocuments = new Set(conceptRows.map((row) => String(row.id))).size;
   const primaryDocuments = new Set(primaryRows.map((row) => String(row.id))).size;
 
@@ -439,6 +502,8 @@ export async function searchDocuments(
     relaxed,
     concepts: detected.map((concept) => ({ id: concept.id, label: concept.label })),
     concept_expanded: concepts.length > 0,
+    semantic: semanticInfo,
+    ranking: semanticInfo.used ? "hybrid" : "lexical",
     concept_documents: conceptDocuments,
     primary_documents: primaryDocuments,
     filters: {

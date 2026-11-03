@@ -13,7 +13,7 @@ from typing import Any
 from .build import build_database, export_d1, read_stats
 from .history import copy_history_into, record_versions
 from .textproc import parse_consolidation
-from .config import DB_PATH, DIST_DIR, HISTORY_PATH, MAHKEMELER_BASE, GOV_BASE, GOV_TIMEOUT, ensure_dirs
+from .config import DATA_DIR, DB_PATH, DIST_DIR, HISTORY_PATH, MAHKEMELER_BASE, GOV_BASE, GOV_TIMEOUT, ensure_dirs
 from .http import FetchError, HttpClient, MahkemelerClient
 from .sources import (
     ACTIVE_GOV_CATEGORIES,
@@ -213,6 +213,38 @@ def cmd_stats(args: argparse.Namespace) -> None:
     print(json.dumps(read_stats(db), ensure_ascii=False, indent=2))
 
 
+def cmd_vectors(args: argparse.Namespace) -> None:
+    import os
+
+    from . import vectors
+
+    if args.action == "export":
+        stats = vectors.export_units(Path(args.db), Path(args.units))
+        print(json.dumps(stats, ensure_ascii=False, indent=2))
+        return
+    if args.action == "admin-token":
+        api_token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+        if not api_token:
+            raise SystemExit("CLOUDFLARE_API_TOKEN is not set")
+        print(vectors.admin_token(api_token))
+        return
+    token = os.environ.get("VECTOR_ADMIN_TOKEN") or (
+        vectors.admin_token(os.environ["CLOUDFLARE_API_TOKEN"]) if os.environ.get("CLOUDFLARE_API_TOKEN") else ""
+    )
+    if not token or not args.base:
+        raise SystemExit("--base and VECTOR_ADMIN_TOKEN (or CLOUDFLARE_API_TOKEN) are required")
+    manifest_path = Path(args.manifest)
+    manifest = vectors.load_manifest(manifest_path)
+    summary = vectors.sync(
+        vectors.load_units(Path(args.units)),
+        manifest,
+        vectors.http_poster(args.base, token),
+        budget_tokens=args.budget_tokens,
+        save=lambda m: vectors.save_manifest(manifest_path, m),
+    )
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="kktc",
@@ -273,6 +305,20 @@ def main(argv: list[str] | None = None) -> None:
     update.add_argument("--no-text", action="store_true")
     update.add_argument("--no-export", action="store_true")
     update.set_defaults(func=cmd_update)
+
+    vec = sub.add_parser("vectors", help="semantic index: export units / sync to the Worker")
+    vec.add_argument("action", choices=["export", "sync", "admin-token"])
+    vec.add_argument("--db", default=str(DB_PATH))
+    vec.add_argument("--units", default=str(DATA_DIR / "vector-units.jsonl.gz"))
+    vec.add_argument("--manifest", default=str(DATA_DIR / "vectors.json"))
+    vec.add_argument("--base", default="", help="Worker URL, e.g. https://kktc-mevzuat-api.example.workers.dev")
+    vec.add_argument(
+        "--budget-tokens",
+        type=int,
+        default=7_000_000,
+        help="max input tokens to embed this run (Workers AI free tier: ~9M/day)",
+    )
+    vec.set_defaults(func=cmd_vectors)
 
     stats = sub.add_parser("stats", help="show index statistics")
     stats.add_argument("--db", default=str(DB_PATH))

@@ -10,3 +10,12 @@ enabled = true
 binding = "DB"
 database_name = "kktc-mevzuat"
 database_id = "315e78ee-3d0c-4736-8385-108e5c0d7358"
+
+# Semantic search (Qwen3-Embedding on Workers AI + Vectorize). The index is
+# created by .github/workflows/data.yml and filled by vectors.yml.
+[ai]
+binding = "AI"
+
+[[vectorize]]
+binding = "VECTORS"
+index_name = "kktc-mevzuat-maddeler"

@@ -228,11 +228,25 @@ Gereken repository secret'ları:
 
 | Secret | Açıklama |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | D1 Edit + Workers Scripts Edit yetkili token |
+| `CLOUDFLARE_API_TOKEN` | D1 Edit + Workers Scripts Edit + **Vectorize Edit** yetkili token (Vectorize izni yoksa Worker anlamsal arama olmadan dağıtılır) |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare hesap kimliği |
 | `CLOUDFLARE_D1_DATABASE_ID` | D1 veritabanı UUID'si |
 
 `wrangler.toml` içindeki `database_id` sabit kalabilir; workflow `sed` ile secret'tan yazar.
+
+### Anlamsal arama (Vectorize + Workers AI)
+
+- Veri workflow'u ilk çalıştırmada `kktc-mevzuat-maddeler` adlı Vectorize dizinini oluşturur
+  (192 boyut, cosine, `type` metadata dizini) ve Worker'a `VECTOR_ADMIN_TOKEN` secret'ını yazar.
+  Bu token `CLOUDFLARE_API_TOKEN`'dan türetilir; ayrıca secret eklemeniz gerekmez.
+- Ayrıca `vector-units.jsonl.gz` (madde birimleri) `history` release'ine yüklenir.
+- `.github/workflows/vectors.yml` her veri yenilemesinden sonra ve her gün çalışır; yeni/değişen
+  maddeleri Worker'ın `/admin/vectors/upsert` ucuna gönderir (gömme Workers AI'da yapılır) ve
+  gönderilenleri `vectors.json`'da tutar.
+- Ücretsiz katman: Vectorize 5M boyut (~26 bin madde × 192), Workers AI günde 10.000 nöron
+  (~9M token). Çalıştırma başına bütçe 7M token; ilk doldurma (~6M token) tek çalıştırmaya sığar.
+- Model veya boyut değişirse (`crawler/kktc/vectors.py` ve `packages/core/src/semantic.ts`),
+  yeni boyutla yeni bir dizin oluşturun; manifest eski vektörleri siler.
 
 > İlk çalıştırma tam kazıma yapar (~10–20 dk gov, mahkemeler Word yasalarıyla birlikte
 > ~30 dk; PDF'ler de dahilse saatler sürebilir). `timeout-minutes: 360` sınırına dikkat edin.

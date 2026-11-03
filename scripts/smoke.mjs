@@ -41,6 +41,8 @@ check("search groups", search.body.groups && Array.isArray(search.body.groups.me
 check("search concepts", Array.isArray(search.body.concepts));
 check("search primary documents", typeof search.body.primary_documents === "number");
 check("search next", typeof search.body.next === "string");
+check("search ranking", ["lexical", "hybrid"].includes(search.body.ranking));
+check("search semantic info", typeof search.body.semantic?.available === "boolean");
 
 const conceptSearch = await json("/v1/search?q=nafaka&limit=5");
 check("concept detected", conceptSearch.body.concepts.some((concept) => concept.id === "nafaka"));

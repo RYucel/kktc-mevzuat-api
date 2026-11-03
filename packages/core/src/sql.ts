@@ -172,6 +172,23 @@ export function chunksForArticlesSql(pairs: { docId: string; ref: string }[]): {
   };
 }
 
+/** Document + one chunk, located by (doc_id, ord), for vector hits. */
+export function chunkRowsSql(pairs: { docId: string; ord: number }[]): { sql: string; binds: unknown[] } {
+  if (!pairs.length) {
+    return { sql: `SELECT ${DOC_COLUMNS} FROM documents d WHERE 0`, binds: [] };
+  }
+  const clauses = pairs.map(() => "(c.doc_id = ? AND c.ord = ?)").join(" OR ");
+  return {
+    sql: `SELECT ${DOC_COLUMNS}, c.ref AS matched_ref, c.kind AS matched_kind, c.text AS chunk_text
+          FROM chunks c JOIN documents d ON d.id = c.doc_id
+          WHERE ${clauses}`,
+    binds: pairs.flatMap(({ docId, ord }) => [docId, ord]),
+  };
+}
+
+/** Max (doc, ord) pairs per chunkRowsSql call (2 binds each, D1 cap 100). */
+export const CHUNK_PAIRS_PER_QUERY = 45;
+
 /** Max (doc, article) pairs per chunksForArticlesSql call (3 binds each, D1 cap 100). */
 export const ARTICLE_PAIRS_PER_QUERY = 30;
 

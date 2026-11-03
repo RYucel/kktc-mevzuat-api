@@ -19,9 +19,14 @@ import { llmsText } from "./llms.js";
 import { changesHtml, changesMarkdown, feedHtml, getDocumentChanges, listChanges } from "./changes.js";
 import { openapiDocument } from "./openapi.js";
 import { handleMcp } from "./mcp.js";
+import { SEMANTIC_DIMS, SEMANTIC_MODEL, type VectorUnit, type VectorWriter } from "./semantic.js";
 
 export interface AppOptions {
   store: Store;
+  /** Vector write side for /admin/vectors/* (Worker only). */
+  vectors?: VectorWriter;
+  /** Bearer token for /admin/vectors/*; the endpoints are disabled without it. */
+  adminToken?: string;
   /** Optional label shown by /health, e.g. "cloudflare-d1" or "node-sqlite". */
   runtime?: string;
 }
@@ -75,7 +80,7 @@ function typeParam(value: string | undefined): string | undefined {
   return value;
 }
 
-export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
+export function createApp({ store, runtime = "unknown", vectors, adminToken }: AppOptions): Hono {
   const app = new Hono();
 
   app.use("*", cors({ origin: "*", allowMethods: ["GET", "POST", "OPTIONS"], allowHeaders: ["Content-Type", "Accept", "Mcp-Session-Id"] }));
@@ -173,6 +178,7 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
       prefer: (preferRaw || undefined) as SearchParams["prefer"],
       min_score: floatParam(c.req.query("min_score"), "min_score", 0, 0, 1000),
       exact_count: ["1", "true", "yes"].includes((c.req.query("exact_count") ?? "").toLowerCase()),
+      semantic: !["0", "false", "no"].includes((c.req.query("semantic") ?? "").toLowerCase()),
       limit: intParam(c.req.query("limit"), "limit", 10, 1, 50),
       offset: intParam(c.req.query("offset"), "offset", 0, 0, 1000),
     };
@@ -203,6 +209,7 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
       court: c.req.query("court") || undefined,
       prefer: (preferRaw || undefined) as SearchParams["prefer"],
       min_score: floatParam(c.req.query("min_score"), "min_score", 0, 0, 1000),
+      semantic: !["0", "false", "no"].includes((c.req.query("semantic") ?? "").toLowerCase()),
       limit: intParam(c.req.query("limit"), "limit", 3, 1, 5),
       offset: 0,
     };
@@ -323,6 +330,48 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
     return c.json(await getStats(store, origin));
   });
 
+  // Vector index sync, called by the vectors workflow. Disabled unless the
+  // runtime provides a writer and an admin token.
+  const requireAdmin = (header: string | undefined) => {
+    if (!vectors || !adminToken) {
+      throw new ApiError(501, "vectors_unavailable", "Vektör dizini bu çalışma ortamında yok.");
+    }
+    if (!header || !timingSafeEqual(header, `Bearer ${adminToken}`)) {
+      throw new ApiError(401, "unauthorized", "Yetkisiz.");
+    }
+    return vectors;
+  };
+
+  app.get("/admin/vectors/info", (c) => {
+    requireAdmin(c.req.header("authorization"));
+    return c.json({ model: SEMANTIC_MODEL, dimensions: SEMANTIC_DIMS });
+  });
+
+  app.post("/admin/vectors/upsert", async (c) => {
+    const writer = requireAdmin(c.req.header("authorization"));
+    const body = (await c.req.json()) as { units?: VectorUnit[] };
+    const units = Array.isArray(body.units) ? body.units : [];
+    if (!units.length || units.length > 100) {
+      throw new ApiError(400, "invalid_units", "units 1-100 öğe olmalıdır.");
+    }
+    for (const unit of units) {
+      if (typeof unit.id !== "string" || unit.id.length > 64 || typeof unit.text !== "string" || !unit.text) {
+        throw new ApiError(400, "invalid_unit", "Her öğede id (≤64 bayt) ve text gerekir.");
+      }
+    }
+    return c.json({ upserted: await writer.upsert(units) });
+  });
+
+  app.post("/admin/vectors/delete", async (c) => {
+    const writer = requireAdmin(c.req.header("authorization"));
+    const body = (await c.req.json()) as { ids?: string[] };
+    const ids = Array.isArray(body.ids) ? body.ids.filter((id) => typeof id === "string") : [];
+    if (!ids.length || ids.length > 1000) {
+      throw new ApiError(400, "invalid_ids", "ids 1-1000 öğe olmalıdır.");
+    }
+    return c.json({ deleted: await writer.remove(ids) });
+  });
+
   app.post("/mcp", async (c) => {
     const origin = requestOrigin(c);
     let payload: unknown;
@@ -437,6 +486,13 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
   });
 
   return app;
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 function cacheableToolCall(payload: unknown): { id: unknown; key: string } | null {
