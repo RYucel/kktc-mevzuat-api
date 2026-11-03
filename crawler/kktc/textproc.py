@@ -325,6 +325,102 @@ def _looks_like_title(line: str) -> bool:
     return True
 
 
+# Consolidated Word files from mevzuat.mahkemeler.net print margin notes
+# (which law amended the article) into the text flow:
+#   "41/2002 2. (1) Kuzey Kıbrıs ..."      law number before the article number
+#   "5. 11/1985\n6(1), 41/2002\n3.(1) 13/2005 8. (1) ..."   "article N of law X"
+#   "41/1976\n24/1977\n62/1977"          lists of earlier laws
+# They look like article numbers to the splitter. normalize_margin_notes()
+# moves them into brackets at the end of the line, keeping the information:
+#   "8. (1) ... [5. 11/1985; 6(1), 41/2002; 3.(1) 13/2005]"
+# One margin reference: "41/2002", "2. 20/1992", "6(1), 41/2002", "3.(1) 13/2005",
+# "2.3/1999", "9(2).17/2025". The optional "article" prefix must end in "." or
+# "," so a run of references can be read only one way; references are consumed
+# one at a time (no backtracking blow-up on long lists such as
+# "7/1979 3 /1982 12/1982 ...").
+_MARGIN_REF_RE = re.compile(
+    r"[ \t]*(?:\d{1,3}(?:\s*\(\d{1,2}\))?\s*[.,]\s*(?:\(\d{1,2}\)\s*)?)?\d{1,3}\s*/\s*(?:19|20)\d{2}(?!\d)[ \t]*[,;]?"
+)
+_CITING_PROSE_RE = re.compile(r"(?:sayılı|sayili|Sayılı|SAYILI|ve|ile|tarihli|nolu|numaralı)\b")
+
+
+def _leading_margin_refs(line: str) -> int:
+    """Length of the run of margin references at the start of ``line``."""
+    pos = 0
+    while True:
+        match = _MARGIN_REF_RE.match(line, pos)
+        if not match or match.end() == pos:
+            return pos
+        pos = match.end()
+
+
+_EFFECTIVE_LINE_RE = re.compile(r"^[ \t]*Yürürlük\s+tarihi\s*:[^\n]{1,40}$")
+_EFFECTIVE_NOTE_RE = re.compile(r"^(?P<note>Yürürlük\s+tarihi\s*:[^\n]{1,40}?)[ \t]+(?=\d{1,4}[A-Z]?\.[ \t])")
+_LEADING_ARTICLE_NUM_RE = re.compile(r"^(?P<num>\d{1,4}[A-Z]?\.)[ \t]+(?P<rest>\S.*)$")
+# A heading wrapped onto two lines: "İstisnalar ve\nmuaflıklar 6. Aşağıda ..."
+_WRAPPED_TITLE_TAIL_RE = re.compile(r"^[a-zçğıöşü][^\n.]{0,50}?[ \t]+\d{1,4}[A-Z]?\.[ \t]+\S")
+_TRANSITIONAL_RE = re.compile(r"[ \t]*(?:Geçici|GEÇİCİ|Gecici|GECICI|Ek|EK)\s+(?:Madde|MADDE)\b")
+
+
+def normalize_margin_notes(text: str) -> str:
+    """Move inlined amendment margin notes out of the article-number position."""
+    out: list[str] = []
+    pending: list[str] = []
+
+    def flush() -> None:
+        if pending:
+            out.append("[" + "; ".join(pending) + "]")
+            pending.clear()
+
+    for line in text.split("\n"):
+        run = _leading_margin_refs(line)
+        if run and not line[run:].strip():
+            pending.append(re.sub(r"\s+", " ", line.strip().rstrip(",;")))
+            continue
+        if pending and _EFFECTIVE_LINE_RE.match(line):
+            pending.append(line.strip())
+            continue
+        if not line.strip():
+            flush()
+            out.append(line)
+            continue
+        notes = list(pending)
+        pending.clear()
+        indent = ""
+        body = line
+        if run and line[run - 1 : run] in (" ", "\t", ",", ";") and not _CITING_PROSE_RE.match(line[run:].lstrip()):
+            indent = line[: len(line) - len(line.lstrip())]
+            notes.append(re.sub(r"\s+", " ", line[:run].strip().rstrip(",;")))
+            body = line[run:].lstrip()
+        effective = _EFFECTIVE_NOTE_RE.match(body)
+        if effective:
+            notes.append(effective.group("note").strip())
+            body = body[effective.end():]
+        if notes:
+            article = _LEADING_ARTICLE_NUM_RE.match(body)
+            joined = "; ".join(notes)
+            # Notes go to the end of the line: the splitter expects the text
+            # after "N." to start like a sentence or "(1)".
+            line = (
+                f"{indent}{article.group('num')} {article.group('rest')} [{joined}]"
+                if article
+                else f"{indent}{body} [{joined}]"
+            )
+        if (
+            out
+            and _WRAPPED_TITLE_TAIL_RE.match(line)
+            and out[-1].strip()
+            and len(out[-1].strip()) <= 50
+            and out[-1].strip()[0].isupper()
+            and out[-1].rstrip()[-1] not in ".:;,)"
+        ):
+            out[-1] = out[-1].rstrip() + " " + line.lstrip()
+            continue
+        out.append(line)
+    flush()
+    return "\n".join(out)
+
+
 def _article_candidates(text: str) -> list[dict]:
     """Collect possible article starts from the three layouts seen in KKTC law PDFs.
 
@@ -336,6 +432,10 @@ def _article_candidates(text: str) -> list[dict]:
     found: dict[int, dict] = {}
 
     def add(pos: int, num: int, suf: str, title: str, priority: int) -> None:
+        # "Geçici Madde 2." / "Ek Madde 1." have their own numbering; taking
+        # them as main articles derails the sequence (and the TOC detection).
+        if _TRANSITIONAL_RE.match(text, pos) or _TRANSITIONAL_RE.match(title):
+            return
         current = found.get(pos)
         if current is None or priority < current["priority"]:
             found[pos] = {"pos": pos, "num": num, "suf": suf, "title": title, "priority": priority}
@@ -614,7 +714,7 @@ def split_articles(text: str) -> list[Chunk]:
     Returns an empty list when the text does not look like an article-based
     law; callers then fall back to paragraph chunking.
     """
-    text = _strip_toc_run(_strip_toc(text))
+    text = _strip_toc_run(_strip_toc(normalize_margin_notes(text)))
     candidates = _article_candidates(text)
     if len(candidates) < 2:
         return []
