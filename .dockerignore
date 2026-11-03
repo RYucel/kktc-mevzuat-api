@@ -10,3 +10,4 @@ data/*.log
 *.log
 __pycache__
 .venv
+data/history*.db

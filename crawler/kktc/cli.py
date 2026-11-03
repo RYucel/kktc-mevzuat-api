@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from .build import build_database, export_d1, read_stats
-from .config import DB_PATH, DIST_DIR, MAHKEMELER_BASE, GOV_BASE, GOV_TIMEOUT, ensure_dirs
+from .history import copy_history_into, record_versions
+from .config import DB_PATH, DIST_DIR, HISTORY_PATH, MAHKEMELER_BASE, GOV_BASE, GOV_TIMEOUT, ensure_dirs
 from .http import FetchError, HttpClient, MahkemelerClient
 from .sources import (
     ACTIVE_GOV_CATEGORIES,
@@ -98,7 +99,7 @@ def cmd_fetch_text(args: argparse.Namespace) -> None:
             break
         checked += 1
         client = gov_client if "gov.ct.tr" in url else mah_client
-        payload = fetch_text_for(doc, client, force=args.force)
+        payload = fetch_text_for(doc, client, force=args.force, revalidate=getattr(args, "revalidate", False))
         if payload.get("text"):
             done += 1
             log.info(
@@ -144,7 +145,14 @@ def cmd_build(args: argparse.Namespace) -> None:
     docs = _merged_with_text()
     if not docs:
         raise SystemExit("No catalog data found. Run `python -m kktc crawl` first.")
+    history_path = Path(getattr(args, "history", "") or HISTORY_PATH)
+    history = None
+    if not getattr(args, "no_history", False):
+        history = record_versions(docs, history_path)
     stats = build_database(docs, Path(args.db))
+    stats["history"] = copy_history_into(Path(args.db), history_path)
+    if history:
+        stats["history"]["this_run"] = history
     print(json.dumps(stats, ensure_ascii=False, indent=2))
     if not args.no_export:
         export_d1(Path(args.db), Path(args.out))
@@ -165,9 +173,10 @@ def cmd_update(args: argparse.Namespace) -> None:
             after=0,
             force=False,
             min_year=0,
+            revalidate=not args.full_text,
         )
         cmd_fetch_text(text_args)
-    build_args = argparse.Namespace(db=str(DB_PATH), out=str(DIST_DIR / "d1"), no_export=args.no_export)
+    build_args = argparse.Namespace(db=str(DB_PATH), out=str(DIST_DIR / "d1"), no_export=args.no_export, history=str(HISTORY_PATH), no_history=False)
     cmd_build(build_args)
 
 
@@ -203,12 +212,23 @@ def main(argv: list[str] | None = None) -> None:
         help="only fetch documents from this year onwards (older PDFs are often scans)",
     )
     text.add_argument("--force", action="store_true")
+    text.add_argument(
+        "--revalidate",
+        action="store_true",
+        help="HEAD cached files and re-download those changed on the server (same name, new content)",
+    )
     text.set_defaults(func=cmd_fetch_text)
 
     build = sub.add_parser("build", help="build the SQLite FTS database")
     build.add_argument("--db", default=str(DB_PATH))
     build.add_argument("--out", default=str(DIST_DIR / "d1"))
     build.add_argument("--no-export", action="store_true")
+    build.add_argument("--history", default=str(HISTORY_PATH), help="persistent version history database")
+    build.add_argument(
+        "--no-history",
+        action="store_true",
+        help="do not record new versions (existing history is still copied into the index)",
+    )
     build.set_defaults(func=cmd_build)
 
     export = sub.add_parser("export", help="export the database as D1 SQL files")

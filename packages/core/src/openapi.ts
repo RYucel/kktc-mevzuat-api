@@ -216,6 +216,39 @@ export function openapiDocument(origin: string): Record<string, unknown> {
           responses: { "200": { description: "Belge listesi" } },
         },
       },
+      "/v1/changes": {
+        get: {
+          tags: ["changes"],
+          operationId: "listChanges",
+          summary: "Mevzuatta saptanan değişiklikler (sürüm geçişleri)",
+          parameters: [
+            { name: "since", in: "query", description: "YYYY-AA-GG", schema: { type: "string" } },
+            { name: "type", in: "query", schema: { type: "string" } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } },
+          ],
+          responses: { "200": { description: "Değişiklik listesi; tracking_since takip başlangıcıdır." } },
+        },
+      },
+      "/v1/documents/{id}/changes": {
+        get: {
+          tags: ["changes"],
+          operationId: "getDocumentChanges",
+          summary: "Bir belgenin sürüm geçmişi ve madde bazlı farkları",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string" } },
+            { name: "version", in: "query", schema: { type: "integer", minimum: 2 } },
+            {
+              name: "format",
+              in: "query",
+              schema: { type: "string", enum: ["json", "markdown", "html"], default: "json" },
+            },
+          ],
+          responses: {
+            "200": { description: "Sürümler ve değişiklikler (ops: [[\"=\"|\"-\"|\"+\", metin], ...])" },
+            "404": { description: "Belge bulunamadı" },
+          },
+        },
+      },
       "/v1/stats": {
         get: {
           tags: ["meta"],

@@ -161,6 +161,23 @@ curl "${origin}/v1/recent?type=yasa&limit=20"
 
 Belge sayıları, türler, yıllar, kaynaklar, tam metin durumu ve her türün en yeni tarihi.
 
+### 6) Değişiklikler — \`GET /v1/changes\` ve \`GET /v1/documents/{id}/changes\`
+
+Güncel birleştirilmiş metinler (\`source=gov\`) her hafta önceki sürümle karşılaştırılır;
+değişen, eklenen ve kaldırılan maddeler kaydedilir. **Takip ilk kayıt tarihinden başlar**
+(\`tracking_since\`); öncesindeki değişiklikler bilinmez. Saptanma tarihi, değişikliğin
+kaynakta görüldüğü haftadır, yürürlük tarihi değildir.
+
+- \`/v1/changes\`: \`since\` (YYYY-AA-GG), \`type\`, \`limit\` (1–200). Belge başına sürüm geçişi listesi.
+- \`/v1/documents/{id}/changes\`: sürümler ve her değişen maddenin \`old_text\` / \`new_text\` metni;
+  \`format=markdown\` LLM'e uygundur, \`format=html\` yeşil/kırmızı görünüm verir. \`version\` ile tek geçiş.
+- İnsanlar için görüntüleyici: \`${origin}/degisiklikler\`.
+
+\`\`\`bash
+curl "${origin}/v1/changes?since=2026-11-01"
+curl "${origin}/v1/documents/yasa-1-1998/changes?format=markdown"
+\`\`\`
+
 ## Belge kimlikleri (\`id\`)
 
 - Yasalar: \`yasa-1-1998\`, \`yasa-fasil-57\`
@@ -199,6 +216,8 @@ Araçlar:
 - \`ictihat_ara\` — \`{ ifade, mahkeme?, yil?, mod?, adet?, sayfa? }\` — yalnız mahkeme kararları; sonuçlarda hazır \`citation\`
 - \`karar_getir\` — \`{ id }\` — kararın künyesi, atfı ve tam metni (Markdown)
 - \`list_courts\` — \`{}\` — mahkemeler, karar sayıları, yıl aralığı
+- \`son_degisiklikler\` — \`{ since?, type?, limit? }\` — mevzuatta saptanan son madde değişiklikleri
+- \`degisiklikleri_getir\` — \`{ id, version? }\` — bir belgenin sürüm geçmişi, maddelerin önceki/yeni metni
 - \`get_document\` — \`{ id, format? }\`
 - \`get_article\` — \`{ id, ref }\`
 - \`list_document_articles\` — \`{ id }\`

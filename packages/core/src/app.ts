@@ -14,6 +14,7 @@ import {
 } from "./operations.js";
 import { DOC_TYPES, type SearchParams, type Store, TYPE_LABELS } from "./types.js";
 import { llmsText } from "./llms.js";
+import { changesHtml, changesMarkdown, feedHtml, getDocumentChanges, listChanges } from "./changes.js";
 import { openapiDocument } from "./openapi.js";
 import { handleMcp } from "./mcp.js";
 
@@ -92,6 +93,9 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
         document: `${origin}/v1/documents/{id}`,
         article: `${origin}/v1/documents/{id}/articles/12`,
         recent: `${origin}/v1/recent`,
+        changes: `${origin}/v1/changes`,
+        document_changes: `${origin}/v1/documents/{id}/changes`,
+        changes_viewer: `${origin}/degisiklikler`,
         stats: `${origin}/v1/stats`,
         llms: `${origin}/llms.txt`,
         openapi: `${origin}/openapi.json`,
@@ -177,6 +181,54 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
     const type = typeParam(c.req.query("type"));
     const limit = intParam(c.req.query("limit"), "limit", 20, 1, 100);
     return c.json(await listRecent(store, type, limit, origin));
+  });
+
+  app.get("/v1/changes", async (c) => {
+    const origin = requestOrigin(c);
+    const feed = await listChanges(
+      store,
+      {
+        since: c.req.query("since") || undefined,
+        type: typeParam(c.req.query("type")),
+        limit: intParam(c.req.query("limit"), "limit", 50, 1, 200),
+      },
+      origin,
+    );
+    return c.json(feed);
+  });
+
+  app.get("/v1/documents/:id/changes", async (c) => {
+    const origin = requestOrigin(c);
+    const id = c.req.param("id");
+    const versionRaw = c.req.query("version");
+    const version = versionRaw ? intParam(versionRaw, "version", 0, 2, 100000) : undefined;
+    const response = await getDocumentChanges(store, id, origin, version);
+    if (!response) throw new ApiError(404, "document_not_found", `Belge bulunamadı: ${id}`);
+    const format = (c.req.query("format") ?? "json").toLowerCase();
+    if (format === "markdown" || format === "md") {
+      return c.text(changesMarkdown(response), 200, { "content-type": "text/markdown; charset=utf-8" });
+    }
+    if (format === "html") return c.html(changesHtml(response, origin));
+    return c.json(response);
+  });
+
+  // Human-facing viewer: green = added, red = removed.
+  app.get("/degisiklikler", async (c) => {
+    const origin = requestOrigin(c);
+    const feed = await listChanges(
+      store,
+      { since: c.req.query("since") || undefined, type: typeParam(c.req.query("type")), limit: 200 },
+      origin,
+    );
+    return c.html(feedHtml(feed, origin));
+  });
+
+  app.get("/degisiklikler/:id", async (c) => {
+    const origin = requestOrigin(c);
+    const id = c.req.param("id");
+    const response = await getDocumentChanges(store, id, origin);
+    if (!response) throw new ApiError(404, "document_not_found", `Belge bulunamadı: ${id}`);
+    return c.html(changesHtml(response, origin));
   });
 
   app.get("/v1/stats", async (c) => {
@@ -283,6 +335,7 @@ function landingPage(origin: string): string {
 curl "${origin}/v1/documents/yasa-1-1998?format=markdown"
 curl "${origin}/v1/documents/yasa-1-1998/articles/4"
 curl "${origin}/v1/recent?type=karar&limit=5"
+curl "${origin}/v1/changes?since=2026-11-01"
 curl "${origin}/v1/stats"</pre>
 <h2>Uçlar</h2>
 <table>
@@ -292,6 +345,8 @@ curl "${origin}/v1/stats"</pre>
 <tr><td><code>GET /v1/documents/{id}/articles/{ref}</code></td><td>Tek madde (ör. 4, 30A)</td></tr>
 <tr><td><code>GET /v1/documents/{id}/articles</code></td><td>Madde listesi</td></tr>
 <tr><td><code>GET /v1/recent</code></td><td>En yeni belgeler</td></tr>
+<tr><td><code>GET /v1/changes</code></td><td>Mevzuatta saptanan değişiklikler (<a href="/degisiklikler">görüntüleyici</a>)</td></tr>
+<tr><td><code>GET /v1/documents/{id}/changes</code></td><td>Bir belgenin sürüm geçmişi; <code>format=markdown|html</code></td></tr>
 <tr><td><code>GET /v1/stats</code></td><td>Kapsam ve kaynak istatistikleri</td></tr>
 <tr><td><code>POST /mcp</code></td><td>Model Context Protocol araçları</td></tr>
 </table>

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from .config import DB_PATH, DIST_DIR
+from .history import HISTORY_TABLES_SQL
 from .textproc import Chunk, chunk_document, clean_text, fold_tr, normalize_title
 
 log = logging.getLogger(__name__)
@@ -338,7 +339,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     text_norm,
     tokenize = 'unicode61 remove_diacritics 2'
 );
-"""
+""" + HISTORY_TABLES_SQL
 
 
 def _sql(value: Any) -> str:
@@ -391,7 +392,8 @@ def export_d1(db_path: Path = DB_PATH, out_dir: Path = DIST_DIR / "d1") -> list[
         stale.unlink()
     (out_dir / "001-schema.sql").write_text(D1_SCHEMA, encoding="utf-8")
     (out_dir / "002-reset.sql").write_text(
-        "DELETE FROM chunks_fts;\nDELETE FROM chunks;\nDELETE FROM documents;\nDELETE FROM meta;\n",
+        "DELETE FROM chunks_fts;\nDELETE FROM chunks;\nDELETE FROM documents;\nDELETE FROM meta;\n"
+        "DELETE FROM changes;\nDELETE FROM doc_versions;\n",
         encoding="utf-8",
     )
 
@@ -416,6 +418,19 @@ def export_d1(db_path: Path = DB_PATH, out_dir: Path = DIST_DIR / "d1") -> list[
     for row in conn.execute("SELECT rowid, text_norm FROM chunks_fts ORDER BY rowid"):
         writer.write(f"INSERT INTO chunks_fts (rowid, text_norm) VALUES ({row['rowid']},{_sql(row['text_norm'])});")
     files += writer.close()
+
+    # Version history: rebuilt from history.db on every build, like the rest.
+    has_history = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'changes'"
+    ).fetchone()[0]
+    if has_history:
+        writer = SqlFileWriter(out_dir / "040-history.sql")
+        for table in ("doc_versions", "changes"):
+            for row in conn.execute(f"SELECT * FROM {table}"):
+                cols = ",".join(row.keys())
+                values = ",".join(_sql(row[k]) for k in row.keys())
+                writer.write(f"INSERT OR REPLACE INTO {table} ({cols}) VALUES ({values});")
+        files += writer.close()
 
     writer = SqlFileWriter(out_dir / "090-meta.sql")
     for row in conn.execute("SELECT key, value FROM meta"):
