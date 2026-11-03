@@ -37,7 +37,17 @@ check("search highlights", search.body.results.every((r) => Array.isArray(r.high
 check("search candidate count", typeof search.body.candidate_documents === "number");
 check("search relaxed flag", typeof search.body.relaxed === "boolean");
 check("search groups", search.body.groups && Array.isArray(search.body.groups.mevzuat));
+check("search concepts", Array.isArray(search.body.concepts));
+check("search primary documents", typeof search.body.primary_documents === "number");
 check("search next", typeof search.body.next === "string");
+
+const conceptSearch = await json("/v1/search?q=nafaka&limit=5");
+check("concept detected", conceptSearch.body.concepts.some((concept) => concept.id === "nafaka"));
+check("concept primary", conceptSearch.body.primary_documents > 0);
+check("concept statute first", conceptSearch.body.results[0]?.id === "yasa-1-1998");
+
+const kdvSearch = await json("/v1/search?q=KDV&limit=3");
+check("concept KDV", kdvSearch.body.results[0]?.id === "yasa-47-1992");
 
 const natural = await json(
   "/v1/search?q=mal%20payla%C5%9F%C4%B1m%C4%B1nda%20e%C5%9Flere%20d%C3%BC%C5%9Fen%20en%20az%20oran&prefer=mevzuat&type=yasa&limit=5",

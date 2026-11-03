@@ -71,6 +71,8 @@ Bağlayıcı metin için resmî kaynağa (source_url) yönlendir.
   aramalar en iyi geri çağırmayı verir.
 - `prefer=mevzuat` yasa/tüzük/anayasayı, `prefer=ictihat` kararları öne çıkarır; `type` filtresi
   kesin daraltma yapar.
+- Sorgu bir hukuk kavramına denk gelirse (`mal paylaşımı`, `nafaka`, `kıdem tazminatı`, `KDV`…)
+  API o kavramın kanonik yasasını öne çıkarır; yanıtta `concepts` ve `primary_documents` görünür.
 - `2/3`, `1/3`, `üçte iki` gibi oranlar tek token olarak aranır; `2/3` artık `23` ile karışmaz.
 - `min_score` ham BM25 skorudur; sorgular arasında karşılaştırmayın, yalnızca aynı sorguda gürültü
   elemek için kullanın.
@@ -96,6 +98,9 @@ Bağlayıcı metin için resmî kaynağa (source_url) yönlendir.
 | `source` | `gov` (resmî birleştirilmiş metin) veya `mahkemeler` (katalog, birleştirilmiş Word metinleri ve kararlar) |
 | `consolidated_through` | Metnin içerdiği son değişiklik (`25/2026` gibi); boşsa birleştirme bilgisi yoktur |
 | `text_status` | `full`, `partial`, `metadata`; arama sonucunda da döner |
+| `concepts` | Sorguda tanınan hukuk kavramları (`mal paylaşımı`, `nafaka`, `KDV`…) |
+| `concept_expanded` | Kavram terimleriyle ek arama yapıldıysa `true` |
+| `primary_documents` | Kavramın kanonik yasalarından gelen belge sayısı |
 | `matched_ref` | Eşleşmenin bulunduğu madde, parçasız (`Madde 26`) |
 | `matched_part` | Parçalı maddede FTS eşleşmesinin bölümü (`3/7` gibi) |
 | `matched_text` | Eşleşen maddenin tam metni (yasa/tüzük; 8.000 karaktere kadar) |
@@ -151,7 +156,7 @@ Araçlar ve tipik argümanlar:
 
 | Araç | Argümanlar | Kullanım |
 | --- | --- | --- |
-| `search_mevzuat` | `query`, `type?`, `year?`, `source?`, `court?`, `mode?`, `limit?`, `offset?` | Mevzuat + karar araması |
+| `search_mevzuat` | `query`, `type?`, `year?`, `source?`, `court?`, `mode?`, `prefer?`, `min_score?`, `limit?`, `offset?` | Mevzuat + karar araması (varsayılan `prefer=mevzuat`) |
 | `ictihat_ara` | `ifade`, `mahkeme?`, `yil?`, `mod?`, `adet?`, `sayfa?` | Yalnız mahkeme kararları; sonuçlarda `citation` |
 | `karar_getir` | `id` | Kararın künyesi, atfı ve tam metni (Markdown) |
 | `list_courts` | — | Mahkemeler, karar sayıları, yıl aralığı |

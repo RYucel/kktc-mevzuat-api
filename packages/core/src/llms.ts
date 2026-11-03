@@ -124,6 +124,11 @@ Kesirler tek token olarak aranır: \`2/3\`, \`üçte iki\` ve \`1/3\` gibi ifade
 \`2/3\` artık \`23\` ile karışmaz. Yanıtta \`candidate_documents\` (aday), \`relevant_documents\`
 (eşiği geçen), \`relaxed\`, \`groups\` ve \`highlights\` alanları bulunur.
 
+Sorgu bir hukuk kavramına denk gelirse (\`mal paylaşımı\`, \`nafaka\`, \`kıdem tazminatı\`,
+\`KDV\`, \`tutuklama\`...) API o kavramın **kanonik yasasını** öne çıkarır ve yanıtta
+\`concepts\` ile \`primary_documents\` döner. Doğal dil sorularında kavram terimleriyle ek arama
+da yapılır; \`concept_expanded=true\` bunu gösterir.
+
 Örnekler:
 \`\`\`bash
 curl "${origin}/v1/search?q=nafaka"
@@ -142,6 +147,10 @@ Yanıt (kısaltılmış):
   "mode": "auto",
   "effective_mode": "all",
   "relaxed": false,
+  "concepts": [{ "id": "nafaka", "label": "Nafaka" }],
+  "concept_expanded": false,
+  "concept_documents": 0,
+  "primary_documents": 1,
   "count": 1,
   "candidate_documents": 37,
   "relevant_documents": 20,

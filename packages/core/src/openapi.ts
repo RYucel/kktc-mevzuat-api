@@ -106,6 +106,26 @@ export function openapiDocument(origin: string): Record<string, unknown> {
                       mode: { type: "string", description: "İstenen mod; auto olabilir." },
                       effective_mode: { type: "string", enum: ["all", "any", "phrase"] },
                       relaxed: { type: "boolean", description: "auto modunda any'ye düşüldüyse true." },
+                      concepts: {
+                        type: "array",
+                        description: "Sorguda tanınan hukuk kavramları.",
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: { type: "string" },
+                            label: { type: "string" },
+                          },
+                        },
+                      },
+                      concept_expanded: {
+                        type: "boolean",
+                        description: "Kavram terimleriyle ek arama yapıldıysa true.",
+                      },
+                      concept_documents: { type: "integer" },
+                      primary_documents: {
+                        type: "integer",
+                        description: "Kavramın kanonik yasalarından gelen belge sayısı.",
+                      },
                       count: { type: "integer" },
                       candidate_documents: {
                         type: "integer",

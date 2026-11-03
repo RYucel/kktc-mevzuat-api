@@ -176,6 +176,12 @@ jobs:
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         run: npm --workspace apps/worker run deploy
 
+      - name: Evaluate search quality
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          BASE: ${{ vars.WORKER_URL || 'https://kktc-mevzuat-api.stevevaius.workers.dev' }}
+        run: node scripts/eval-search.mjs
+
       - name: Warn when Cloudflare secrets are missing
         if: ${{ env.CLOUDFLARE_API_TOKEN == '' }}
         run: |
