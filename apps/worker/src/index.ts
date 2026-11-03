@@ -1,5 +1,6 @@
 import {
   createApp,
+  DECISION_MODELS,
   queryText,
   SEMANTIC_MODEL,
   type SemanticHit,
@@ -105,6 +106,9 @@ export default {
       runtime: semantic ? "cloudflare-d1+vectorize" : "cloudflare-d1",
       vectors: semantic,
       adminToken: env.VECTOR_ADMIN_TOKEN,
+      decide: env.AI
+        ? (model, input) => env.AI!.run(DECISION_MODELS[model] as Parameters<Ai["run"]>[0], input as never)
+        : undefined,
     });
     return app.fetch(request, env, ctx);
   },

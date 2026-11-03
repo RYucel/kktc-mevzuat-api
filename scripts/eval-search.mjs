@@ -13,45 +13,9 @@ const minMrr = Number(process.env.MIN_MRR ?? 0.55);
 const minHit1 = Number(process.env.MIN_HIT1 ?? 0.55);
 const minArticle = Number(process.env.MIN_ARTICLE ?? 0.8);
 
-const cases = [
-  { q: "mal paylaşımı", expect: "yasa-1-1998", ref: "Madde 26" },
-  { q: "mal paylaşımında eşlere düşen en az oran", expect: "yasa-1-1998", ref: "Madde 26" },
-  { q: "boşanmada mal paylaşımı", expect: "yasa-1-1998", ref: "Madde 26" },
-  { q: "nafaka", expect: "yasa-1-1998" },
-  { q: "iştirak nafakası", expect: "yasa-1-1998" },
-  { q: "velayet", expect: "yasa-1-1998" },
-  { q: "boşanma", expect: "yasa-1-1998" },
-  { q: "kira", expect: "yasa-17-1981" },
-  { q: "kira denetimi", expect: "yasa-17-1981" },
-  { q: "ecrimisil", expect: "yasa-17-1981" },
-  { q: "kıdem tazminatı", expect: "yasa-22-1992" },
-  { q: "ihbar tazminatı", expect: "yasa-22-1992" },
-  { q: "fazla mesai", expect: "yasa-22-1992" },
-  { q: "iş kazası", expect: "yasa-22-1992" },
-  { q: "miras", expect: "yasa-fasil-195" },
-  { q: "saklı pay", expect: "yasa-fasil-195" },
-  { q: "tenkis", expect: "yasa-fasil-195" },
-  { q: "maddi tazminat", expect: "yasa-fasil-148" },
-  { q: "manevi tazminat", expect: "yasa-fasil-148" },
-  { q: "destekten yoksun kalma", expect: "yasa-fasil-148" },
-  { q: "gelir vergisi", expect: "yasa-24-1982" },
-  { q: "KDV", expect: "yasa-47-1992" },
-  { q: "vergi cezası", expect: "yasa-27-1977" },
-  { q: "sosyal sigorta", expect: "yasa-16-1976" },
-  { q: "emeklilik", expect: "yasa-16-1976" },
-  { q: "disiplin", expect: "yasa-7-1979" },
-  { q: "kamu görevlisi", expect: "yasa-7-1979" },
-  { q: "idari işlem", expect: "yasa-27-2013" },
-  { q: "ceza", expect: "yasa-fasil-154" },
-  { q: "tutuklama", expect: "yasa-fasil-155" },
-  { q: "sigorta", expect: "yasa-60-2010" },
-  { q: "trafik kazası", expect: "yasa-60-2010" },
-  { q: "kat mülkiyeti", expect: "yasa-35-2010" },
-  { q: "aidat", expect: "yasa-35-2010" },
-  { q: "imar", expect: "yasa-55-1989" },
-  { q: "çevre", expect: "yasa-18-2012" },
-  { q: "kamu ihalesi", expect: "yasa-20-2016" },
-];
+import { readFileSync } from "node:fs";
+
+const { cases } = JSON.parse(readFileSync(new URL("./eval-keywords.json", import.meta.url), "utf8"));
 
 let hit1 = 0;
 let recall5 = 0;
