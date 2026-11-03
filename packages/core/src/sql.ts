@@ -33,6 +33,10 @@ function filters(params: SearchParams): { sql: string[]; binds: unknown[] } {
     sql.push(FILTER_TYPES.court);
     binds.push(`%${params.court}%`);
   }
+  if (params.doc_ids?.length) {
+    sql.push(`d.id IN (${params.doc_ids.map(() => "?").join(", ")})`);
+    binds.push(...params.doc_ids);
+  }
   return { sql, binds };
 }
 
@@ -45,6 +49,11 @@ export function buildSearchSql(match: string, params: SearchParams): { sql: stri
       : params.prefer === "ictihat"
         ? "CASE WHEN d.type = 'karar' THEN 1.6 ELSE 1.0 END"
         : "1.0";
+  const primaryBoost = params.boost_ids?.length
+    ? `CASE WHEN d.id IN (${params.boost_ids
+        .map((id) => `'${id.replace(/'/g, "''")}'`)
+        .join(", ")}) THEN 4.0 ELSE 1.0 END`
+    : "1.0";
   const sql = `
     SELECT
       c.doc_id, c.ref AS matched_ref, c.kind AS matched_kind, c.text AS chunk_text,
@@ -59,6 +68,7 @@ export function buildSearchSql(match: string, params: SearchParams): { sql: stri
       END
       * CASE WHEN d.type IN ('yasa', 'tuzuk', 'anayasa') THEN 1.15 ELSE 1.0 END
       * ${prefer}
+      * ${primaryBoost}
       * CASE d.source
         -- mevzuat.gov.ct.tr carries the consolidated, currently in-force text.
         WHEN 'gov' THEN 1.25
@@ -117,6 +127,26 @@ export function articleListSql(id: string): { sql: string; binds: unknown[] } {
           WHERE doc_id = ? AND kind IN ('article', 'preamble')
           GROUP BY ref, kind ORDER BY ord`,
     binds: [id],
+  };
+}
+
+/** Title chunks for canonical statutes that did not match the query tokens. */
+export function primaryDocsSql(ids: string[]): { sql: string; binds: unknown[] } {
+  if (!ids.length) {
+    return {
+      sql: `SELECT ${DOC_COLUMNS}, c.ref AS matched_ref, c.kind AS matched_kind, c.text AS chunk_text
+            FROM documents d LEFT JOIN chunks c ON c.doc_id = d.id AND c.kind = 'title'
+            WHERE 0`,
+      binds: [],
+    };
+  }
+  const placeholders = ids.map(() => "?").join(",");
+  return {
+    sql: `SELECT ${DOC_COLUMNS}, c.ref AS matched_ref, c.kind AS matched_kind, c.text AS chunk_text
+          FROM documents d LEFT JOIN chunks c ON c.doc_id = d.id AND c.kind = 'title'
+          WHERE d.id IN (${placeholders})
+          ORDER BY d.id`,
+    binds: ids,
   };
 }
 

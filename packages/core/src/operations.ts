@@ -6,13 +6,16 @@ import {
   chunksForDocsSql,
   chunksSql,
   documentSql,
+  primaryDocsSql,
   recentSql,
   STATS_SQL,
 } from "./sql.js";
 import { buildCitation } from "./citation.js";
+import { conceptMatch, matchConcepts } from "./legal-concepts.js";
 import {
   baseArticleRef,
   buildMatch,
+  foldTr,
   makeHighlights,
   makeSnippet,
   normalizeArticleRef,
@@ -96,6 +99,7 @@ const LEGISLATION_TYPES = new Set([
   "andlasma",
 ]);
 const MATCHED_TEXT_LIMIT = 8000;
+const CONCEPT_BOOST = 8;
 
 function capText(text: string, limit: number): { text: string; truncated: boolean } {
   if (text.length <= limit) return { text, truncated: false };
@@ -159,13 +163,37 @@ export async function searchDocuments(
     throw new ApiError(400, "empty_query", "Arama sorgusu en az bir harf/rakam içermelidir.");
   }
 
+  // Concept expansion is for natural-language questions, not for short
+  // keyword searches: "nafaka" or "kıdem tazminatı" already retrieve the right
+  // documents, while expanding them adds noise.
+  const queryWords = params.q.trim().split(/\s+/).filter(Boolean).length;
+  const naturalQuestion = /\b(nedir|nasil|hangi|ne kadar|en az|en fazla|oran|sart|sartlari|sonuc|sonuclari|kim|nerede)\b/.test(
+    foldTr(params.q),
+  );
+  const conceptMatches = matchConcepts(params.q);
+  const detected = conceptMatches.map((match) => match.concept);
+  const concepts = queryWords >= 4 || naturalQuestion ? detected : [];
+  // Only the leading concept(s) contribute canonical statutes; otherwise a
+  // generic trigger such as "ceza" injects the Criminal Code into tax queries.
+  const topConceptScore = conceptMatches[0]?.score ?? 0;
+  const primaryConcepts = conceptMatches
+    .filter((match) => match.score >= topConceptScore * 0.85)
+    .map((match) => match.concept);
+  const primaryIds = [...new Set(primaryConcepts.flatMap((concept) => concept.primary ?? []))];
+  const searchParams: SearchParams = {
+    ...params,
+    prefer: params.prefer ?? (detected.length > 0 ? "mevzuat" : undefined),
+    boost_ids: primaryIds,
+  };
+
+  const fetchRows = async (match: string, overrides: Partial<SearchParams> = {}) => {
+    const search = buildSearchSql(match, { ...searchParams, ...overrides });
+    return store.all(search.sql, search.binds);
+  };
+
   const run = async (match: string) => {
-    const search = buildSearchSql(match, params);
-    const count = buildCountSql(match, params);
-    const [rows, countRow] = await Promise.all([
-      store.all(search.sql, search.binds),
-      store.first(count.sql, count.binds),
-    ]);
+    const count = buildCountSql(match, searchParams);
+    const [rows, countRow] = await Promise.all([fetchRows(match), store.first(count.sql, count.binds)]);
     return { rows, candidate: Number(countRow?.n ?? 0) };
   };
 
@@ -185,14 +213,82 @@ export async function searchDocuments(
     }
   }
 
-  const seen = new Set<string>();
-  const deduped: { row: StoreRow; score: number }[] = [];
+  // Concept channel: "en az oran" -> "2/3'ünden fazla olamaz", "mal rejimi"...
+  const conceptRows: StoreRow[] = [];
+  if (concepts.length) {
+    const batches = await Promise.all(
+      concepts.map((concept) => fetchRows(conceptMatch(concept))),
+    );
+    for (const batch of batches) conceptRows.push(...batch);
+  }
+
+  const injectPrimary =
+    detected.length > 0 &&
+    params.prefer !== "ictihat" &&
+    (!params.type || params.type === "yasa");
+  const primaryRows: StoreRow[] = [];
+  if (injectPrimary) {
+    for (const concept of primaryConcepts) {
+      if (!concept.primary?.length) continue;
+      const conceptRowsForPrimary = await fetchRows(conceptMatch(concept), {
+        doc_ids: concept.primary,
+        boost_ids: [],
+      });
+      const found = new Set<string>();
+      for (const row of conceptRowsForPrimary) {
+        const id = String(row.id);
+        if (found.has(id)) continue;
+        found.add(id);
+        primaryRows.push(row);
+      }
+      const missing = concept.primary.filter((id) => !found.has(id));
+      // Title fallback is safe only without source/year/court filters; the
+      // primary query above already applied those filters.
+      if (missing.length && !params.source && !params.year && !params.court) {
+        const lookup = primaryDocsSql(missing);
+        primaryRows.push(...(await store.all(lookup.sql, lookup.binds)));
+      }
+    }
+  }
+
+  const primaryOrder = new Map<string, number>();
+  let primaryRank = 0;
+  for (const concept of primaryConcepts) {
+    for (const id of concept.primary ?? []) {
+      if (!primaryOrder.has(id)) primaryOrder.set(id, primaryRank++);
+    }
+  }
+  primaryRows.sort(
+    (a, b) =>
+      (primaryOrder.get(String(a.id)) ?? 999) - (primaryOrder.get(String(b.id)) ?? 999),
+  );
+
+  const byId = new Map<string, { row: StoreRow; score: number }>();
   for (const row of rows) {
     const id = String(row.id);
-    if (seen.has(id)) continue;
-    seen.add(id);
-    deduped.push({ row, score: -Number(row.rank ?? 0) });
+    byId.set(id, { row, score: -Number(row.rank ?? 0) });
   }
+  for (const row of conceptRows) {
+    const id = String(row.id);
+    const score = -Number(row.rank ?? 0) + CONCEPT_BOOST;
+    const existing = byId.get(id);
+    if (!existing || score > existing.score) byId.set(id, { row, score });
+  }
+  for (const row of primaryRows) {
+    const id = String(row.id);
+    // Canonical statutes are an editorial decision, not a BM25 accident.
+    byId.set(id, { row, score: 120 });
+  }
+  const deduped = [...byId.values()].sort((a, b) => {
+    const difference = b.score - a.score;
+    if (difference !== 0) return difference;
+    return (
+      (primaryOrder.get(String(a.row.id)) ?? 999) -
+      (primaryOrder.get(String(b.row.id)) ?? 999)
+    );
+  });
+  const conceptDocuments = new Set(conceptRows.map((row) => String(row.id))).size;
+  const primaryDocuments = new Set(primaryRows.map((row) => String(row.id))).size;
 
   const minScore = Math.max(0, Number(params.min_score ?? 0));
   const filtered = minScore > 0 ? deduped.filter((item) => item.score >= minScore) : deduped;
@@ -314,12 +410,16 @@ export async function searchDocuments(
     mode: params.mode ?? "auto",
     effective_mode: effectiveMode,
     relaxed,
+    concepts: detected.map((concept) => ({ id: concept.id, label: concept.label })),
+    concept_expanded: concepts.length > 0,
+    concept_documents: conceptDocuments,
+    primary_documents: primaryDocuments,
     filters: {
       type: params.type ?? null,
       year: params.year ?? null,
       source: params.source ?? null,
       court: params.court ?? null,
-      prefer: params.prefer ?? null,
+      prefer: searchParams.prefer ?? null,
       min_score: minScore,
     },
     count: results.length,

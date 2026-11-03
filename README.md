@@ -170,6 +170,8 @@ esas/karar numarası ve tarihi kendileri birleştirmesi yerine bu alanı aynen k
 - Varsayılan `mode=auto`: önce tüm sözcükler (VE); sonuç yoksa herhangi biri (VEYA) ve `relaxed=true`.
   `all`, `any`, `phrase` açıkça seçilebilir.
 - Hukuk sorularında `prefer=mevzuat` yasa/tüzük/anayasayı, `prefer=ictihat` kararları öne çıkarır.
+- Hukuk kavramı tanınırsa (`mal paylaşımı`, `nafaka`, `kıdem tazminatı`, `KDV`…) kavramın kanonik
+  yasası öne çıkarılır; yanıtta `concepts` ve `primary_documents` döner.
 - Tırnaklı ifade: `q="mal paylaşımı"`. `2/3`, `1/3`, `üçte iki` tek token olarak aranır.
 - 3+ harfli sözcüklerde otomatik önek araması (`nafaka` → `nafaka*`).
 - Sonuçlar belge bazında tekilleştirilir; `score` büyük olan daha iyidir. `text_status` metnin
@@ -279,6 +281,9 @@ npm run build
 
 # Çalışan API'ye karşı uçtan uca test
 npm run smoke
+
+# Arama kalitesi (37 hukuk sorusu; hit@1, recall@5, MRR, article@5)
+npm run eval:search
 ```
 
 ## GitHub Actions

@@ -41,6 +41,10 @@ export interface SearchParams {
   court?: string;
   prefer?: "mevzuat" | "ictihat";
   min_score?: number;
+  /** Internal: canonical statutes for the detected legal concept. */
+  boost_ids?: string[];
+  /** Internal: restrict to these document ids (primary-law lookup). */
+  doc_ids?: string[];
   limit: number;
   offset: number;
 }
@@ -147,6 +151,10 @@ export interface SearchResponse {
   mode: string;
   effective_mode: "all" | "any" | "phrase";
   relaxed: boolean;
+  concepts: { id: string; label: string }[];
+  concept_expanded: boolean;
+  concept_documents: number;
+  primary_documents: number;
   filters: Record<string, string | number | null>;
   count: number;
   /** Distinct documents matching the FTS expression (pre-pagination). */
