@@ -3,13 +3,21 @@ import {
   articleSql,
   buildCountSql,
   buildSearchSql,
+  chunksForDocsSql,
   chunksSql,
   documentSql,
   recentSql,
   STATS_SQL,
 } from "./sql.js";
 import { buildCitation } from "./citation.js";
-import { baseArticleRef, buildMatch, makeSnippet, normalizeArticleRef, truncate } from "./text.js";
+import {
+  baseArticleRef,
+  buildMatch,
+  makeHighlights,
+  makeSnippet,
+  normalizeArticleRef,
+  truncate,
+} from "./text.js";
 import {
   type ApiMeta,
   type ArticleResponse,
@@ -18,6 +26,7 @@ import {
   type DocumentResponse,
   type DocumentSummary,
   type RecentResponse,
+  type SearchGroupItem,
   type SearchParams,
   type SearchResponse,
   type SearchResult,
@@ -77,6 +86,36 @@ export function consolidationLabel(through: string | null): string | null {
     : `${through} sayılı değişikliğe kadar birleştirilmiş metin`;
 }
 
+const LEGISLATION_TYPES = new Set([
+  "yasa",
+  "tuzuk",
+  "anayasa",
+  "yonetmelik",
+  "emirname",
+  "kararname",
+  "andlasma",
+]);
+const MATCHED_TEXT_LIMIT = 8000;
+
+function capText(text: string, limit: number): { text: string; truncated: boolean } {
+  if (text.length <= limit) return { text, truncated: false };
+  const cut = text.lastIndexOf(" ", limit);
+  return {
+    text: `${text.slice(0, cut > limit * 0.6 ? cut : limit).trimEnd()}…`,
+    truncated: true,
+  };
+}
+
+function articleUrl(origin: string, id: string, baseRef: string): string {
+  const ref = baseRef.replace(/^Madde\s+/, "");
+  return `${origin}/v1/documents/${encodeURIComponent(id)}/articles/${encodeURIComponent(ref)}`;
+}
+
+function matchedPart(ref: string, baseRef: string): string | null {
+  const suffix = ref.slice(baseRef.length).trim().replace(/^\(|\)$/g, "");
+  return suffix || null;
+}
+
 export function mapSummary(row: StoreRow, origin: string): DocumentSummary {
   const id = String(row.id);
   const extra = parseJson(row.extra_json);
@@ -113,17 +152,38 @@ export async function searchDocuments(
   params: SearchParams,
   origin: string,
 ): Promise<SearchResponse> {
-  const match = buildMatch(params.q, params.mode ?? "all");
-  if (!match) {
+  const requestedMode = params.mode ?? "auto";
+  const initialMode: "all" | "any" | "phrase" = requestedMode === "auto" ? "all" : requestedMode;
+  const initialMatch = buildMatch(params.q, initialMode);
+  if (!initialMatch) {
     throw new ApiError(400, "empty_query", "Arama sorgusu en az bir harf/rakam içermelidir.");
   }
 
-  const search = buildSearchSql(match, params);
-  const count = buildCountSql(match, params);
-  const [rows, countRow] = await Promise.all([
-    store.all(search.sql, search.binds),
-    store.first(count.sql, count.binds),
-  ]);
+  const run = async (match: string) => {
+    const search = buildSearchSql(match, params);
+    const count = buildCountSql(match, params);
+    const [rows, countRow] = await Promise.all([
+      store.all(search.sql, search.binds),
+      store.first(count.sql, count.binds),
+    ]);
+    return { rows, candidate: Number(countRow?.n ?? 0) };
+  };
+
+  let { rows, candidate } = await run(initialMatch);
+  let effectiveMode: "all" | "any" | "phrase" = initialMode;
+  let relaxed = false;
+  if (requestedMode === "auto" && rows.length === 0) {
+    const relaxedMatch = buildMatch(params.q, "any");
+    if (relaxedMatch && relaxedMatch !== initialMatch) {
+      const retry = await run(relaxedMatch);
+      if (retry.rows.length > 0) {
+        rows = retry.rows;
+        candidate = retry.candidate;
+        effectiveMode = "any";
+        relaxed = true;
+      }
+    }
+  }
 
   const seen = new Set<string>();
   const deduped: { row: StoreRow; score: number }[] = [];
@@ -134,9 +194,60 @@ export async function searchDocuments(
     deduped.push({ row, score: -Number(row.rank ?? 0) });
   }
 
-  const page = deduped.slice(params.offset, params.offset + params.limit);
+  const minScore = Math.max(0, Number(params.min_score ?? 0));
+  const filtered = minScore > 0 ? deduped.filter((item) => item.score >= minScore) : deduped;
+  const page = filtered.slice(params.offset, params.offset + params.limit);
+
+  const typeById = new Map(page.map(({ row }) => [String(row.id), String(row.type)]));
+  const legislationIds = [
+    ...new Set(
+      page
+        .map(({ row }) => String(row.id))
+        .filter((id) => LEGISLATION_TYPES.has(typeById.get(id) ?? "")),
+    ),
+  ];
+  const chunkQuery = chunksForDocsSql(legislationIds);
+  const chunkRows = legislationIds.length ? await store.all(chunkQuery.sql, chunkQuery.binds) : [];
+  const chunksByDoc = new Map<string, StoreRow[]>();
+  for (const chunk of chunkRows) {
+    const docId = String(chunk.doc_id);
+    const list = chunksByDoc.get(docId) ?? [];
+    list.push(chunk);
+    chunksByDoc.set(docId, list);
+  }
+
   const results: SearchResult[] = page.map(({ row, score }) => {
     const summary = mapSummary(row, origin);
+    const rawRef = asString(row.matched_ref);
+    const base = baseArticleRef(rawRef);
+    const isArticle = !!base && LEGISLATION_TYPES.has(summary.type);
+    let matchedRef = rawRef;
+    let matchedPartValue: string | null = null;
+    let matchedText: string | null = null;
+    let matchedTextTruncated = false;
+    let matchedUrl: string | null = null;
+    let snippet = makeSnippet(String(row.chunk_text ?? ""), params.q);
+
+    if (isArticle && base) {
+      matchedRef = base;
+      matchedPartValue = rawRef ? matchedPart(rawRef, base) : null;
+      const parts = (chunksByDoc.get(summary.id) ?? []).filter(
+        (chunk) => baseArticleRef(asString(chunk.ref)) === base,
+      );
+      if (parts.length) {
+        const full = parts
+          .map((chunk) => String(chunk.text))
+          .join("\n\n")
+          .trim();
+        const capped = capText(full, MATCHED_TEXT_LIMIT);
+        matchedText = capped.text;
+        matchedTextTruncated = capped.truncated;
+        // Show the clause from the whole article, not only the matched part.
+        snippet = makeSnippet(full, params.q);
+      }
+      matchedUrl = articleUrl(origin, summary.id, base);
+    }
+
     return {
       id: summary.id,
       type: summary.type,
@@ -149,43 +260,76 @@ export async function searchDocuments(
       court: summary.court,
       citation: summary.citation,
       consolidated_through: summary.consolidated_through,
-      matched_ref: asString(row.matched_ref),
+      text_status: summary.text_status,
+      content_chars: summary.content_chars,
+      chunk_count: summary.chunk_count,
+      matched_ref: matchedRef,
+      matched_part: matchedPartValue,
       matched_kind: String(row.matched_kind ?? ""),
-      snippet: makeSnippet(String(row.chunk_text ?? ""), params.q),
+      matched_text: matchedText,
+      matched_text_truncated: matchedTextTruncated,
+      matched_url: matchedUrl,
+      snippet,
+      highlights: makeHighlights(snippet, params.q),
       score: Number(score.toFixed(6)),
       url: summary.url,
       source_url: summary.source_url,
     };
   });
 
+  const groups: SearchResponse["groups"] = { mevzuat: [], ictihat: [] };
+  for (const { row, score } of filtered) {
+    const type = String(row.type);
+    const key = type === "karar" ? "ictihat" : LEGISLATION_TYPES.has(type) ? "mevzuat" : null;
+    if (!key || groups[key].length >= 3) continue;
+    const summary = mapSummary(row, origin);
+    groups[key].push({
+      id: summary.id,
+      type: summary.type,
+      title: summary.title,
+      citation: summary.citation,
+      matched_ref: asString(row.matched_ref),
+      text_status: summary.text_status,
+      score: Number(score.toFixed(6)),
+    });
+  }
+
   const nextOffset = params.offset + results.length;
-  const next =
-    results.length === params.limit
-      ? `${origin}/v1/search?${new URLSearchParams({
-          q: params.q,
-          ...(params.mode && params.mode !== "all" ? { mode: params.mode } : {}),
-          ...(params.type ? { type: params.type } : {}),
-          ...(params.year ? { year: String(params.year) } : {}),
-          ...(params.source ? { source: params.source } : {}),
-          ...(params.court ? { court: params.court } : {}),
-          limit: String(params.limit),
-          offset: String(nextOffset),
-        }).toString()}`
-      : null;
+  const hasMore = filtered.length > nextOffset;
+  const nextParams: Record<string, string> = { q: params.q };
+  if (relaxed) nextParams.mode = "any";
+  else if (params.mode && params.mode !== "auto") nextParams.mode = params.mode;
+  if (params.type) nextParams.type = params.type;
+  if (params.year) nextParams.year = String(params.year);
+  if (params.source) nextParams.source = params.source;
+  if (params.court) nextParams.court = params.court;
+  if (params.prefer) nextParams.prefer = params.prefer;
+  if (minScore > 0) nextParams.min_score = String(minScore);
+  nextParams.limit = String(params.limit);
+  nextParams.offset = String(nextOffset);
+  const next = hasMore ? `${origin}/v1/search?${new URLSearchParams(nextParams).toString()}` : null;
 
   return {
     query: params.q,
-    mode: params.mode ?? "all",
+    mode: params.mode ?? "auto",
+    effective_mode: effectiveMode,
+    relaxed,
     filters: {
       type: params.type ?? null,
       year: params.year ?? null,
       source: params.source ?? null,
       court: params.court ?? null,
+      prefer: params.prefer ?? null,
+      min_score: minScore,
     },
     count: results.length,
-    total_documents: Number(countRow?.n ?? 0),
+    candidate_documents: candidate,
+    relevant_documents: filtered.length,
+    total_documents: candidate,
+    min_score: minScore,
     has_more: next !== null,
     next,
+    groups,
     results,
     _meta: apiMeta(origin),
   };

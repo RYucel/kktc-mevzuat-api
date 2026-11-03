@@ -145,6 +145,31 @@ def fold_tr(text: str) -> str:
     return text.translate(_FOLD).lower()
 
 
+# Fractions such as "2/3" are split by the FTS5 tokenizer, so a query for
+# "2/3" would otherwise become "2 AND 3" and match article numbers like 23.
+# Index and query both use a single token (f2of3). The denominator whitelist
+# keeps law numbers ("24/1982") and dates ("13/10/2026") untouched.
+_FRACTION_RE = re.compile(r"(?<![\d/])(\d{1,2})\s*/\s*(\d{1,2})(?![\d/])")
+_FRACTION_DENOMINATORS = {2, 3, 4, 5, 6, 8, 10, 12, 16, 20}
+
+
+def fraction_token(match: re.Match[str]) -> str:
+    numerator, denominator = int(match.group(1)), int(match.group(2))
+    if 0 < numerator < denominator and denominator in _FRACTION_DENOMINATORS:
+        return f"f{numerator}of{denominator}"
+    return match.group(0)
+
+
+def index_text(text: str) -> str:
+    """Folded text for the FTS index, with searchable fraction tokens.
+
+    The replacement is not length-preserving, so this is only for
+    ``chunks_fts.text_norm``; the original ``chunks.text`` is kept for display
+    and snippet offsets.
+    """
+    return _FRACTION_RE.sub(fraction_token, fold_tr(text))
+
+
 def clean_text(text: str) -> str:
     """Normalise a plain-text document without destroying its layout."""
     if not text:

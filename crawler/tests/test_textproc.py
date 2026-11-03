@@ -6,6 +6,7 @@ from kktc.textproc import (
     extract_number,
     extract_year,
     fold_tr,
+    index_text,
     normalize_margin_notes,
     split_articles,
     split_paragraphs,
@@ -42,6 +43,18 @@ def test_fold_preserves_length() -> None:
     folded = fold_tr(text)
     assert len(folded) == len(text)
     assert folded == "iiii ssgguuoocc aaiiuu \"tirnak\" - tire - cizgi 12/2024"
+
+
+def test_index_text_makes_fractions_single_tokens() -> None:
+    assert index_text("Pay 2/3 oranı") == "pay f2of3 orani"
+    assert index_text("1 / 3 pay") == "f1of3 pay"
+    assert index_text("üçte iki") == "ucte iki"  # word expansion is query-side
+
+
+def test_index_text_keeps_law_numbers_and_dates() -> None:
+    assert index_text("24/1982 sayılı Yasa") == "24/1982 sayili yasa"
+    assert index_text("13/10/2026 tarihli") == "13/10/2026 tarihli"
+    assert index_text("1122-2024") == "1122-2024"
 
 
 def test_clean_text_normalises_layout() -> None:

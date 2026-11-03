@@ -45,7 +45,17 @@ const TOOLS = [
         year: { type: "integer", minimum: 1900, maximum: 2100 },
         source: { type: "string", enum: ["gov", "mahkemeler"], description: "İkisi de birleştirilmiş metin; birçok yasa (ör. Gelir Vergisi) yalnızca mahkemeler kaynağında. Genelde boş bırakın." },
         court: { type: "string", description: "Mahkeme adı içinde geçen ifade (yalnız kararlar)." },
-        mode: { type: "string", enum: ["all", "any", "phrase"] },
+        mode: {
+          type: "string",
+          enum: ["auto", "all", "any", "phrase"],
+          description: "auto: önce tüm sözcükler, sonuç yoksa herhangi biri (varsayılan).",
+        },
+        prefer: {
+          type: "string",
+          enum: ["mevzuat", "ictihat"],
+          description: "mevzuat: yasa/tüzük/anayasayı öne çıkar; ictihat: kararları öne çıkar.",
+        },
+        min_score: { type: "number", minimum: 0, description: "Bu skorun altındaki sonuçları at." },
         limit: { type: "integer", minimum: 1, maximum: 50 },
         offset: { type: "integer", minimum: 0, maximum: 1000 },
       },
@@ -67,7 +77,7 @@ const TOOLS = [
           description: "Mahkeme adı içinde geçen ifade, ör. 'Yargıtay', 'Anayasa', 'İdare'. Boş = tümü.",
         },
         yil: { type: "integer", minimum: 1900, maximum: 2100 },
-        mod: { type: "string", enum: ["all", "any", "phrase"] },
+        mod: { type: "string", enum: ["auto", "all", "any", "phrase"] },
         adet: { type: "integer", minimum: 1, maximum: 50 },
         sayfa: { type: "integer", minimum: 1, maximum: 50, description: "1'den başlar." },
       },
@@ -215,11 +225,13 @@ async function callTool(
       if (!query.trim()) throw new ApiError(400, "missing_query", "query zorunludur.");
       const params: SearchParams = {
         q: query,
-        mode: (strArg(args, "mode") as SearchParams["mode"]) ?? "all",
+        mode: (strArg(args, "mode") as SearchParams["mode"]) || "auto",
         type: strArg(args, "type"),
         year: intArg(args, "year"),
         source: strArg(args, "source"),
         court: strArg(args, "court"),
+        prefer: (strArg(args, "prefer") as SearchParams["prefer"]) || "mevzuat",
+        min_score: intArg(args, "min_score", 0) ?? 0,
         limit: Math.min(50, Math.max(1, intArg(args, "limit", 10) ?? 10)),
         offset: Math.min(1000, Math.max(0, intArg(args, "offset", 0) ?? 0)),
       };
@@ -234,7 +246,7 @@ async function callTool(
         store,
         {
           q: query,
-          mode: (strArg(args, "mod") as SearchParams["mode"]) ?? "all",
+          mode: (strArg(args, "mod") as SearchParams["mode"]) || "auto",
           type: "karar",
           year: intArg(args, "yil"),
           court: strArg(args, "mahkeme") || undefined,

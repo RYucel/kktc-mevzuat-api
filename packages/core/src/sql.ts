@@ -39,16 +39,27 @@ function filters(params: SearchParams): { sql: string[]; binds: unknown[] } {
 export function buildSearchSql(match: string, params: SearchParams): { sql: string; binds: unknown[] } {
   const f = filters(params);
   const fetchLimit = Math.min(1000, Math.max(params.limit + params.offset, 1) * 20);
+  const prefer =
+    params.prefer === "mevzuat"
+      ? "CASE WHEN d.type IN ('yasa', 'tuzuk', 'anayasa') THEN 1.6 ELSE 1.0 END"
+      : params.prefer === "ictihat"
+        ? "CASE WHEN d.type = 'karar' THEN 1.6 ELSE 1.0 END"
+        : "1.0";
   const sql = `
     SELECT
       c.doc_id, c.ref AS matched_ref, c.kind AS matched_kind, c.text AS chunk_text,
       ${DOC_COLUMNS},
-      bm25(chunks_fts) * CASE c.kind
-        WHEN 'title' THEN 1.8
-        WHEN 'article' THEN 1.0
-        WHEN 'paragraph' THEN 1.1
+      bm25(chunks_fts) * CASE
+        -- Court titles duplicate their subject tags; do not let them bury statutes.
+        WHEN c.kind = 'title' AND d.type = 'karar' THEN 1.25
+        WHEN c.kind = 'title' THEN 1.8
+        WHEN c.kind = 'article' THEN 1.0
+        WHEN c.kind = 'paragraph' THEN 1.1
         ELSE 1.2
-      END * CASE d.source
+      END
+      * CASE WHEN d.type IN ('yasa', 'tuzuk', 'anayasa') THEN 1.15 ELSE 1.0 END
+      * ${prefer}
+      * CASE d.source
         -- mevzuat.gov.ct.tr carries the consolidated, currently in-force text.
         WHEN 'gov' THEN 1.25
         ELSE 1.0
@@ -106,6 +117,20 @@ export function articleListSql(id: string): { sql: string; binds: unknown[] } {
           WHERE doc_id = ? AND kind IN ('article', 'preamble')
           GROUP BY ref, kind ORDER BY ord`,
     binds: [id],
+  };
+}
+
+/** All chunks for a page of search results, used to rebuild whole articles. */
+export function chunksForDocsSql(ids: string[]): { sql: string; binds: unknown[] } {
+  if (!ids.length) {
+    return { sql: "SELECT doc_id, ord, kind, ref, text FROM chunks WHERE 0", binds: [] };
+  }
+  const placeholders = ids.map(() => "?").join(",");
+  return {
+    sql: `SELECT doc_id, ord, kind, ref, text FROM chunks
+          WHERE doc_id IN (${placeholders})
+          ORDER BY doc_id, ord`,
+    binds: ids,
   };
 }
 

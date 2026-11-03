@@ -46,6 +46,21 @@ function intParam(
   return parsed;
 }
 
+function floatParam(
+  value: string | undefined,
+  name: string,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  if (value === undefined || value === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    throw new ApiError(400, "invalid_parameter", `${name} ${min} ile ${max} arasında bir sayı olmalıdır.`);
+  }
+  return parsed;
+}
+
 function typeParam(value: string | undefined): string | undefined {
   if (!value) return undefined;
   if (!(DOC_TYPES as readonly string[]).includes(value)) {
@@ -112,9 +127,13 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
     if (!query.trim()) {
       throw new ApiError(400, "missing_query", "q parametresi zorunludur. Örnek: /v1/search?q=nafaka");
     }
-    const modeRaw = c.req.query("mode") ?? "all";
-    if (!["all", "any", "phrase"].includes(modeRaw)) {
-      throw new ApiError(400, "invalid_mode", "mode all, any veya phrase olmalıdır.");
+    const modeRaw = c.req.query("mode") ?? "auto";
+    if (!["auto", "all", "any", "phrase"].includes(modeRaw)) {
+      throw new ApiError(400, "invalid_mode", "mode auto, all, any veya phrase olmalıdır.");
+    }
+    const preferRaw = c.req.query("prefer");
+    if (preferRaw && !["mevzuat", "ictihat"].includes(preferRaw)) {
+      throw new ApiError(400, "invalid_prefer", "prefer mevzuat veya ictihat olmalıdır.");
     }
     const yearRaw = c.req.query("year");
     const params: SearchParams = {
@@ -124,6 +143,8 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
       year: yearRaw ? intParam(yearRaw, "year", 0, 1900, 2100) : undefined,
       source: c.req.query("source") || undefined,
       court: c.req.query("court") || undefined,
+      prefer: (preferRaw || undefined) as SearchParams["prefer"],
+      min_score: floatParam(c.req.query("min_score"), "min_score", 0, 0, 1000),
       limit: intParam(c.req.query("limit"), "limit", 10, 1, 50),
       offset: intParam(c.req.query("offset"), "offset", 0, 0, 1000),
     };

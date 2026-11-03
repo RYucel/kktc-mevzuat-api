@@ -13,7 +13,7 @@ from typing import Any, Iterable, Optional
 
 from .config import DB_PATH, DIST_DIR
 from .history import HISTORY_TABLES_SQL
-from .textproc import Chunk, chunk_document, clean_text, fold_tr, normalize_title
+from .textproc import Chunk, chunk_document, clean_text, index_text, normalize_title
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +86,11 @@ def _subtype(doc: dict[str, Any]) -> Optional[str]:
 
 def _chunks_for(doc: dict[str, Any]) -> list[Chunk]:
     title = clean_text(doc.get("title") or "")
-    chunks: list[Chunk] = [Chunk("title", "Başlık", title)] if title else []
+    # Index the number with the title so metadata-only documents (many tüzük
+    # PDFs) are still found by "1122-2024" or "24/1982".
+    number = clean_text(str(doc.get("number") or ""))
+    label = f"{title} {number}".strip() if number and number not in title else title
+    chunks: list[Chunk] = [Chunk("title", "Başlık", label)] if label else []
     content = clean_text(doc.get("content") or "")
     if content:
         chunks.extend(chunk_document(content, doc.get("type") or "yasa"))
@@ -247,7 +251,7 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
     )
     conn.executemany(
         "INSERT INTO chunks_fts (rowid, text_norm) VALUES (?, ?)",
-        [(cid, fold_tr(row[4])) for cid, row in chunk_ids],
+        [(cid, index_text(row[4])) for cid, row in chunk_ids],
     )
 
     meta = {

@@ -45,7 +45,11 @@ MCP: ${origin}/mcp (Streamable HTTP, POST)
 ## Bu API'yi nasıl kullanmalıyım?
 
 1. **Önce arayın.** Konuyla ilgili belgeleri bulmak için \`/v1/search?q=...\` kullanın.
-   Sonuçlardaki \`snippet\`, \`matched_ref\` ve \`id\` alanlarını okuyun.
+   Varsayılan \`mode=auto\` önce tüm sözcükleri arar; sonuç yoksa \`any\`'ye düşer ve
+   \`relaxed=true\` döner. Hukuk sorularında \`prefer=mevzuat\` kullanın. Sonuçlardaki
+   \`snippet\`, \`matched_ref\`, \`matched_text\`, \`matched_url\`, \`text_status\` ve \`id\`
+   alanlarını okuyun. \`matched_text\` eşleşen maddenin tam metnidir; \`matched_url\`
+   doğrudan o maddeye gider.
 2. **Tam metni alın.** \`/v1/documents/{id}?format=markdown\` ile belgenin tam metnini alın.
 3. **Tek maddeye gidin.** \`/v1/documents/{id}/articles/12\` (veya \`30A\`) ile ilgili maddeyi alın.
 4. **Atıf yapın.** Her sonuçtaki hazır \`citation\` alanını aynen kullanın (ör. mahkeme, E./D. no, tarih);
@@ -55,6 +59,18 @@ MCP: ${origin}/mcp (Streamable HTTP, POST)
    ya da başlığında değişiklik listesi yoktur.
 5. **Emin değilseniz arayın.** Metinde olmayan bir hüküm uydurmayın; \`text_status\` değeri
    \`metadata\` ise tam metin indekslenmemiştir, yalnızca künye ve resmî PDF bağlantısı vardır.
+
+### Hukuk sorusu akışı
+
+"Doğal dille" sorulan sorularda (\`mal paylaşımında eşlere düşen en az oran\` gibi):
+
+1. \`/v1/search?q=...&prefer=mevzuat&type=yasa\` ile başlayın. \`mode=auto\` zaten gevşetir.
+2. \`matched_text\` varsa onu okuyun; yoksa \`matched_url\` veya \`/articles/{ref}\` ile maddeyi alın.
+3. Metinde **birebir yazmayan** ama matematiksel olarak çıkan sonuçları açıkça "çıkarım" olarak belirtin.
+   Örnek: "bir tarafa düşen pay 2/3'ten fazla olamaz" hükmü, diğer tarafın **en az 1/3** alması anlamına gelir;
+   ancak mahkemenin hakkaniyet takdirini ortadan kaldırmaz.
+4. Cevabı \`citation\` + \`matched_url\` / \`source_url\` ile verin; hangi maddeye dayandığını söyleyin.
+5. \`text_status=metadata\` ise tam metin olmadığını açıkça söyleyin; uydurmayın.
 
 Her JSON yanıtında \`_meta.hint\` ve \`_meta.docs\` alanları bu talimatlara geri bağlantı verir.
 
@@ -84,7 +100,8 @@ Kaynaklar:
 - \`mahkemeler\` kaynağındaki eski PDF'lerin bir kısmı taranmış görüntüdür; \`text_status=metadata\`
   ise tam metin yoktur, yalnızca künye ve dosya bağlantısı vardır.
 - **Mahkeme kararları yalnızca \`mahkemeler\` kaynağındadır.**
-- Arama, \`gov\` sonuçlarını otomatik olarak üst sıralara taşır.
+- Arama, \`gov\` ve yasa/tüzük/anayasa sonuçlarını hafifçe üst sıralara taşır; \`prefer=mevzuat\`
+  bu avantajı belirginleştirir.
 
 ## Uçlar
 
@@ -92,19 +109,28 @@ Kaynaklar:
 
 Parametreler:
 - \`q\` (zorunlu): arama sözcükleri. Türkçe karakterler ve büyük/küçük harf farkı önemsizdir.
-- \`mode\`: \`all\` (varsayılan, tüm sözcükler), \`any\` (herhangi biri), \`phrase\` (tam ifade).
+- \`mode\`: \`auto\` (varsayılan; önce tüm sözcükler, sonuç yoksa herhangi biri), \`all\`, \`any\`, \`phrase\`.
 - \`type\`: ${DOC_TYPES.map((type) => `\`${type}\``).join(", ")}.
 - \`year\`: 4 haneli yıl (ör. 1998).
 - \`source\`: \`gov\` veya \`mahkemeler\` (ikisi de birleştirilmiş metin; birçok yasa yalnızca \`mahkemeler\`'dedir).
 - \`court\`: mahkeme adı içinde geçen ifade (ör. \`Yargıtay\`); \`GET /v1/stats\` → \`courts\` listesinde tüm adlar var.
+- \`prefer\`: \`mevzuat\` (yasa/tüzük/anayasa önce) veya \`ictihat\` (kararlar önce).
+- \`min_score\`: bu skorun altındaki sonuçları eler (varsayılan 0). Ham BM25 skorudur;
+  sorgular arasında karşılaştırmayın.
 - \`limit\`: 1–50 (varsayılan 10).
 - \`offset\`: 0–1000 (varsayılan 0).
+
+Kesirler tek token olarak aranır: \`2/3\`, \`üçte iki\` ve \`1/3\` gibi ifadeler doğru maddeyi bulur;
+\`2/3\` artık \`23\` ile karışmaz. Yanıtta \`candidate_documents\` (aday), \`relevant_documents\`
+(eşiği geçen), \`relaxed\`, \`groups\` ve \`highlights\` alanları bulunur.
 
 Örnekler:
 \`\`\`bash
 curl "${origin}/v1/search?q=nafaka"
 curl "${origin}/v1/search?q=nafaka&type=yasa&source=gov"
 curl "${origin}/v1/search?q=%22mal%20payla%C5%9F%C4%B1m%C4%B1%22&type=yasa"
+curl "${origin}/v1/search?q=mal%20payla%C5%9F%C4%B1m%C4%B1&prefer=mevzuat&type=yasa"
+curl "${origin}/v1/search?q=mal%20payla%C5%9F%C4%B1m%C4%B1%202%2F3&prefer=mevzuat"
 curl "${origin}/v1/search?q=kira%20tazminat&type=karar&year=2024&limit=5"
 curl "${origin}/v1/search?q=kefalet&mode=any&limit=20&offset=20"
 \`\`\`
@@ -113,24 +139,38 @@ Yanıt (kısaltılmış):
 \`\`\`json
 {
   "query": "nafaka",
+  "mode": "auto",
+  "effective_mode": "all",
+  "relaxed": false,
   "count": 1,
+  "candidate_documents": 37,
+  "relevant_documents": 20,
   "total_documents": 37,
+  "min_score": 0,
   "has_more": true,
   "next": "${origin}/v1/search?q=nafaka&limit=10&offset=10",
+  "groups": { "mevzuat": [], "ictihat": [] },
   "results": [{
     "id": "yasa-1-1998",
     "title": "1/1998 SAYILI AİLE (EVLENME VE BOŞANMA) YASASI",
     "number": "1/1998",
     "citation": "1/1998 SAYILI AİLE (EVLENME VE BOŞANMA) YASASI",
-    "matched_ref": "Madde 4",
+    "text_status": "full",
+    "matched_ref": "Madde 26",
+    "matched_part": "1/7",
+    "matched_url": "${origin}/v1/documents/yasa-1-1998/articles/26",
+    "matched_text": "26. Mahkeme … 2/3'ünden fazla olamaz.",
     "snippet": "…",
+    "highlights": [{ "start": 12, "end": 15 }],
     "score": 1.234,
     "url": "${origin}/v1/documents/yasa-1-1998"
   }]
 }
 \`\`\`
 
-\`score\` büyük olan daha iyidir. \`total_documents\` filtrelere uyan belge sayısıdır.
+\`score\` büyük olan daha iyidir. \`candidate_documents\` FTS ifadesiyle eşleşen aday sayısıdır;
+\`total_documents\` geriye dönük uyumluluk için aynı değeri taşır. \`relevant_documents\` getirilen
+pencere içinde \`min_score\` eşiğini geçen belge sayısıdır.
 
 ### 2) Belge — \`GET /v1/documents/{id}\`
 
@@ -198,10 +238,10 @@ Kimlikler kararlıdır; arama sonuçlarındaki \`id\` değerini doğrudan kullan
 
 ## Arama sözdizimi
 
-- Varsayılan \`all\`: tüm sözcükler aranır (VE).
-- \`mode=any\`: sözcüklerden herhangi biri (VEYA).
-- \`mode=phrase\`: sözcükler bitişik bir ifade olarak aranır.
-- Tırnak içinde ifade: \`q="mal paylaşımı"\`.
+- Varsayılan \`auto\`: önce tüm sözcükler (VE); sonuç yoksa herhangi biri (VEYA) ve \`relaxed=true\`.
+- \`mode=all\`, \`mode=any\`, \`mode=phrase\` açıkça seçilebilir.
+- \`prefer=mevzuat\` yasa/tüzük/anayasayı, \`prefer=ictihat\` kararları öne çıkarır.
+- Tırnak içinde ifade: \`q="mal paylaşımı"\`. \`2/3\`, \`1/3\`, \`üçte iki\` tek token olarak aranır.
 - 3+ harfli sözcüklerde otomatik önek araması yapılır (\`nafaka\` → \`nafaka*\`).
 - Noktalama ve Türkçe diakritikler normalize edilir (ı/i, ş/s, ğ/g, ü/u, ö/o, ç/c).
 

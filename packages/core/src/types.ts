@@ -34,13 +34,20 @@ export interface Store {
 
 export interface SearchParams {
   q: string;
-  mode?: "all" | "any" | "phrase";
+  mode?: "auto" | "all" | "any" | "phrase";
   type?: string;
   year?: number;
   source?: string;
   court?: string;
+  prefer?: "mevzuat" | "ictihat";
+  min_score?: number;
   limit: number;
   offset: number;
+}
+
+export interface SearchHighlight {
+  start: number;
+  end: number;
 }
 
 export interface SearchResult {
@@ -55,12 +62,32 @@ export interface SearchResult {
   court: string | null;
   citation: string;
   consolidated_through: string | null;
+  text_status: string;
+  content_chars: number;
+  chunk_count: number;
   matched_ref: string | null;
+  matched_part: string | null;
   matched_kind: string;
+  /** Full matched article (laws/regulations), capped; null for decisions/titles. */
+  matched_text: string | null;
+  matched_text_truncated: boolean;
+  /** Direct link to the matched article, when the hit is an article. */
+  matched_url: string | null;
   snippet: string;
+  highlights: SearchHighlight[];
   score: number;
   url: string;
   source_url: string;
+}
+
+export interface SearchGroupItem {
+  id: string;
+  type: string;
+  title: string;
+  citation: string;
+  matched_ref: string | null;
+  text_status: string;
+  score: number;
 }
 
 export interface DocumentSummary {
@@ -116,12 +143,25 @@ export interface ApiMeta {
 
 export interface SearchResponse {
   query: string;
+  /** Requested mode; "auto" falls back from all to any. */
   mode: string;
+  effective_mode: "all" | "any" | "phrase";
+  relaxed: boolean;
   filters: Record<string, string | number | null>;
   count: number;
+  /** Distinct documents matching the FTS expression (pre-pagination). */
+  candidate_documents: number;
+  /** Distinct documents in the retrieved window passing min_score. */
+  relevant_documents: number;
+  /** Backwards-compatible alias of candidate_documents. */
   total_documents: number;
+  min_score: number;
   has_more: boolean;
   next: string | null;
+  groups: {
+    mevzuat: SearchGroupItem[];
+    ictihat: SearchGroupItem[];
+  };
   results: SearchResult[];
   _meta: ApiMeta;
 }

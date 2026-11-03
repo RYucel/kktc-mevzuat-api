@@ -57,7 +57,8 @@ export function openapiDocument(origin: string): Record<string, unknown> {
             {
               name: "mode",
               in: "query",
-              schema: { type: "string", enum: ["all", "any", "phrase"], default: "all" },
+              description: "auto: önce tüm sözcükler, sonuç yoksa herhangi biri.",
+              schema: { type: "string", enum: ["auto", "all", "any", "phrase"], default: "auto" },
             },
             {
               name: "type",
@@ -70,6 +71,18 @@ export function openapiDocument(origin: string): Record<string, unknown> {
             { name: "year", in: "query", schema: { type: "integer", minimum: 1900, maximum: 2100 } },
             { name: "source", in: "query", schema: { type: "string", enum: ["gov", "mahkemeler"] } },
             { name: "court", in: "query", description: "Mahkeme adı içinde geçen ifade.", schema: { type: "string" } },
+            {
+              name: "prefer",
+              in: "query",
+              description: "mevzuat: yasa/tüzük/anayasayı öne çıkarır; ictihat: kararları öne çıkarır.",
+              schema: { type: "string", enum: ["mevzuat", "ictihat"] },
+            },
+            {
+              name: "min_score",
+              in: "query",
+              description: "Bu skorun altındaki sonuçları eler.",
+              schema: { type: "number", minimum: 0, default: 0 },
+            },
             {
               name: "limit",
               in: "query",
@@ -90,10 +103,29 @@ export function openapiDocument(origin: string): Record<string, unknown> {
                     type: "object",
                     properties: {
                       query: { type: "string" },
+                      mode: { type: "string", description: "İstenen mod; auto olabilir." },
+                      effective_mode: { type: "string", enum: ["all", "any", "phrase"] },
+                      relaxed: { type: "boolean", description: "auto modunda any'ye düşüldüyse true." },
                       count: { type: "integer" },
-                      total_documents: { type: "integer" },
+                      candidate_documents: {
+                        type: "integer",
+                        description: "FTS ifadesiyle eşleşen tekil belge sayısı.",
+                      },
+                      relevant_documents: {
+                        type: "integer",
+                        description: "Getirilen pencere içinde min_score eşiğini geçen belge sayısı.",
+                      },
+                      total_documents: { type: "integer", description: "candidate_documents ile aynı." },
+                      min_score: { type: "number" },
                       has_more: { type: "boolean" },
                       next: { type: ["string", "null"] },
+                      groups: {
+                        type: "object",
+                        properties: {
+                          mevzuat: { type: "array", items: { type: "object" } },
+                          ictihat: { type: "array", items: { type: "object" } },
+                        },
+                      },
                       results: {
                         type: "array",
                         items: {
@@ -108,8 +140,38 @@ export function openapiDocument(origin: string): Record<string, unknown> {
                             court: { type: ["string", "null"] },
                             citation: { type: "string", description: "Hazır atıf; aynen kullanın." },
                             consolidated_through: { type: ["string", "null"] },
-                            matched_ref: { type: ["string", "null"] },
+                            text_status: { type: "string", enum: ["full", "partial", "metadata"] },
+                            content_chars: { type: "integer" },
+                            chunk_count: { type: "integer" },
+                            matched_ref: {
+                              type: ["string", "null"],
+                              description: "Madde eşleşmesinde parçasız ref, ör. 'Madde 26'.",
+                            },
+                            matched_part: {
+                              type: ["string", "null"],
+                              description: "Parçalı maddede eşleşen bölüm, ör. '3/7'.",
+                            },
+                            matched_kind: { type: "string" },
+                            matched_text: {
+                              type: ["string", "null"],
+                              description: "Eşleşen maddenin tam metni (yasa/tüzük); 8000 karaktere kadar.",
+                            },
+                            matched_text_truncated: { type: "boolean" },
+                            matched_url: {
+                              type: ["string", "null"],
+                              description: "Eşleşen maddeye doğrudan bağlantı.",
+                            },
                             snippet: { type: "string" },
+                            highlights: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                properties: {
+                                  start: { type: "integer" },
+                                  end: { type: "integer" },
+                                },
+                              },
+                            },
                             score: { type: "number", description: "Büyük olan daha iyidir." },
                             url: { type: "string" },
                             source_url: { type: "string" },
