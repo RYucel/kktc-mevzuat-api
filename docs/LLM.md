@@ -23,14 +23,18 @@ Bağlayıcı metin için resmî kaynağa (source_url) yönlendir.
 
 1. **Ara**
    ```http
-   GET /v1/search?q=nafaka&type=yasa&limit=5
+   GET /v1/search?q=mal%20paylaşımı&type=yasa&prefer=mevzuat&limit=5
    ```
-   Sonuçlardaki `id`, `matched_ref`, `snippet`, `citation`, `consolidated_through` ve `score`
-   alanlarını incele. `score` büyük olan daha iyidir. `source=gov` filtresi yalnızca resmî
-   sitedeki metinlere daraltır; Gelir Vergisi, KDV ve Sosyal Sigortalar gibi yalnızca
-   `mahkemeler` kataloğunda bulunan yasalar bu filtreyle görünmez. Önce filtresiz ara,
-   sonra `consolidated_through` dolu olan sonucu tercih et. Sonuç yoksa eş anlamlıları ve
-   daha kısa kökleri dene (`nafaka`, `nafakasının`, `iştirak nafakası`, `tedbir nafakası`).
+   Sonuçlardaki `id`, `matched_ref`, `matched_part`, `matched_text`, `matched_url`, `snippet`,
+   `citation`, `text_status`, `consolidated_through` ve `score` alanlarını incele. `score`
+   büyük olan daha iyidir. Varsayılan `mode=auto` önce tüm sözcükleri arar; sonuç yoksa
+   `any`'ye düşer ve `relaxed=true` döner. Hukuk sorularında `prefer=mevzuat` kullan;
+   `ictihat` için `prefer=ictihat` veya `type=karar` kullan.
+   `source=gov` filtresi yalnızca resmî sitedeki metinlere daraltır; Gelir Vergisi, KDV ve
+   Sosyal Sigortalar gibi yalnızca `mahkemeler` kataloğunda bulunan yasalar bu filtreyle
+   görünmez. Önce filtresiz ara, sonra `consolidated_through` dolu olan sonucu tercih et.
+   Sonuç yoksa eş anlamlıları ve daha kısa kökleri dene (`nafaka`, `nafakasının`,
+   `iştirak nafakası`, `tedbir nafakası`).
 
 2. **Tam metni al**
    ```http
@@ -63,7 +67,13 @@ Bağlayıcı metin için resmî kaynağa (source_url) yönlendir.
 
 ## Arama ipuçları
 
-- Varsayılan `mode=all` tüm sözcükleri arar. Tek sözcüklü aramalar en iyi geri çağırmayı verir.
+- Varsayılan `mode=auto` önce tüm sözcükleri arar; sonuç yoksa `any`'ye düşer. Tek sözcüklü
+  aramalar en iyi geri çağırmayı verir.
+- `prefer=mevzuat` yasa/tüzük/anayasayı, `prefer=ictihat` kararları öne çıkarır; `type` filtresi
+  kesin daraltma yapar.
+- `2/3`, `1/3`, `üçte iki` gibi oranlar tek token olarak aranır; `2/3` artık `23` ile karışmaz.
+- `min_score` ham BM25 skorudur; sorgular arasında karşılaştırmayın, yalnızca aynı sorguda gürültü
+  elemek için kullanın.
 - `mode=any` eş anlamlıları tek istekte denemek için uygundur:
   `q="nafaka yoksulluk iştirak"&mode=any`.
 - Tam ifade için tırnak veya `mode=phrase`: `q="mal paylaşımı"`.
@@ -85,9 +95,14 @@ Bağlayıcı metin için resmî kaynağa (source_url) yönlendir.
 | `source_url`, `pdf_url` | Resmî kaynak ve PDF |
 | `source` | `gov` (resmî birleştirilmiş metin) veya `mahkemeler` (katalog, birleştirilmiş Word metinleri ve kararlar) |
 | `consolidated_through` | Metnin içerdiği son değişiklik (`25/2026` gibi); boşsa birleştirme bilgisi yoktur |
-| `text_status` | `full`, `partial`, `metadata` |
-| `matched_ref` | Eşleşmenin bulunduğu madde (varsa) |
+| `text_status` | `full`, `partial`, `metadata`; arama sonucunda da döner |
+| `matched_ref` | Eşleşmenin bulunduğu madde, parçasız (`Madde 26`) |
+| `matched_part` | Parçalı maddede FTS eşleşmesinin bölümü (`3/7` gibi) |
+| `matched_text` | Eşleşen maddenin tam metni (yasa/tüzük; 8.000 karaktere kadar) |
+| `matched_text_truncated` | `matched_text` kısaltıldıysa `true` |
+| `matched_url` | Eşleşen maddeye doğrudan bağlantı |
 | `snippet` | Türkçe özgün metinden pencere |
+| `highlights` | Snippet içindeki eşleşmelerin `start`/`end` offsetleri |
 | `score` | Alaka; büyük daha iyi |
 
 `text_status=metadata` ise belge yalnızca künye ve PDF bağlantısıyla indekslenmiştir. Model bunu

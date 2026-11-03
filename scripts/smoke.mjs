@@ -32,7 +32,27 @@ check("search total", search.body.total_documents > 0);
 check("search meta", search.body._meta.docs.endsWith("/llms.txt"));
 check("search snippet", search.body.results.every((r) => r.snippet.length > 0));
 check("search citation", search.body.results.every((r) => typeof r.citation === "string" && r.citation.length > 0));
+check("search text status", search.body.results.every((r) => typeof r.text_status === "string"));
+check("search highlights", search.body.results.every((r) => Array.isArray(r.highlights)));
+check("search candidate count", typeof search.body.candidate_documents === "number");
+check("search relaxed flag", typeof search.body.relaxed === "boolean");
+check("search groups", search.body.groups && Array.isArray(search.body.groups.mevzuat));
 check("search next", typeof search.body.next === "string");
+
+const natural = await json(
+  "/v1/search?q=mal%20payla%C5%9F%C4%B1m%C4%B1nda%20e%C5%9Flere%20d%C3%BC%C5%9Fen%20en%20az%20oran&prefer=mevzuat&type=yasa&limit=5",
+);
+check("auto fallback", natural.body.mode === "auto" && natural.body.relaxed === true);
+check("auto candidates", natural.body.candidate_documents > 0);
+
+const fraction = await json(
+  "/v1/search?q=mal%20payla%C5%9F%C4%B1m%C4%B1%202%2F3&prefer=mevzuat&type=yasa&limit=5",
+);
+const fractionLaw = fraction.body.results.find((r) => r.id === "yasa-1-1998");
+check("fraction law found", Boolean(fractionLaw));
+check("fraction article", fractionLaw?.matched_ref === "Madde 26");
+check("fraction article url", typeof fractionLaw?.matched_url === "string");
+check("fraction article text", typeof fractionLaw?.matched_text === "string" && fractionLaw.matched_text.includes("2/3"));
 
 const lawSearch = await json("/v1/search?q=nafaka&type=yasa&limit=3");
 check("search type filter", lawSearch.body.results.every((r) => r.type === "yasa"));

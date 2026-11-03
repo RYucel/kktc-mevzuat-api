@@ -118,6 +118,7 @@ Canlı API örnekleri:
 ```bash
 BASE=https://kktc-mevzuat-api.stevevaius.workers.dev
 curl "$BASE/v1/search?q=nafaka&limit=5"
+curl "$BASE/v1/search?q=mal%20payla%C5%9F%C4%B1m%C4%B1&type=yasa&prefer=mevzuat&limit=5"
 curl "$BASE/v1/documents/yasa-1-1998?format=markdown"
 curl "$BASE/v1/documents/yasa-1-1998/articles/4"
 curl "$BASE/v1/recent?type=karar&limit=10"
@@ -130,7 +131,7 @@ Yerel geliştirmede adres `http://localhost:8787` olur.
 
 | Uç | Açıklama |
 | --- | --- |
-| `GET /v1/search` | `q` zorunlu; `mode=all\|any\|phrase`, `type`, `year`, `source`, `court`, `limit` (1–50), `offset` |
+| `GET /v1/search` | `q` zorunlu; `mode=auto\|all\|any\|phrase`, `type`, `year`, `source`, `court`, `prefer=mevzuat\|ictihat`, `min_score`, `limit` (1–50), `offset` |
 | `GET /v1/documents/{id}` | Künye + tam metin; `format=json\|markdown\|text`, `include_chunks=1` |
 | `GET /v1/documents/{id}/articles` | Madde referansları |
 | `GET /v1/documents/{id}/articles/{ref}` | Tek madde (`12`, `Madde 12`, `30A`) |
@@ -166,11 +167,16 @@ esas/karar numarası ve tarihi kendileri birleştirmesi yerine bu alanı aynen k
 
 ### Arama davranışı
 
-- Varsayılan `mode=all`: tüm sözcükler (VE). `any`: herhangi biri (VEYA). `phrase`: tam ifade.
-- Tırnaklı ifade: `q="mal paylaşımı"`.
+- Varsayılan `mode=auto`: önce tüm sözcükler (VE); sonuç yoksa herhangi biri (VEYA) ve `relaxed=true`.
+  `all`, `any`, `phrase` açıkça seçilebilir.
+- Hukuk sorularında `prefer=mevzuat` yasa/tüzük/anayasayı, `prefer=ictihat` kararları öne çıkarır.
+- Tırnaklı ifade: `q="mal paylaşımı"`. `2/3`, `1/3`, `üçte iki` tek token olarak aranır.
 - 3+ harfli sözcüklerde otomatik önek araması (`nafaka` → `nafaka*`).
-- Sonuçlar belge bazında tekilleştirilir; `score` büyük olan daha iyidir.
-- `matched_ref` eşleşmenin hangi maddede olduğunu gösterir; `snippet` Türkçe özgün metinden üretilir.
+- Sonuçlar belge bazında tekilleştirilir; `score` büyük olan daha iyidir. `text_status` metnin
+  tam/kısmi/künye olduğunu söyler.
+- `matched_ref` parçasız maddeyi (`Madde 26`), `matched_part` FTS’in bulduğu bölümü, `matched_text`
+  maddenin tam metnini, `matched_url` doğrudan madde bağlantısını verir. `snippet` ve `highlights`
+  kanıt penceresini gösterir.
 - `citation` hazır atıftır; `consolidated_through` metnin hangi değişikliğe kadar birleştirildiğini gösterir.
 
 ### Belge kimlikleri
