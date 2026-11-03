@@ -4,6 +4,9 @@ on:
   schedule:
     # Her pazartesi 03:00 UTC
     - cron: "0 3 * * 1"
+    # Tek seferlik: D1 günlük okuma kotası sıfırlandıktan sonra.
+    # 2026-11-04 00:15 UTC; çalıştıktan sonra bu satır kaldırılmalı.
+    - cron: "15 0 4 11 *"
   workflow_dispatch:
     inputs:
       full_text:
