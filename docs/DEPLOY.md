@@ -17,13 +17,18 @@ cd crawler
 
 python -m kktc crawl
 python -m kktc fetch-text --source gov
-# İsteğe bağlı: mahkemeler yasa/tüzük PDF'leri
-# python -m kktc fetch-text --type yasa --source mahkemeler
+# Mahkemeler'deki birleştirilmiş Word yasaları (gov'da olmayan Gelir Vergisi, KDV, ...)
+python -m kktc fetch-text --type yasa --source mahkemeler --ext doc,docx,rtf
+# İsteğe bağlı: mahkemeler tüzük PDF'leri (2015 öncesi genellikle taranmıştır)
 # python -m kktc fetch-text --type tuzuk --source mahkemeler --min-year 2015
 
 python -m kktc build
 python -m kktc stats
 ```
+
+`.doc` dosyaları için LibreOffice (`soffice`) veya `catdoc` gerekir; yoksa belge künye ve
+resmî dosya bağlantısıyla indekslenir. `python -m kktc update` bu Word yasalarını varsayılan
+olarak indirir; `--full-text` ayrıca mahkemeler yasa/tüzük PDF'lerini de indirir.
 
 Çıktılar:
 
@@ -208,9 +213,11 @@ Cloud Run yeni revizyonu sağlık kontrolünden sonra trafiğe alır.
 
 `.github/workflows/data.yml`:
 
-1. Python crawler'ı çalıştırır (`crawl`, `fetch-text --source gov --revalidate`, `build`).
+1. Python crawler'ı çalıştırır (`crawl`, `fetch-text --source gov --revalidate`, mahkemeler
+   Word yasaları `--ext doc,docx,rtf`, `build`). `.doc` çıkarımı için LibreOffice kurulur.
 2. `data/text` önbelleğini Actions cache ile saklar; sonraki haftalarda yalnızca yeni veya
-   sunucuda değişmiş belgeler indirilir.
+   sunucuda değişmiş belgeler indirilir. Her iki kaynakta da dosyalar yeniden indirilip
+   SHA-256 parmak iziyle karşılaştırılır.
 3. `history` Release'inden `data/history.db` dosyasını geri yükler; build sonrası güncel
    `history.db` ve `history-prev.db` dosyalarını aynı Release'e yükler. Release indirilemezse
    iş durur; böylece boş bir geçmiş gerçek geçmişin üzerine yazılmaz.
@@ -227,13 +234,14 @@ Gereken repository secret'ları:
 
 `wrangler.toml` içindeki `database_id` sabit kalabilir; workflow `sed` ile secret'tan yazar.
 
-> İlk çalıştırma tam kazıma yapar (~10–20 dk gov, mahkemeler yasa/tüzük dahilse saatler sürebilir).
-> `timeout-minutes: 360` sınırına dikkat edin. Yalnızca gov metinleriyle başlamak en hızlı yoldur.
+> İlk çalıştırma tam kazıma yapar (~10–20 dk gov, mahkemeler Word yasalarıyla birlikte
+> ~30 dk; PDF'ler de dahilse saatler sürebilir). `timeout-minutes: 360` sınırına dikkat edin.
 
 ### 3.3 Manuel dağıtım
 
-Actions sekmesinden `Refresh data` → `Run workflow`. `full_text=true` girdisi mahkemeler
-yasa/tüzük PDF'lerini de indirir.
+Actions sekmesinden `Refresh data` → `Run workflow`. Word yasaları ve gov metinleri her
+çalıştırmada yenilenir; `full_text=true` girdisi ayrıca mahkemeler yasa/tüzük PDF'lerini
+indirir.
 
 ---
 
