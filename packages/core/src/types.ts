@@ -94,6 +94,30 @@ export interface SearchGroupItem {
   score: number;
 }
 
+export interface AnswerQuote {
+  document_id: string;
+  title: string;
+  ref: string | null;
+  citation: string;
+  text: string;
+  url: string;
+  source_url: string;
+  text_status: string;
+  score: number;
+}
+
+export interface AnswerResponse {
+  query: string;
+  answer: string | null;
+  answer_type: "extractive";
+  quotes: AnswerQuote[];
+  citations: string[];
+  confidence: "high" | "medium" | "low";
+  concepts: { id: string; label: string }[];
+  disclaimer: string;
+  _meta: ApiMeta;
+}
+
 export interface DocumentSummary {
   id: string;
   type: string;

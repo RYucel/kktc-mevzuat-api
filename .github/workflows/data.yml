@@ -176,6 +176,14 @@ jobs:
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         run: npm --workspace apps/worker run deploy
 
+      - name: Smoke test live API
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          BASE: ${{ vars.WORKER_URL || 'https://kktc-mevzuat-api.stevevaius.workers.dev' }}
+        run: |
+          sleep 5
+          node scripts/smoke.mjs
+
       - name: Evaluate search quality
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         env:

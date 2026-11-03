@@ -1,5 +1,6 @@
 import {
   ApiError,
+  answerQuestion,
   articleMarkdown,
   documentMarkdown,
   getArticle,
@@ -60,6 +61,25 @@ const TOOLS = [
         offset: { type: "integer", minimum: 0, maximum: 1000 },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "sor",
+    description:
+      "Bir hukuk sorusuna metinden birebir alıntı ve hazır atıf döndürür. " +
+      "Yorum üretmez; alıntılanan hükmü ve kaynağını verir. Cevap için ilk adım olarak kullanılabilir.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        soru: { type: "string", description: "Doğal dilde hukuk sorusu." },
+        type: {
+          type: "string",
+          enum: ["yasa", "tuzuk", "karar", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"],
+        },
+        prefer: { type: "string", enum: ["mevzuat", "ictihat"] },
+        adet: { type: "integer", minimum: 1, maximum: 5, description: "Alıntı sayısı." },
+      },
+      required: ["soru"],
     },
   },
   {
@@ -237,6 +257,24 @@ async function callTool(
       };
       return textResult(await searchDocuments(store, params, origin));
     }
+    case "sor": {
+      const query = strArg(args, "soru") ?? strArg(args, "query") ?? "";
+      if (!query.trim()) throw new ApiError(400, "missing_query", "soru zorunludur.");
+      return textResult(
+        await answerQuestion(
+          store,
+          {
+            q: query,
+            mode: "auto",
+            type: strArg(args, "type"),
+            prefer: (strArg(args, "prefer") as SearchParams["prefer"]) || "mevzuat",
+            limit: Math.min(5, Math.max(1, intArg(args, "adet", 3) ?? 3)),
+            offset: 0,
+          },
+          origin,
+        ),
+      );
+    }
     case "ictihat_ara": {
       const query = strArg(args, "ifade") ?? strArg(args, "query") ?? "";
       if (!query.trim()) throw new ApiError(400, "missing_query", "ifade zorunludur.");
@@ -345,8 +383,9 @@ async function handleOne(
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: "kktc-mevzuat", version: "1.2.0" },
           instructions:
-            "KKTC güncel mevzuatı ve içtihadı. Mevzuat için search_mevzuat, mahkeme kararları için " +
-            "ictihat_ara kullanın; sonuç id'siyle get_document/get_article veya karar_getir çağırın. " +
+            "KKTC güncel mevzuatı ve içtihadı. Doğrudan alıntı için sor, mevzuat için search_mevzuat, " +
+            "mahkeme kararları için ictihat_ara kullanın; sonuç id'siyle get_document/get_article " +
+            "veya karar_getir çağırın. " +
             "Atıf yaparken sonuçtaki citation alanını aynen kullanın, künye uydurmayın. " +
             "Bir maddenin yakın zamanda değişip değişmediği için degisiklikleri_getir kullanın. " +
             "Yanıtlarda source_url verin; bağlayıcı metin resmî kaynaktır. " +

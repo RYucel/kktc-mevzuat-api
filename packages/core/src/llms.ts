@@ -50,6 +50,8 @@ MCP: ${origin}/mcp (Streamable HTTP, POST)
    \`snippet\`, \`matched_ref\`, \`matched_text\`, \`matched_url\`, \`text_status\` ve \`id\`
    alanlarını okuyun. \`matched_text\` eşleşen maddenin tam metnidir; \`matched_url\`
    doğrudan o maddeye gider.
+1b. **Hızlı alıntı.** \`/v1/answer?q=...&format=markdown\` en iyi pasajı birebir alıntılar,
+   \`citation\` ve \`source_url\` ile döndürür. Üretken değildir; hukuki yorum yapmaz.
 2. **Tam metni alın.** \`/v1/documents/{id}?format=markdown\` ile belgenin tam metnini alın.
 3. **Tek maddeye gidin.** \`/v1/documents/{id}/articles/12\` (veya \`30A\`) ile ilgili maddeyi alın.
 4. **Atıf yapın.** Her sonuçtaki hazır \`citation\` alanını aynen kullanın (ör. mahkeme, E./D. no, tarih);
@@ -181,6 +183,17 @@ Yanıt (kısaltılmış):
 \`total_documents\` geriye dönük uyumluluk için aynı değeri taşır. \`relevant_documents\` getirilen
 pencere içinde \`min_score\` eşiğini geçen belge sayısıdır.
 
+### 1b) Alıntı yanıtı — \`GET /v1/answer\`
+
+Parametreler: \`q\` (zorunlu), \`type?\`, \`prefer?\`, \`mode?\`, \`limit\` (1–5), \`format=json|markdown\`.
+
+\`\`\`bash
+curl "${origin}/v1/answer?q=mal%20payla%C5%9F%C4%B1m%C4%B1nda%20e%C5%9Flere%20d%C3%BC%C5%9Fen%20en%20az%20oran&format=markdown"
+\`\`\`
+
+Yanıt \`answer\`, \`quotes\`, \`citations\`, \`confidence\` ve \`disclaimer\` içerir. \`answer_type\`
+her zaman \`extractive\`dır: metin birebir alıntılanır, yeniden yazılmaz.
+
 ### 2) Belge — \`GET /v1/documents/{id}\`
 
 - \`format=json\` (varsayılan): künye + \`content\` (tam metin) + \`_meta\`.
@@ -270,7 +283,8 @@ Sunucu: \`${origin}/mcp\` — Streamable HTTP, \`POST\` JSON-RPC 2.0.
 \`\`\`
 
 Araçlar:
-- \`search_mevzuat\` — \`{ query, type?, year?, source?, court?, mode?, limit?, offset? }\`
+- \`sor\` — \`{ soru, type?, prefer?, adet? }\` — birebir alıntı + atıf (üretken değil)
+- \`search_mevzuat\` — \`{ query, type?, year?, source?, court?, mode?, prefer?, min_score?, limit?, offset? }\`
 - \`ictihat_ara\` — \`{ ifade, mahkeme?, yil?, mod?, adet?, sayfa? }\` — yalnız mahkeme kararları; sonuçlarda hazır \`citation\`
 - \`karar_getir\` — \`{ id }\` — kararın künyesi, atfı ve tam metni (Markdown)
 - \`list_courts\` — \`{}\` — mahkemeler, karar sayıları, yıl aralığı

@@ -208,6 +208,80 @@ export function openapiDocument(origin: string): Record<string, unknown> {
           },
         },
       },
+      "/v1/answer": {
+        get: {
+          tags: ["search"],
+          operationId: "answerQuestion",
+          summary: "Metinden birebir alıntı ve hazır atıf",
+          description:
+            "Üretken değildir; en iyi pasajları birebir alıntılar, citation ve source_url ile döndürür.",
+          parameters: [
+            {
+              name: "q",
+              in: "query",
+              required: true,
+              description: "Doğal dilde hukuk sorusu.",
+              schema: { type: "string", examples: ["mal paylaşımında eşlere düşen en az oran"] },
+            },
+            {
+              name: "mode",
+              in: "query",
+              schema: { type: "string", enum: ["auto", "all", "any", "phrase"], default: "auto" },
+            },
+            {
+              name: "type",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["yasa", "tuzuk", "karar", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"],
+              },
+            },
+            { name: "prefer", in: "query", schema: { type: "string", enum: ["mevzuat", "ictihat"] } },
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 5, default: 3 } },
+            { name: "format", in: "query", schema: { type: "string", enum: ["json", "markdown"], default: "json" } },
+          ],
+          responses: {
+            "200": {
+              description: "Alıntı yanıtı",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      query: { type: "string" },
+                      answer: { type: ["string", "null"] },
+                      answer_type: { type: "string", enum: ["extractive"] },
+                      quotes: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            document_id: { type: "string" },
+                            title: { type: "string" },
+                            ref: { type: ["string", "null"] },
+                            citation: { type: "string" },
+                            text: { type: "string" },
+                            url: { type: "string" },
+                            source_url: { type: "string" },
+                            text_status: { type: "string" },
+                            score: { type: "number" },
+                          },
+                        },
+                      },
+                      citations: { type: "array", items: { type: "string" } },
+                      confidence: { type: "string", enum: ["high", "medium", "low"] },
+                      concepts: { type: "array", items: { type: "object" } },
+                      disclaimer: { type: "string" },
+                      _meta: { $ref: "#/components/schemas/ApiMeta" },
+                    },
+                  },
+                },
+              },
+            },
+            "400": errorResponse,
+          },
+        },
+      },
       "/v1/documents/{id}": {
         get: {
           tags: ["documents"],
