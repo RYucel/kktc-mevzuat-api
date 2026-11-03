@@ -50,6 +50,9 @@ MCP: ${origin}/mcp (Streamable HTTP, POST)
 3. **Tek maddeye gidin.** \`/v1/documents/{id}/articles/12\` (veya \`30A\`) ile ilgili maddeyi alın.
 4. **Atıf yapın.** Her sonuçtaki hazır \`citation\` alanını aynen kullanın (ör. mahkeme, E./D. no, tarih);
    künyeyi kendiniz oluşturmayın. Yanına \`source_url\` bağlantısını ekleyin.
+   Yasa/tüzüklerde \`consolidated_through\` metnin hangi değişikliğe kadar birleştirildiğini
+   gösterir (ör. \`25/2026\`); güncellik sorulduğunda bunu belirtin. Boşsa metin ya hiç değiştirilmemiştir
+   ya da başlığında değişiklik listesi yoktur.
 5. **Emin değilseniz arayın.** Metinde olmayan bir hüküm uydurmayın; \`text_status\` değeri
    \`metadata\` ise tam metin indekslenmemiştir, yalnızca künye ve resmî PDF bağlantısı vardır.
 
@@ -66,17 +69,22 @@ ${sourceCoverage(stats)}
 
 Kaynaklar:
 - https://mevzuat.gov.ct.tr — Merkezi Mevzuat Dairesi, birleştirilmiş/güncel metinler (öncelikli)
-- https://mevzuat.mahkemeler.net — Mahkemeler Mevzuat Bilgi Sistemi, katalog ve mahkeme kararları
+- https://mevzuat.mahkemeler.net — Mahkemeler Mevzuat Bilgi Sistemi; çok daha geniş yasa kataloğu
+  (birleştirilmiş metinler) ve mahkeme kararları
 
 ## Kaynak önceliği
 
-- **Yasa ve tüzük sorularında \`source=gov\` metnini esas alın.** Bu kaynak yürürlükteki
-  değişikliklerin işlendiği birleştirilmiş resmî metindir.
-- Aynı belge iki kaynakta bulunuyorsa \`gov\` sürümü kullanılır; \`sources\` alanı diğer kaydı gösterir.
-- \`mahkemeler\` kaynağındaki yasa/tüzük dosyaları arşiv ve karşılaştırma içindir; bazıları eski
-  veya taranmış olabilir. **Mahkeme kararları yalnızca \`mahkemeler\` kaynağındadır.**
-- Arama, \`gov\` sonuçlarını otomatik olarak üst sıralara taşır. Emin değilseniz \`source=gov\`
-  filtresini açıkça ekleyin.
+- Her iki kaynak da birleştirilmiş metin yayımlar ("… sayılı Değişiklik Yasaları ile değiştirilmiş
+  ve birleştirilmiş şekliyle"). Aynı yasa iki kaynakta da varsa \`gov\` sürümü kullanılır;
+  \`sources\` alanı diğer kaydı gösterir.
+- \`gov\` yalnızca yasaların küçük bir kısmını taşır. Gelir Vergisi, Katma Değer Vergisi ve Sosyal
+  Sigortalar gibi birçok yasa **yalnızca \`mahkemeler\` kaynağındadır**; bu yüzden \`source=gov\`
+  filtresini yalnızca gerektiğinde kullanın.
+- Güncellik için \`consolidated_through\` alanına bakın (metnin içerdiği son değişiklik).
+- \`mahkemeler\` kaynağındaki eski PDF'lerin bir kısmı taranmış görüntüdür; \`text_status=metadata\`
+  ise tam metin yoktur, yalnızca künye ve dosya bağlantısı vardır.
+- **Mahkeme kararları yalnızca \`mahkemeler\` kaynağındadır.**
+- Arama, \`gov\` sonuçlarını otomatik olarak üst sıralara taşır.
 
 ## Uçlar
 
@@ -87,7 +95,7 @@ Parametreler:
 - \`mode\`: \`all\` (varsayılan, tüm sözcükler), \`any\` (herhangi biri), \`phrase\` (tam ifade).
 - \`type\`: ${DOC_TYPES.map((type) => `\`${type}\``).join(", ")}.
 - \`year\`: 4 haneli yıl (ör. 1998).
-- \`source\`: \`gov\` (güncel birleştirilmiş metin; yasa/tüzükte tercih edin) veya \`mahkemeler\`.
+- \`source\`: \`gov\` veya \`mahkemeler\` (ikisi de birleştirilmiş metin; birçok yasa yalnızca \`mahkemeler\`'dedir).
 - \`court\`: mahkeme adı içinde geçen ifade (ör. \`Yargıtay\`); \`GET /v1/stats\` → \`courts\` listesinde tüm adlar var.
 - \`limit\`: 1–50 (varsayılan 10).
 - \`offset\`: 0–1000 (varsayılan 0).
@@ -164,7 +172,7 @@ Belge sayıları, türler, yıllar, kaynaklar, tam metin durumu ve her türün e
 
 ### 6) Değişiklikler — \`GET /v1/changes\` ve \`GET /v1/documents/{id}/changes\`
 
-Güncel birleştirilmiş metinler (\`source=gov\`) her hafta önceki sürümle karşılaştırılır;
+Birleştirilmiş yasa ve tüzük metinleri (\`gov\`; orada olmayanlar için \`mahkemeler\`) her hafta önceki sürümle karşılaştırılır;
 değişen, eklenen ve kaldırılan maddeler kaydedilir. **Takip ilk kayıt tarihinden başlar**
 (\`tracking_since\`); öncesindeki değişiklikler bilinmez. Saptanma tarihi, değişikliğin
 kaynakta görüldüğü haftadır, yürürlük tarihi değildir.

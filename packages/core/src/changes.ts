@@ -385,7 +385,7 @@ export function feedHtml(feed: ChangeFeedResponse, origin: string): string {
   const parts = [
     `<p class="muted"><a href="${origin}/">KKTC Mevzuat API</a></p>`,
     `<h1>Mevzuat değişiklikleri</h1>`,
-    `<p class="meta">Güncel birleştirilmiş metinlerde (mevzuat.gov.ct.tr) saptanan madde değişiklikleri. ` +
+    `<p class="meta">Birleştirilmiş yasa ve tüzük metinlerinde (mevzuat.gov.ct.tr ve mevzuat.mahkemeler.net) saptanan madde değişiklikleri. ` +
       `Takip başlangıcı: ${day(feed.tracking_since)}.</p>`,
   ];
   if (!feed.results.length) {

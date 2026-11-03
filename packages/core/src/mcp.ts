@@ -43,7 +43,7 @@ const TOOLS = [
           enum: ["yasa", "tuzuk", "karar", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"],
         },
         year: { type: "integer", minimum: 1900, maximum: 2100 },
-        source: { type: "string", enum: ["gov", "mahkemeler"], description: "gov = güncel birleştirilmiş resmî metin." },
+        source: { type: "string", enum: ["gov", "mahkemeler"], description: "İkisi de birleştirilmiş metin; birçok yasa (ör. Gelir Vergisi) yalnızca mahkemeler kaynağında. Genelde boş bırakın." },
         court: { type: "string", description: "Mahkeme adı içinde geçen ifade (yalnız kararlar)." },
         mode: { type: "string", enum: ["all", "any", "phrase"] },
         limit: { type: "integer", minimum: 1, maximum: 50 },

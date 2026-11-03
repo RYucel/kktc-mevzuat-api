@@ -62,6 +62,21 @@ function parseJson(value: unknown): unknown {
   }
 }
 
+function consolidatedThrough(extra: unknown): string | null {
+  if (!extra || typeof extra !== "object") return null;
+  const info = (extra as Record<string, unknown>).consolidation as { through?: unknown } | undefined;
+  return info && typeof info.through === "string" ? info.through : null;
+}
+
+/** "25/2026 sayılı değişikliğe kadar" or "13.02.2024 tarihli değişikliğe kadar". */
+export function consolidationLabel(through: string | null): string | null {
+  if (!through) return null;
+  const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(through);
+  return date
+    ? `${date[3]}.${date[2]}.${date[1]} tarihli değişikliğe kadar birleştirilmiş metin`
+    : `${through} sayılı değişikliğe kadar birleştirilmiş metin`;
+}
+
 export function mapSummary(row: StoreRow, origin: string): DocumentSummary {
   const id = String(row.id);
   const extra = parseJson(row.extra_json);
@@ -90,7 +105,7 @@ export function mapSummary(row: StoreRow, origin: string): DocumentSummary {
     sources: parseJson(row.sources_json),
     url: `${origin}/v1/documents/${encodeURIComponent(id)}`,
   };
-  return { ...summary, citation: buildCitation(summary) };
+  return { ...summary, citation: buildCitation(summary), consolidated_through: consolidatedThrough(extra) };
 }
 
 export async function searchDocuments(
@@ -133,6 +148,7 @@ export async function searchDocuments(
       source: summary.source,
       court: summary.court,
       citation: summary.citation,
+      consolidated_through: summary.consolidated_through,
       matched_ref: asString(row.matched_ref),
       matched_kind: String(row.matched_kind ?? ""),
       snippet: makeSnippet(String(row.chunk_text ?? ""), params.q),
@@ -319,6 +335,8 @@ export function documentMarkdown(doc: DocumentDetail, origin: string): string {
   const label = TYPE_LABELS[doc.type] ?? doc.type;
   const lines = [`# ${doc.title}`, ""];
   lines.push(`- **Atıf:** ${doc.citation}`);
+  const consolidated = consolidationLabel(doc.consolidated_through);
+  if (consolidated) lines.push(`- **Güncellik:** ${consolidated}`);
   lines.push(`- **Tür:** ${label}`);
   if (doc.number) lines.push(`- **Sayı:** ${doc.number}`);
   if (doc.date) lines.push(`- **Tarih:** ${doc.date}`);

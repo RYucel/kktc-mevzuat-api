@@ -1,7 +1,8 @@
 """Version history for consolidated legislation.
 
-Every build compares the current consolidated text of each tracked document
-(``source == "gov"``, i.e. mevzuat.gov.ct.tr) with the last version stored in
+Every build compares the current consolidated text of each tracked law or
+regulation (mevzuat.gov.ct.tr, or mevzuat.mahkemeler.net for laws the
+government site does not carry) with the last version stored in
 ``history.db``. When the normalised text changes, a new version is stored and
 the difference is recorded article by article, with a word-level diff inside
 each modified article.
@@ -32,7 +33,10 @@ from .textproc import chunk_document, clean_text
 
 log = logging.getLogger(__name__)
 
-TRACKED_SOURCES = {"gov"}
+# Both sources publish consolidated texts ("... sayılı Değişiklik Yasaları ile
+# değiştirilmiş ve birleştirilmiş şekliyle"). A document present on both is
+# merged under the gov copy, so each law is tracked once.
+TRACKED_SOURCES = {"gov", "mahkemeler"}
 # A new text shorter than this share of the previous one is far more likely to
 # be a failed or truncated extraction than a real amendment; it is not stored.
 MIN_LENGTH_RATIO = 0.4

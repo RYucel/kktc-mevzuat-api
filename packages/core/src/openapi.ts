@@ -107,6 +107,7 @@ export function openapiDocument(origin: string): Record<string, unknown> {
                             date: { type: ["string", "null"] },
                             court: { type: ["string", "null"] },
                             citation: { type: "string", description: "Hazır atıf; aynen kullanın." },
+                            consolidated_through: { type: ["string", "null"] },
                             matched_ref: { type: ["string", "null"] },
                             snippet: { type: "string" },
                             score: { type: "number", description: "Büyük olan daha iyidir." },
@@ -224,7 +225,7 @@ export function openapiDocument(origin: string): Record<string, unknown> {
           operationId: "listChanges",
           summary: "Mevzuatta saptanan değişiklikler (sürüm geçişleri)",
           description:
-            "Yalnızca source=gov belgeleri izlenir. Takip ilk kayıttan başlar; tracking_since " +
+            "Birleştirilmiş yasa ve tüzük metinleri izlenir (gov; gov\'da olmayanlar için mahkemeler). Takip ilk kayıttan başlar; tracking_since " +
             "öncesindeki değişiklikler bilinmez. detected_at, değişikliğin kaynakta görüldüğü " +
             "çalıştırmadır (yürürlük tarihi değildir).",
           parameters: [
@@ -349,6 +350,10 @@ export function openapiDocument(origin: string): Record<string, unknown> {
             pdf_url: { type: ["string", "null"] },
             court: { type: ["string", "null"] },
             citation: { type: "string", description: "Hazır atıf; aynen kullanın." },
+            consolidated_through: {
+              type: ["string", "null"],
+              description: "Birleştirilmiş metnin içerdiği son değişiklik: '25/2026' (yasa no) veya '2024-02-13' (tüzük tarihi).",
+            },
             parties: { type: ["string", "null"] },
             subject: { type: ["string", "null"] },
             summary: { type: ["string", "null"] },

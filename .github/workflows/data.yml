@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       full_text:
-        description: "Mahkemeler yasa/tüzük PDF'lerini de indir (uzun sürer)"
+        description: "Mahkemeler yasa PDF'lerini ve tüzüklerini de indir (uzun sürer)"
         type: boolean
         default: false
 
@@ -69,10 +69,28 @@ jobs:
         working-directory: crawler
         run: python -m kktc fetch-text --source gov --revalidate
 
-      - name: Download mahkemeler law texts
+      # Most laws (Gelir Vergisi, KDV, Sosyal Sigortalar, ...) exist only on
+      # mevzuat.mahkemeler.net, as consolidated Word files. Laws also on the
+      # government site are skipped here (merged under the gov copy). Every
+      # week each file is downloaded again and compared by SHA-256, as for gov.
+      # ~800 files, ~200 MB; .doc needs LibreOffice.
+      - name: Install LibreOffice for .doc files
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends libreoffice-writer-nogui \
+            || sudo apt-get install -y -qq --no-install-recommends libreoffice-writer
+          soffice --version
+
+      - name: Download mahkemeler law texts (Word)
+        working-directory: crawler
+        run: python -m kktc fetch-text --source mahkemeler --type yasa --ext doc,docx,rtf --revalidate
+
+      # The PDFs are mostly large scans of old or English-language laws
+      # (~7.6 MB each on average), so they are fetched on demand only.
+      - name: Download mahkemeler law texts (PDF)
         if: ${{ inputs.full_text == true }}
         working-directory: crawler
-        run: python -m kktc fetch-text --source mahkemeler --type yasa
+        run: python -m kktc fetch-text --source mahkemeler --type yasa --ext pdf
 
       - name: Download mahkemeler regulation texts
         if: ${{ inputs.full_text == true }}

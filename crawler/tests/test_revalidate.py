@@ -85,3 +85,13 @@ def test_failed_download_keeps_cached_text(extractions: list[bytes]) -> None:
             raise RuntimeError("timeout")
 
     assert fetch_text_for(doc, Down(), revalidate=True)["text"] == "eski metin"
+
+
+def test_failed_downloads_are_retried_on_revalidation(extractions: list[bytes]) -> None:
+    doc = {"pdf_url": URL}
+    sources._write_text_cache(URL, {"status": "error", "method": None, "error": "HTTP 503", "text": ""})
+    server = FakeServer(b"simdi var")
+    # A normal run trusts the cache, including the error.
+    assert fetch_text_for(doc, server)["status"] == "error"
+    # A revalidation run tries again.
+    assert fetch_text_for(doc, server, revalidate=True)["text"] == "simdi var"

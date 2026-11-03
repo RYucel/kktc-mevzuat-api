@@ -78,13 +78,13 @@ def test_absent_or_truncated_documents_are_not_changes(tmp_path: Path) -> None:
     # A failed extraction leaves a fragment: skipped, not stored.
     result = record_versions([_doc(long_law[:900])], history, now="2026-11-16T00:00:00Z")
     assert result["skipped"] == 1 and result["changed"] == 0
-    # Court decisions and non-gov copies are not tracked.
+    # Court decisions are not tracked; mahkemeler laws are.
     result = record_versions(
         [_doc(long_law, _id="karar-1", type="karar"), _doc(long_law, _id="yasa-x", source="mahkemeler")],
         history,
         now="2026-11-23T00:00:00Z",
     )
-    assert result["tracked"] == 0
+    assert result["tracked"] == 1 and result["baseline"] == 1
 
 
 def test_copy_history_into_search_db(tmp_path: Path) -> None:
