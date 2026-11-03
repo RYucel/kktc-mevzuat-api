@@ -150,7 +150,8 @@ Hayvanın Tutsak Edilmesi 9(2).17/2025 3. Yürürlükteki kurallar saklıdır.
 """
     chunks = split_articles(clean_text(text))
     assert [c.ref for c in chunks] == ["Madde 1", "Madde 2", "Madde 3"]
-    assert chunks[1].text.startswith("Hayvanı Terk Etmek\n9(2).17/2025 2.")
+    # The margin note moves behind the article number, still in the text.
+    assert chunks[1].text.startswith("Hayvanı Terk Etmek\n2. (1) Her kim bir hayvanı terk ederse suç işler. [9(2).17/2025]")
     assert chunks[2].text.startswith("Hayvanın Tutsak Edilmesi 9(2).17/2025 3.")
 
 
