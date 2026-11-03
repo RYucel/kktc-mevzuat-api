@@ -132,7 +132,7 @@ Yerel geliştirmede adres `http://localhost:8787` olur.
 
 | Uç | Açıklama |
 | --- | --- |
-| `GET /v1/search` | `q` zorunlu; `mode=auto\|all\|any\|phrase`, `type`, `year`, `source`, `court`, `prefer=mevzuat\|ictihat`, `min_score`, `limit` (1–50), `offset` |
+| `GET /v1/search` | `q` zorunlu; `mode=auto\|all\|any\|phrase`, `type`, `year`, `source`, `court`, `prefer=mevzuat\|ictihat`, `min_score`, `exact_count`, `limit` (1–50), `offset` |
 | `GET /v1/answer` | Birebir alıntı + atıf; `q`, `type`, `prefer`, `limit` (1–5), `format=json\|markdown` |
 | `GET /v1/documents/{id}` | Künye + tam metin; `format=json\|markdown\|text`, `include_chunks=1` |
 | `GET /v1/documents/{id}/articles` | Madde referansları |
@@ -149,7 +149,9 @@ Yerel geliştirmede adres `http://localhost:8787` olur.
 
 > D1 ücretsiz katmanının günlük satır okuma sınırı dolarsa API `503 d1_quota_exceeded`
 > döner ve `retry_at` alanında kotanın sıfırlanacağı zamanı (00:00 UTC) bildirir.
-> `/v1/search`, `/v1/answer` ve `/v1/stats` yanıtları 120 saniye edge cache'lenir.
+> `/v1/search`, `/v1/answer` ve `/v1/stats` yanıtları 120 saniye edge cache'lenir. `stats`
+> build sırasında `meta` tablosuna yazılır; arama varsayılan olarak pahalı `COUNT(DISTINCT)`
+> çalıştırmaz (`exact_count=1` ile açılır).
 
 Her JSON yanıtında şu alan bulunur:
 

@@ -119,6 +119,8 @@ Parametreler:
 - \`prefer\`: \`mevzuat\` (yasa/tüzük/anayasa önce) veya \`ictihat\` (kararlar önce).
 - \`min_score\`: bu skorun altındaki sonuçları eler (varsayılan 0). Ham BM25 skorudur;
   sorgular arasında karşılaştırmayın.
+- \`exact_count\`: \`1\` ise pahalı \`COUNT(DISTINCT)\` çalışır; varsayılan \`0\` yalnızca getirilen
+  pencereyi sayar (D1 okuma kotasını korur).
 - \`limit\`: 1–50 (varsayılan 10).
 - \`offset\`: 0–1000 (varsayılan 0).
 
@@ -155,6 +157,7 @@ Yanıt (kısaltılmış):
   "primary_documents": 1,
   "count": 1,
   "candidate_documents": 37,
+  "exact_count": false,
   "relevant_documents": 20,
   "total_documents": 37,
   "min_score": 0,
@@ -179,9 +182,9 @@ Yanıt (kısaltılmış):
 }
 \`\`\`
 
-\`score\` büyük olan daha iyidir. \`candidate_documents\` FTS ifadesiyle eşleşen aday sayısıdır;
-\`total_documents\` geriye dönük uyumluluk için aynı değeri taşır. \`relevant_documents\` getirilen
-pencere içinde \`min_score\` eşiğini geçen belge sayısıdır.
+\`score\` büyük olan daha iyidir. \`candidate_documents\` getirilen penceredeki aday belge sayısıdır
+(\`exact_count=1\` ise FTS toplamı); \`total_documents\` geriye dönük uyumluluk için aynı değeri
+taşır. \`relevant_documents\` getirilen pencere içinde \`min_score\` eşiğini geçen belge sayısıdır.
 
 ### 1b) Alıntı yanıtı — \`GET /v1/answer\`
 

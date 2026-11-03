@@ -172,6 +172,7 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
       court: c.req.query("court") || undefined,
       prefer: (preferRaw || undefined) as SearchParams["prefer"],
       min_score: floatParam(c.req.query("min_score"), "min_score", 0, 0, 1000),
+      exact_count: ["1", "true", "yes"].includes((c.req.query("exact_count") ?? "").toLowerCase()),
       limit: intParam(c.req.query("limit"), "limit", 10, 1, 50),
       offset: intParam(c.req.query("offset"), "offset", 0, 0, 1000),
     };

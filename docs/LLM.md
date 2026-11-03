@@ -89,6 +89,8 @@ GET /v1/answer?q=mal%20paylaşımında%20eşlere%20düşen%20en%20az%20oran&form
 - `2/3`, `1/3`, `üçte iki` gibi oranlar tek token olarak aranır; `2/3` artık `23` ile karışmaz.
 - `min_score` ham BM25 skorudur; sorgular arasında karşılaştırmayın, yalnızca aynı sorguda gürültü
   elemek için kullanın.
+- `exact_count=1` pahalı `COUNT(DISTINCT)` sorgusunu çalıştırır; varsayılan yalnızca getirilen
+  pencereyi sayar ve D1 okuma kotasını korur.
 - `mode=any` eş anlamlıları tek istekte denemek için uygundur:
   `q="nafaka yoksulluk iştirak"&mode=any`.
 - Tam ifade için tırnak veya `mode=phrase`: `q="mal paylaşımı"`.

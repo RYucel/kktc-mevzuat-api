@@ -35,6 +35,7 @@ check("search citation", search.body.results.every((r) => typeof r.citation === 
 check("search text status", search.body.results.every((r) => typeof r.text_status === "string"));
 check("search highlights", search.body.results.every((r) => Array.isArray(r.highlights)));
 check("search candidate count", typeof search.body.candidate_documents === "number");
+check("search exact count flag", search.body.exact_count === false);
 check("search relaxed flag", typeof search.body.relaxed === "boolean");
 check("search groups", search.body.groups && Array.isArray(search.body.groups.mevzuat));
 check("search concepts", Array.isArray(search.body.concepts));
