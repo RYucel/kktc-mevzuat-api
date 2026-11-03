@@ -41,6 +41,8 @@ export interface SearchParams {
   court?: string;
   prefer?: "mevzuat" | "ictihat";
   min_score?: number;
+  /** Run the expensive COUNT(DISTINCT) query; off by default. */
+  exact_count?: boolean;
   /** Internal: canonical statutes for the detected legal concept. */
   boost_ids?: string[];
   /** Internal: restrict to these document ids (primary-law lookup). */
@@ -181,8 +183,10 @@ export interface SearchResponse {
   primary_documents: number;
   filters: Record<string, string | number | null>;
   count: number;
-  /** Distinct documents matching the FTS expression (pre-pagination). */
+  /** Distinct documents in the retrieved window (or exact FTS count). */
   candidate_documents: number;
+  /** True when candidate_documents came from COUNT(DISTINCT). */
+  exact_count: boolean;
   /** Distinct documents in the retrieved window passing min_score. */
   relevant_documents: number;
   /** Backwards-compatible alias of candidate_documents. */

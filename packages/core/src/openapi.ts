@@ -84,6 +84,13 @@ export function openapiDocument(origin: string): Record<string, unknown> {
               schema: { type: "number", minimum: 0, default: 0 },
             },
             {
+              name: "exact_count",
+              in: "query",
+              description:
+                "1 ise pahalı COUNT(DISTINCT) çalışır ve candidate_documents tam sayı olur.",
+              schema: { type: "boolean", default: false },
+            },
+            {
               name: "limit",
               in: "query",
               schema: { type: "integer", minimum: 1, maximum: 50, default: 10 },
@@ -129,8 +136,10 @@ export function openapiDocument(origin: string): Record<string, unknown> {
                       count: { type: "integer" },
                       candidate_documents: {
                         type: "integer",
-                        description: "FTS ifadesiyle eşleşen tekil belge sayısı.",
+                        description:
+                          "Getirilen penceredeki aday belge sayısı; exact_count=1 ise FTS toplamı.",
                       },
+                      exact_count: { type: "boolean" },
                       relevant_documents: {
                         type: "integer",
                         description: "Getirilen pencere içinde min_score eşiğini geçen belge sayısı.",

@@ -254,6 +254,43 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
         [(cid, index_text(row[4])) for cid, row in chunk_ids],
     )
 
+    # Precompute the /v1/stats payload. Reading it back is one meta row instead
+    # of seven GROUP BY scans over documents on every request.
+    conn.row_factory = sqlite3.Row
+
+    def stat_rows(sql: str) -> list[dict[str, Any]]:
+        return [dict(row) for row in conn.execute(sql)]
+
+    stats_payload = {
+        "by_type": stat_rows(
+            "SELECT type, COUNT(*) AS documents, "
+            "SUM(CASE WHEN text_status = 'full' THEN 1 ELSE 0 END) AS full_text, "
+            "SUM(CASE WHEN text_status = 'partial' THEN 1 ELSE 0 END) AS partial_text "
+            "FROM documents GROUP BY type ORDER BY documents DESC"
+        ),
+        "by_year": stat_rows(
+            "SELECT year, COUNT(*) AS documents FROM documents "
+            "WHERE year IS NOT NULL GROUP BY year ORDER BY year DESC LIMIT 30"
+        ),
+        "by_source": stat_rows(
+            "SELECT source, COUNT(*) AS documents, "
+            "SUM(CASE WHEN text_status = 'full' THEN 1 ELSE 0 END) AS full_text "
+            "FROM documents GROUP BY source ORDER BY documents DESC"
+        ),
+        "text_status": stat_rows(
+            "SELECT text_status, COUNT(*) AS documents FROM documents GROUP BY text_status"
+        ),
+        "latest_by_type": stat_rows(
+            "SELECT type, MAX(date) AS latest_date FROM documents "
+            "WHERE date IS NOT NULL GROUP BY type ORDER BY type"
+        ),
+        "courts": stat_rows(
+            "SELECT court, COUNT(*) AS documents, MIN(year) AS first_year, MAX(year) AS last_year, "
+            "SUM(CASE WHEN text_status = 'full' THEN 1 ELSE 0 END) AS full_text "
+            "FROM documents WHERE type = 'karar' GROUP BY court ORDER BY documents DESC"
+        ),
+    }
+
     meta = {
         "built_at": now,
         "document_count": len(document_rows),
@@ -262,6 +299,7 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
         "by_type": dict(stats_types),
         "by_source": dict(stats_sources),
         "schema_version": 1,
+        "stats": stats_payload,
     }
     conn.executemany("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", [(k, json.dumps(v)) for k, v in meta.items()])
     conn.commit()

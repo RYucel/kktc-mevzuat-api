@@ -193,22 +193,19 @@ export async function searchDocuments(
     return store.all(search.sql, search.binds);
   };
 
-  const run = async (match: string) => {
-    const count = buildCountSql(match, searchParams);
-    const [rows, countRow] = await Promise.all([fetchRows(match), store.first(count.sql, count.binds)]);
-    return { rows, candidate: Number(countRow?.n ?? 0) };
-  };
+  const run = async (match: string) => fetchRows(match);
 
-  let { rows, candidate } = await run(initialMatch);
+  let rows = await run(initialMatch);
+  let effectiveMatch = initialMatch;
   let effectiveMode: "all" | "any" | "phrase" = initialMode;
   let relaxed = false;
   if (requestedMode === "auto" && rows.length === 0) {
     const relaxedMatch = buildMatch(params.q, "any");
     if (relaxedMatch && relaxedMatch !== initialMatch) {
       const retry = await run(relaxedMatch);
-      if (retry.rows.length > 0) {
-        rows = retry.rows;
-        candidate = retry.candidate;
+      if (retry.length > 0) {
+        rows = retry;
+        effectiveMatch = relaxedMatch;
         effectiveMode = "any";
         relaxed = true;
       }
@@ -291,6 +288,13 @@ export async function searchDocuments(
   });
   const conceptDocuments = new Set(conceptRows.map((row) => String(row.id))).size;
   const primaryDocuments = new Set(primaryRows.map((row) => String(row.id))).size;
+
+  let candidate = deduped.length;
+  if (params.exact_count) {
+    const count = buildCountSql(effectiveMatch, searchParams);
+    const countRow = await store.first(count.sql, count.binds);
+    candidate = Number(countRow?.n ?? 0);
+  }
 
   const minScore = Math.max(0, Number(params.min_score ?? 0));
   const filtered = minScore > 0 ? deduped.filter((item) => item.score >= minScore) : deduped;
@@ -402,6 +406,7 @@ export async function searchDocuments(
   if (params.source) nextParams.source = params.source;
   if (params.court) nextParams.court = params.court;
   if (params.prefer) nextParams.prefer = params.prefer;
+  if (params.exact_count) nextParams.exact_count = "1";
   if (minScore > 0) nextParams.min_score = String(minScore);
   nextParams.limit = String(params.limit);
   nextParams.offset = String(nextOffset);
@@ -426,6 +431,7 @@ export async function searchDocuments(
     },
     count: results.length,
     candidate_documents: candidate,
+    exact_count: Boolean(params.exact_count),
     relevant_documents: filtered.length,
     total_documents: candidate,
     min_score: minScore,
@@ -628,15 +634,7 @@ export async function listRecent(
 }
 
 export async function getStats(store: Store, origin: string): Promise<StatsResponse> {
-  const [metaRows, types, years, sources, status, latest, courts] = await Promise.all([
-    store.all(STATS_SQL.meta),
-    store.all(STATS_SQL.types),
-    store.all(STATS_SQL.years),
-    store.all(STATS_SQL.sources),
-    store.all(STATS_SQL.status),
-    store.all(STATS_SQL.latest),
-    store.all(STATS_SQL.courts),
-  ]);
+  const metaRows = await store.all(STATS_SQL.meta);
   const meta: Record<string, unknown> = {};
   for (const row of metaRows) {
     try {
@@ -645,6 +643,29 @@ export async function getStats(store: Store, origin: string): Promise<StatsRespo
       meta[String(row.key)] = row.value;
     }
   }
+  // New builds carry the whole stats payload in one meta row. Fall back to the
+  // seven live GROUP BY queries only for databases built before that change.
+  if (meta.stats && typeof meta.stats === "object") {
+    const { stats: _precomputed, ...base } = meta;
+    return {
+      stats: {
+        ...base,
+        ...(meta.stats as Record<string, unknown>),
+        history: meta.history,
+        type_labels: TYPE_LABELS,
+      },
+      _meta: apiMeta(origin),
+    };
+  }
+
+  const [types, years, sources, status, latest, courts] = await Promise.all([
+    store.all(STATS_SQL.types),
+    store.all(STATS_SQL.years),
+    store.all(STATS_SQL.sources),
+    store.all(STATS_SQL.status),
+    store.all(STATS_SQL.latest),
+    store.all(STATS_SQL.courts),
+  ]);
   return {
     stats: {
       ...meta,
