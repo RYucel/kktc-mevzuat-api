@@ -57,15 +57,33 @@ function fractionToken(match: string, numerator: string, denominator: string): s
   return n > 0 && n < d && FRACTION_DENOMINATORS.has(d) ? `f${n}of${d}` : match;
 }
 
-/** Fold and expand common legal fraction wording before tokenisation. */
+/** Fold the query and turn digit fractions ("2/3") into their index token. */
 export function normalizeQuery(query: string): string {
-  const expanded = foldTr(query)
-    .replace(/\bucte\s+iki\b/g, " 2/3 ")
-    .replace(/\bucte\s+bir\b/g, " 1/3 ")
-    .replace(/\byari\b/g, " 1/2 ");
-  return expanded.replace(FRACTION_RE, (match, numerator, denominator) =>
+  return foldTr(query).replace(FRACTION_RE, (match, numerator, denominator) =>
     fractionToken(match, numerator, denominator),
   );
+}
+
+// Fractions written in words. Statutes use both forms ("2/3'ü" and "üçte iki
+// çoğunluğu"), and "yarı" is usually not a fraction at all ("yarı zamanlı",
+// "yarı açık cezaevi"). The match therefore accepts either form instead of
+// replacing the word with the fraction token (which matched nothing for
+// "yarı zamanlı çalışma"). Markers are word characters so they survive
+// tokenisation.
+const WORD_FRACTIONS: { re: RegExp; marker: string; expr: string }[] = [
+  { re: /\bucte\s+iki\b/g, marker: "qwf2of3", expr: '(f2of3 OR "ucte iki")' },
+  { re: /\bucte\s+bir\b/g, marker: "qwf1of3", expr: '(f1of3 OR "ucte bir")' },
+  { re: /\byari\b/g, marker: "qwf1of2", expr: "(f1of2 OR yari)" },
+];
+
+function markWordFractions(normalized: string): string {
+  let out = normalized;
+  for (const { re, marker } of WORD_FRACTIONS) out = out.replace(re, ` ${marker} `);
+  return out;
+}
+
+function wordFractionExpr(token: string): string | null {
+  return WORD_FRACTIONS.find((item) => item.marker === token)?.expr ?? null;
 }
 
 /** Split a user query into folded word tokens (quoted phrases preserved). */
@@ -140,8 +158,13 @@ export function buildMatch(query: string, mode: "all" | "any" | "phrase" = "all"
     if (folded) parts.push(`"${escapeFtsTerm(folded)}"`);
   }
 
-  const rest = normalized.replace(phraseRe, " ").split(/\s+/);
+  const rest = markWordFractions(normalized.replace(phraseRe, " ")).split(/\s+/);
   for (const raw of rest) {
+    const wordFraction = wordFractionExpr(raw);
+    if (wordFraction) {
+      parts.push(wordFraction);
+      continue;
+    }
     // FTS5 splits "24/1982" and "1122-2024" into two tokens; keep the pair
     // together as a phrase so law/case numbers do not become "241982".
     const numeric = /^(\d{1,4})\s*[/-]\s*(\d{2,4})$/.exec(raw.trim());
@@ -289,4 +312,52 @@ export function truncate(text: string, limit: number): string {
   if (text.length <= limit) return text;
   const cut = text.lastIndexOf(" ", limit);
   return `${text.slice(0, cut > limit * 0.6 ? cut : limit).trimEnd()}…`;
+}
+
+
+// Question words and fillers that carry no legal content.
+const QUERY_STOPWORDS = new Set([
+  "nedir", "nelerdir", "nasil", "hangi", "hangisi", "kadar", "ne", "en", "az", "cok", "fazla",
+  "mi", "mu", "midir", "mudur", "var", "yok", "icin", "ile", "ve", "veya", "olan", "olarak",
+  "gibi", "kim", "kimdir", "nerede", "zaman", "ise", "bir", "bu", "su", "da", "de", "ki",
+]);
+
+/**
+ * Rough Turkish stem for matching inside a known document: FTS5 prefix
+ * queries do not survive suffixes ("oranı" must find "oranları"), so cut a
+ * suffix-sized tail. Too broad for corpus-wide search, fine within one law.
+ */
+function roughStem(token: string): string {
+  const cut = token.length >= 8 ? 3 : token.length >= 6 ? 2 : token.length === 5 ? 1 : 0;
+  return token.slice(0, Math.max(4, token.length - cut));
+}
+
+/** Content-word stems of a query (no question words, no numbers). */
+export function queryStems(query: string): string[] {
+  const stems: string[] = [];
+  for (const token of queryTokens(query)) {
+    if (token.includes(" ") || /^f\d+of\d+$/.test(token) || /^\d+$/.test(token)) continue;
+    if (token.length < 3 || QUERY_STOPWORDS.has(token)) continue;
+    const stem = roughStem(token);
+    if (!stems.includes(stem)) stems.push(stem);
+  }
+  return stems;
+}
+
+/** OR-of-stems FTS expression for ranking passages inside given documents. */
+export function stemMatch(query: string): string {
+  const parts = queryStems(query).map((stem) => `${escapeFtsTerm(stem)}*`);
+  for (const token of queryTokens(query)) {
+    if (/^f\d+of\d+$/.test(token)) parts.push(token);
+  }
+  return parts.length ? parts.join(" OR ") : "";
+}
+
+/** How many of the query's content stems occur in ``text`` (folded). */
+export function stemCoverage(text: string, query: string): { found: number; total: number } {
+  // Word starts only: "yari" must not be found inside "kayit/yariyil" noise.
+  const words = new Set(foldTr(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+  const stems = queryStems(query);
+  const found = stems.filter((stem) => [...words].some((word) => word.startsWith(stem))).length;
+  return { found, total: stems.length };
 }

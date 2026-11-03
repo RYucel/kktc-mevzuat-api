@@ -407,7 +407,9 @@ def normalize_margin_notes(text: str) -> str:
             pending.append(line.strip())
             continue
         if not line.strip():
-            flush()
+            # Keep collecting: notes often sit between a heading and its
+            # article with a blank line in between; flushing them here put a
+            # "[...]" line between the two and the heading was lost.
             out.append(line)
             continue
         notes = list(pending)

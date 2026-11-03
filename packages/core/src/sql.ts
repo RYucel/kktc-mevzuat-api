@@ -33,6 +33,9 @@ function filters(params: SearchParams): { sql: string[]; binds: unknown[] } {
     sql.push(FILTER_TYPES.court);
     binds.push(`%${params.court}%`);
   }
+  if (params.exclude_title) {
+    sql.push("c.kind != 'title'");
+  }
   if (params.doc_ids?.length) {
     sql.push(`d.id IN (${params.doc_ids.map(() => "?").join(", ")})`);
     binds.push(...params.doc_ids);
@@ -150,19 +153,27 @@ export function primaryDocsSql(ids: string[]): { sql: string; binds: unknown[] }
   };
 }
 
-/** All chunks for a page of search results, used to rebuild whole articles. */
-export function chunksForDocsSql(ids: string[]): { sql: string; binds: unknown[] } {
-  if (!ids.length) {
+/**
+ * Chunks of the matched articles only, used to rebuild whole articles for a
+ * page of results. Reading every chunk of every law on the page cost hundreds
+ * of D1 rows per search (Gelir Vergisi ~150, 34/2007 ~600 chunks); an article
+ * is a handful. D1 allows 100 bound parameters, so callers batch the pairs.
+ */
+export function chunksForArticlesSql(pairs: { docId: string; ref: string }[]): { sql: string; binds: unknown[] } {
+  if (!pairs.length) {
     return { sql: "SELECT doc_id, ord, kind, ref, text FROM chunks WHERE 0", binds: [] };
   }
-  const placeholders = ids.map(() => "?").join(",");
+  const clauses = pairs.map(() => "(doc_id = ? AND (ref = ? OR ref LIKE ?))").join(" OR ");
   return {
     sql: `SELECT doc_id, ord, kind, ref, text FROM chunks
-          WHERE doc_id IN (${placeholders})
+          WHERE ${clauses}
           ORDER BY doc_id, ord`,
-    binds: ids,
+    binds: pairs.flatMap(({ docId, ref }) => [docId, ref, `${ref} (%`]),
   };
 }
+
+/** Max (doc, article) pairs per chunksForArticlesSql call (3 binds each, D1 cap 100). */
+export const ARTICLE_PAIRS_PER_QUERY = 30;
 
 export function recentSql(type: string | undefined, limit: number): { sql: string; binds: unknown[] } {
   const where = type ? "WHERE d.type = ?" : "";
