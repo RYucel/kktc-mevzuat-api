@@ -5,76 +5,83 @@ from pathlib import Path
 import pytest
 
 from kktc import sources
-from kktc.sources import fetch_text_for, validators_changed
+from kktc.sources import fetch_text_for
 
-URL = "https://mevzuat.gov.ct.tr/YASALAR/1-2024 MALI YASA.pdf"
+URL = "https://mevzuat.gov.ct.tr/Portals/48/ATESLI SILAHLAR YASASI.pdf"
 
 
 class FakeResponse:
-    def __init__(self, content: bytes, headers: dict[str, str]):
+    def __init__(self, content: bytes):
         self.content = content
-        self.headers = headers
+        self.headers: dict[str, str] = {}
 
 
 class FakeServer:
-    """Serves one file; counts GETs so tests can tell download from cache."""
+    """Serves one file; counts downloads and extractions."""
 
-    def __init__(self, content: bytes, headers: dict[str, str]):
+    def __init__(self, content: bytes):
         self.content = content
-        self.headers = headers
         self.gets = 0
-        self.heads = 0
 
     def get(self, url: str, **kwargs):
         self.gets += 1
-        return FakeResponse(self.content, self.headers)
-
-    def request(self, method: str, url: str, **kwargs):
-        assert method == "HEAD"
-        self.heads += 1
-        return FakeResponse(b"", self.headers)
+        return FakeResponse(self.content)
 
 
-@pytest.fixture(autouse=True)
-def isolated_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.fixture()
+def extractions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[bytes]:
+    seen: list[bytes] = []
+
+    def fake_extract(url: str, data: bytes) -> dict:
+        seen.append(data)
+        return {"status": "full", "method": "fake", "text": data.decode("utf-8")}
+
     monkeypatch.setattr(sources, "TEXT_DIR", tmp_path / "text")
-    monkeypatch.setattr(
-        sources,
-        "extract_document_text",
-        lambda url, data: {"status": "full", "method": "fake", "text": data.decode("utf-8")},
-    )
+    monkeypatch.setattr(sources, "extract_document_text", fake_extract)
+    return seen
 
 
-def test_validators_changed_prefers_strongest() -> None:
-    assert validators_changed({"etag": "a", "content-length": "1"}, {"etag": "b", "content-length": "1"})
-    assert not validators_changed({"etag": "a", "content-length": "1"}, {"etag": "a", "content-length": "2"})
-    assert validators_changed({"content-length": "1"}, {"content-length": "2"})
-    assert not validators_changed({"etag": "a"}, {"last-modified": "x"})
-
-
-def test_same_name_new_content_is_downloaded_again() -> None:
+def test_same_name_new_content_is_extracted_again(extractions: list[bytes]) -> None:
     doc = {"pdf_url": URL}
-    server = FakeServer(b"eski metin", {"etag": '"v1"', "content-length": "10"})
+    server = FakeServer(b"eski metin")
     assert fetch_text_for(doc, server)["text"] == "eski metin"
 
-    # Unchanged on the server: HEAD only, cached text returned.
+    # Same bytes: downloaded and compared, but not extracted again.
     assert fetch_text_for(doc, server, revalidate=True)["text"] == "eski metin"
-    assert (server.gets, server.heads) == (1, 1)
+    assert server.gets == 2 and len(extractions) == 1
 
     # Replaced under the same name.
-    server.content, server.headers = b"yeni metin", {"etag": '"v2"', "content-length": "10"}
+    server.content = b"yeni metin"
     assert fetch_text_for(doc, server, revalidate=True)["text"] == "yeni metin"
-    assert server.gets == 2
+    assert len(extractions) == 2
+    assert sources._read_text_cache(URL)["text"] == "yeni metin"
 
     # Without --revalidate the cache is trusted as before.
-    server.content, server.headers = b"daha yeni", {"etag": '"v3"'}
+    server.content = b"daha yeni"
     assert fetch_text_for(doc, server)["text"] == "yeni metin"
+    assert server.gets == 3
 
 
-def test_old_cache_entries_get_validators_without_download() -> None:
+def test_old_cache_entries_get_a_fingerprint_without_reextraction(extractions: list[bytes]) -> None:
     doc = {"pdf_url": URL}
     sources._write_text_cache(URL, {"status": "full", "method": "pypdf", "text": "eski metin"})
-    server = FakeServer(b"ayni", {"last-modified": "Mon, 02 Nov 2026 10:00:00 GMT"})
+    server = FakeServer(b"dosya baytlari")
     assert fetch_text_for(doc, server, revalidate=True)["text"] == "eski metin"
-    assert server.gets == 0
-    assert sources._read_text_cache(URL)["validators"] == {"last-modified": "Mon, 02 Nov 2026 10:00:00 GMT"}
+    assert extractions == []
+    assert sources._read_text_cache(URL)["sha256"]
+
+    # From the next run on, a change is detected.
+    server.content = b"degismis dosya"
+    assert fetch_text_for(doc, server, revalidate=True)["text"] == "degismis dosya"
+
+
+def test_failed_download_keeps_cached_text(extractions: list[bytes]) -> None:
+    doc = {"pdf_url": URL}
+    server = FakeServer(b"eski metin")
+    fetch_text_for(doc, server)
+
+    class Down:
+        def get(self, url: str, **kwargs):
+            raise RuntimeError("timeout")
+
+    assert fetch_text_for(doc, Down(), revalidate=True)["text"] == "eski metin"

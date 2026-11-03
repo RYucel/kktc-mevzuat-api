@@ -255,7 +255,7 @@ Her build, güncel birleştirilmiş metinleri (`source=gov`) `data/history.db` i
 - `history.db` build'ler arasında korunması gereken tek durumdur. GitHub Actions'ta `history` adlı release'in eki olarak saklanır (`history-prev.db` bir önceki kopyadır). Yerelde `data/history.db` dosyasını silmeyin.
 - `python -m kktc build --no-history` yeni sürüm kaydetmeden derler.
 - Saptanma tarihi değişikliğin kaynakta görüldüğü haftadır, yürürlük tarihi değildir.
-- mevzuat.gov.ct.tr değişiklikte genellikle dosya adına yeni tarih koyar (yeni URL → yeni indirme). Aynı adla değiştirilen dosyalar için `fetch-text --revalidate` her dosyaya HEAD isteği atar; `ETag`, `Last-Modified` veya boyut değiştiyse dosyayı yeniden indirir. Haftalık iş akışı bunu kullanır.
+- mevzuat.gov.ct.tr dosyalarının çoğunun adında tarih yoktur (Ekim 2026: 324 dosyanın 275'i), yani değişiklik aynı adla gelebilir. Bu yüzden `fetch-text --revalidate` her hafta tüm dosyaları (~150 MB) yeniden indirir ve SHA-256 parmak izini karşılaştırır; yalnızca içeriği değişen dosyanın metni yeniden çıkarılır. Haftalık iş akışı bunu kullanır.
 
 ## Sınırlamalar
 

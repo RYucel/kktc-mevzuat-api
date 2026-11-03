@@ -486,46 +486,52 @@ def _extract_legacy_doc(url: str, data: bytes) -> dict[str, Any]:
     return {"status": "unsupported", "method": None, "text": ""}
 
 
-# HTTP validators compared on revalidation, strongest first.
-_VALIDATORS = ("etag", "last-modified", "content-length")
+def _sha256(data: bytes) -> str:
+    import hashlib
+
+    return hashlib.sha256(data).hexdigest()
 
 
-def _validators(headers: Any) -> dict[str, str]:
-    return {key: str(headers.get(key)) for key in _VALIDATORS if headers.get(key)}
+def _redownload(url: str, cached: dict[str, Any], client: HttpClient, max_bytes: int) -> Optional[dict[str, Any]]:
+    """Download the file again and compare its bytes with the cached copy.
 
+    Most mevzuat.gov.ct.tr files (275 of 324 in October 2026) carry no date in
+    their name, so an amendment can replace a file under the same URL. The whole
+    collection is about 150 MB, so every file is fetched each week and compared
+    by SHA-256; HTTP headers are not relied on.
 
-def validators_changed(old: dict[str, str], new: dict[str, str]) -> bool:
-    """True when the strongest validator both responses carry differs."""
-    for key in _VALIDATORS:
-        if old.get(key) and new.get(key):
-            return old[key] != new[key]
-    return False
-
-
-def _revalidate(url: str, cached: dict[str, Any], client: HttpClient) -> bool:
-    """HEAD the file; True when it changed since the cached copy was made.
-
-    mevzuat.gov.ct.tr normally puts the consolidation date in the file name, so
-    an amendment arrives under a new URL. This catches the case where a file is
-    replaced under the same name. A cache entry without validators (made before
-    revalidation existed) only records them; it is compared from the next run.
+    Returns a fresh payload when the content changed, otherwise None (the
+    cached text stays). A cache entry made before fingerprints existed only
+    records the fingerprint; its text is not re-extracted, so a newer PDF
+    library cannot show up as an amendment.
     """
     try:
-        response = client.request("HEAD", url, allow_redirects=True)
+        response = client.get(url)
     except Exception as exc:  # pragma: no cover - network failures
-        log.warning("revalidate failed for %s: %s; keeping cached text", url, exc)
-        return False
-    current = _validators(response.headers)
-    previous = cached.get("validators")
+        log.warning("re-download failed for %s: %s; keeping cached text", url, exc)
+        return None
+    data = response.content
+    digest = _sha256(data)
+    previous = cached.get("sha256")
+    if previous == digest:
+        return None
     if not previous:
-        if current:
-            cached["validators"] = current
-            _write_text_cache(url, cached)
-        return False
-    if validators_changed(previous, current):
-        log.info("changed on server: %s (%s -> %s)", url, previous, current)
-        return True
-    return False
+        cached["sha256"] = digest
+        cached["bytes"] = len(data)
+        _write_text_cache(url, cached)
+        return None
+    log.info("changed on server: %s (%d -> %d bytes)", url, cached.get("bytes") or 0, len(data))
+    return _payload_from(url, data, max_bytes)
+
+
+def _payload_from(url: str, data: bytes, max_bytes: int) -> dict[str, Any]:
+    if len(data) > max_bytes:
+        payload: dict[str, Any] = {"status": "too_large", "method": None, "text": ""}
+    else:
+        payload = extract_document_text(url, data)
+    payload["bytes"] = len(data)
+    payload["sha256"] = _sha256(data)
+    return payload
 
 
 def fetch_text_for(
@@ -542,18 +548,16 @@ def fetch_text_for(
     if not force:
         cached = _read_text_cache(url)
         if cached is not None:
-            if not (revalidate and cached.get("text") and _revalidate(url, cached, client)):
+            if not (revalidate and cached.get("text")):
                 return cached
+            fresh = _redownload(url, cached, client, max_bytes)
+            if fresh is None:
+                return cached
+            _write_text_cache(url, fresh)
+            return fresh
     try:
         response = client.get(url)
-        if len(response.content) > max_bytes:
-            payload = {"status": "too_large", "method": None, "text": "", "bytes": len(response.content)}
-        else:
-            payload = extract_document_text(url, response.content)
-            payload["bytes"] = len(response.content)
-        validators = _validators(response.headers)
-        if validators:
-            payload["validators"] = validators
+        payload = _payload_from(url, response.content, max_bytes)
         _write_text_cache(url, payload)
         return payload
     except Exception as exc:  # pragma: no cover - network failures
