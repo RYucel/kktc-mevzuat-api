@@ -1,0 +1,101 @@
+name: Sync semantic index
+
+# Embeds new/changed legislation articles into Vectorize through the Worker's
+# /admin/vectors/* endpoints (Workers AI does the embedding). Units come from
+# the data workflow (vector-units.jsonl.gz on the "history" release); what has
+# been sent is tracked in vectors.json on the same release.
+#
+# Free tier: Workers AI gives 10,000 neurons/day (~9M input tokens for
+# Qwen3-Embedding) shared with query embeddings, so each run embeds at most
+# BUDGET_TOKENS and the next run continues. The first fill (~6M tokens) fits
+# in one run.
+
+on:
+  workflow_run:
+    workflows: ["Refresh data"]
+    types: [completed]
+  schedule:
+    # Daily, to finish an interrupted fill or catch up after quota errors.
+    - cron: "40 4 * * *"
+  workflow_dispatch:
+    inputs:
+      budget_tokens:
+        description: "Bu çalıştırmada gömülecek en fazla token"
+        default: "7000000"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vectors-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      BASE: ${{ vars.WORKER_URL || 'https://kktc-mevzuat-api.stevevaius.workers.dev' }}
+      BUDGET: ${{ inputs.budget_tokens || '7000000' }}
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: crawler/requirements.txt
+
+      - name: Install crawler dependencies
+        run: python -m pip install -r crawler/requirements.txt
+
+      - name: Download units and manifest
+        id: assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          assets=$(gh release view history --json assets --jq '.assets[].name' 2>/dev/null || true)
+          if ! grep -qx vector-units.jsonl.gz <<<"$assets"; then
+            echo "::notice::vector-units.jsonl.gz yok; önce 'Refresh data' çalışmalı."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh release download history --pattern vector-units.jsonl.gz --dir data --clobber
+          if grep -qx vectors.json <<<"$assets"; then
+            gh release download history --pattern vectors.json --dir data --clobber
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check the Worker's vector endpoints
+        id: worker
+        if: ${{ steps.assets.outputs.ready == 'true' && env.CLOUDFLARE_API_TOKEN != '' }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          ADMIN=$(cd crawler && python -m kktc vectors admin-token)
+          echo "::add-mask::$ADMIN"
+          code=$(curl -s -o /tmp/info.json -w '%{http_code}' -H "Authorization: Bearer $ADMIN" "$BASE/admin/vectors/info")
+          if [[ "$code" == "200" ]]; then
+            cat /tmp/info.json; echo
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Worker vektör uçları hazır değil (HTTP $code). Vectorize bağlantısı veya VECTOR_ADMIN_TOKEN henüz yok; 'Refresh data' sonrası tekrar denenecek."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync
+        if: ${{ steps.worker.outputs.ready == 'true' }}
+        working-directory: crawler
+        run: python -m kktc vectors sync --base "$BASE" --budget-tokens "$BUDGET"
+
+      - name: Save manifest
+        if: ${{ always() && steps.worker.outputs.ready == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -f data/vectors.json ]] && gh release upload history data/vectors.json --clobber

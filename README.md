@@ -301,6 +301,21 @@ npm run eval:search
 - `.github/workflows/data.yml` — haftalık kazıma, D1'e aktarım ve Worker dağıtımı
   (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID` secret'ları gerekir).
 
+## Anlamsal arama
+
+Doğal dilde sorulan mevzuat sorularında ("kiracı hangi hallerde tahliye edilebilir") arama,
+anahtar kelime sıralamasını (BM25) bir vektör diziniyle birleştirir (reciprocal rank fusion).
+
+- Her yasa/tüzük/anayasa maddesi (parçaları birleştirilmiş, en fazla 1.800 karakter) bir vektördür:
+  ~22 bin madde. Model Qwen3-Embedding-0.6B (Workers AI, 100+ dil); vektörler Matryoshka ile
+  192 boyuta kısaltılır, böylece Cloudflare Vectorize ücretsiz katmanına (5M boyut) sığar.
+- Kararlar, tek kelimelik aramalar, yasa/karar numaraları ve tırnaklı ifadeler anahtar kelimeyle
+  aranır. Kanonik yasalar (kavram sözlüğü) yine en üsttedir.
+- Yanıtta `ranking` (`lexical`/`hybrid`) ve `semantic` alanları; `semantic=0` ile kapatılır.
+- Vektör dizini yoksa veya hata verirse arama sessizce anahtar kelimeye döner. Node sürümünde
+  anlamsal arama yoktur.
+- Kurulum ve kota ayrıntıları: [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
 ## Sürüm geçmişi
 
 Her build, birleştirilmiş yasa ve tüzük metinlerini (`gov`; orada olmayan yasalar için `mahkemeler`) `data/history.db` içindeki son sürümle karşılaştırır. Metin değişmişse yeni sürüm saklanır; fark madde madde (eklenen / kaldırılan / değişen) ve değişen maddelerin içinde kelime bazında kaydedilir.

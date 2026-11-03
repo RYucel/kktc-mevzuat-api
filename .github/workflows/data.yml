@@ -121,6 +121,12 @@ jobs:
         working-directory: crawler
         run: python -m kktc build
 
+      # Article units for the semantic index (see vectors.yml). Exported from
+      # the fresh database so chunk ordinals match D1.
+      - name: Export vector units
+        working-directory: crawler
+        run: python -m kktc vectors export
+
       - name: Save version history
         shell: bash
         run: |
@@ -129,7 +135,7 @@ jobs:
             gh release create history --title "Sürüm geçmişi (history.db)" --latest=false \
               --notes "Mevzuat sürüm geçmişi. Veri yenileme iş akışı her çalıştırmada history.db dosyasını günceller; history-prev.db bir önceki kopyadır. Elle silmeyin."
           fi
-          files=(data/history.db)
+          files=(data/history.db data/vector-units.jsonl.gz)
           [[ -f data/history-prev.db ]] && files+=(data/history-prev.db)
           gh release upload history "${files[@]}" --clobber
 
@@ -175,9 +181,49 @@ jobs:
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         run: npx wrangler d1 execute kktc-mevzuat --remote --command "SELECT type, COUNT(*) AS n FROM documents GROUP BY type ORDER BY n DESC"
 
+      # The Worker binds a Vectorize index for semantic search. Create it on
+      # the first run; if the API token cannot (no "Vectorize: Edit"
+      # permission), deploy without the binding so lexical search keeps
+      # working.
+      - name: Ensure vector index
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          INDEX=kktc-mevzuat-maddeler
+          if npx wrangler vectorize get "$INDEX" >/dev/null 2>&1; then
+            echo "Vectorize index $INDEX exists."
+            # Type filters need this metadata index; it may be missing if an
+            # earlier run created the index but stopped halfway.
+            npx wrangler vectorize create-metadata-index "$INDEX" --propertyName=type --type=string >/dev/null 2>&1 || true
+          elif npx wrangler vectorize create "$INDEX" --dimensions=192 --metric=cosine \
+               && npx wrangler vectorize create-metadata-index "$INDEX" --propertyName=type --type=string; then
+            echo "Created Vectorize index $INDEX."
+          else
+            echo "::warning::Vectorize dizini oluşturulamadı (API token'a 'Vectorize: Edit' izni gerekir). Worker anlamsal arama olmadan dağıtılıyor."
+            python - <<'PY'
+          import pathlib, re
+          path = pathlib.Path("apps/worker/wrangler.toml")
+          text = path.read_text(encoding="utf-8")
+          text = re.sub(r"\n\[\[vectorize\]\][^\[]*", "\n", text)
+          path.write_text(text, encoding="utf-8")
+          PY
+          fi
+
       - name: Deploy Worker
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         run: npm --workspace apps/worker run deploy
+
+      # Token for /admin/vectors/*: derived from the Cloudflare API token, so
+      # there is no extra secret to manage (vectors.yml derives the same).
+      - name: Set vector admin token
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN=$(cd crawler && python -m kktc vectors admin-token)
+          echo "::add-mask::$ADMIN"
+          printf '%s' "$ADMIN" | npx wrangler secret put VECTOR_ADMIN_TOKEN --config apps/worker/wrangler.toml
 
       - name: Smoke test live API
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}

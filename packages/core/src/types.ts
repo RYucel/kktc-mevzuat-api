@@ -1,4 +1,5 @@
 /** Shared types for the KKTC mevzuat API. */
+import type { SemanticIndex } from "./semantic.js";
 
 export const DOC_TYPES = [
   "yasa",
@@ -30,6 +31,8 @@ export type StoreRow = Record<string, unknown>;
 export interface Store {
   all(sql: string, binds?: unknown[]): Promise<StoreRow[]>;
   first(sql: string, binds?: unknown[]): Promise<StoreRow | null>;
+  /** Optional vector index (Worker with Workers AI + Vectorize bindings). */
+  semantic?: SemanticIndex;
 }
 
 export interface SearchParams {
@@ -49,6 +52,8 @@ export interface SearchParams {
   doc_ids?: string[];
   /** Internal: skip title chunks, so a law's best passage is an article. */
   exclude_title?: boolean;
+  /** Use the vector index when available (default true). */
+  semantic?: boolean;
   limit: number;
   offset: number;
 }
@@ -185,6 +190,9 @@ export interface SearchResponse {
   concept_expanded: boolean;
   concept_documents: number;
   primary_documents: number;
+  /** Hybrid ranking: lexical (BM25) fused with the vector index. */
+  semantic: { available: boolean; used: boolean; hits: number; documents: number };
+  ranking: "lexical" | "hybrid";
   filters: Record<string, string | number | null>;
   count: number;
   /** Distinct documents in the retrieved window (or exact FTS count). */

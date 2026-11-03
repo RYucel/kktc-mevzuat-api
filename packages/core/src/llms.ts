@@ -119,6 +119,11 @@ Parametreler:
 - \`prefer\`: \`mevzuat\` (yasa/tüzük/anayasa önce) veya \`ictihat\` (kararlar önce).
 - \`min_score\`: bu skorun altındaki sonuçları eler (varsayılan 0). Ham BM25 skorudur;
   sorgular arasında karşılaştırmayın.
+- \`semantic\`: \`0\` anlamsal (vektör) sıralamayı kapatır. Varsayılan açıktır; doğal dilde
+  sorulan mevzuat sorularında sonuçlar BM25 ile vektör benzerliğinin birleşimiyle (RRF) sıralanır
+  (\`ranking: "hybrid"\`). Tek kelimelik aramalar, numaralar, tırnaklı ifadeler ve kararlar
+  anahtar kelimeyle aranır. Karma sıralamada \`score\` RRF ölçeğindedir (en fazla ~100;
+  kanonik yasalar 120).
 - \`exact_count\`: \`1\` ise pahalı \`COUNT(DISTINCT)\` çalışır; varsayılan \`0\` yalnızca getirilen
   pencereyi sayar (D1 okuma kotasını korur).
 - \`limit\`: 1–50 (varsayılan 10).
