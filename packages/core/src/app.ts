@@ -334,6 +334,33 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
         400,
       );
     }
+    // MCP is how assistants use this API, and it is POST, so the GET edge
+    // cache above never saw it. Cache single tools/call results (all tools
+    // are read-only) keyed by tool + arguments; the JSON-RPC id is put back
+    // on each response.
+    const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
+    const call = cacheableToolCall(payload);
+    if (cache && call) {
+      const key = new Request(`${origin}/__cache/mcp/${await sha256Hex(call.key)}`, { method: "GET" });
+      const hit = await cache.match(key);
+      if (hit) {
+        return c.json({ jsonrpc: "2.0", id: call.id, result: await hit.json() });
+      }
+      const result = await handleMcp(payload, store, origin);
+      const body = result.body as { result?: { isError?: boolean } } | undefined;
+      if (result.status === 200 && body?.result && !body.result.isError) {
+        const stored = new Response(JSON.stringify(body.result), {
+          headers: { "content-type": "application/json", "cache-control": "public, max-age=300" },
+        });
+        try {
+          c.executionCtx.waitUntil(cache.put(key, stored));
+        } catch {
+          // No execution context (Node).
+        }
+      }
+      if (result.status === 202) return c.body(null, 202);
+      return c.json(result.body as Record<string, unknown>, result.status as 200);
+    }
     const result = await handleMcp(payload, store, origin);
     if (result.status === 202) return c.body(null, 202);
     return c.json(result.body as Record<string, unknown>, result.status as 200);
@@ -410,6 +437,32 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
   });
 
   return app;
+}
+
+function cacheableToolCall(payload: unknown): { id: unknown; key: string } | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const request = payload as { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };
+  if (request.jsonrpc !== "2.0" || request.method !== "tools/call" || request.id === undefined) return null;
+  const params = (request.params ?? {}) as { name?: unknown; arguments?: unknown };
+  if (typeof params.name !== "string") return null;
+  return { id: request.id, key: JSON.stringify([params.name, sortKeys(params.arguments ?? {})]) };
+}
+
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => [k, sortKeys(v)]),
+    );
+  }
+  return value;
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function landingPage(origin: string): string {

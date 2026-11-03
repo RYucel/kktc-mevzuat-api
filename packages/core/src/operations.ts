@@ -3,7 +3,8 @@ import {
   articleSql,
   buildCountSql,
   buildSearchSql,
-  chunksForDocsSql,
+  ARTICLE_PAIRS_PER_QUERY,
+  chunksForArticlesSql,
   chunksSql,
   documentSql,
   primaryDocsSql,
@@ -19,6 +20,8 @@ import {
   makeHighlights,
   makeSnippet,
   normalizeArticleRef,
+  stemCoverage,
+  stemMatch,
   truncate,
 } from "./text.js";
 import {
@@ -227,19 +230,26 @@ export async function searchDocuments(
     (!params.type || params.type === "yasa");
   const primaryRows: StoreRow[] = [];
   if (injectPrimary) {
+    const questionMatch = stemMatch(params.q);
     for (const concept of primaryConcepts) {
       if (!concept.primary?.length) continue;
-      const conceptRowsForPrimary = await fetchRows(conceptMatch(concept), {
-        doc_ids: concept.primary,
-        boost_ids: [],
-      });
+      // Pick each canonical law's best *article* for this question, ranked on
+      // the question's own word stems ("oranı" also finds "oranları") together
+      // with the concept vocabulary ("2/3", "katkı payı"). Titles are excluded: the
+      // concept words are in the law's title, which used to win and became
+      // the quoted "answer".
       const found = new Set<string>();
-      for (const row of conceptRowsForPrimary) {
-        const id = String(row.id);
-        if (found.has(id)) continue;
-        found.add(id);
-        primaryRows.push(row);
-      }
+      const take = (rows: StoreRow[]) => {
+        for (const row of rows) {
+          const id = String(row.id);
+          if (found.has(id)) continue;
+          found.add(id);
+          primaryRows.push(row);
+        }
+      };
+      const within = { doc_ids: concept.primary, boost_ids: [], exclude_title: true };
+      const vocabulary = conceptMatch(concept);
+      take(await fetchRows(questionMatch ? `(${questionMatch}) OR ${vocabulary}` : vocabulary, within));
       const missing = concept.primary.filter((id) => !found.has(id));
       // Title fallback is safe only without source/year/court filters; the
       // primary query above already applied those filters.
@@ -300,16 +310,26 @@ export async function searchDocuments(
   const filtered = minScore > 0 ? deduped.filter((item) => item.score >= minScore) : deduped;
   const page = filtered.slice(params.offset, params.offset + params.limit);
 
-  const typeById = new Map(page.map(({ row }) => [String(row.id), String(row.type)]));
-  const legislationIds = [
-    ...new Set(
-      page
-        .map(({ row }) => String(row.id))
-        .filter((id) => LEGISLATION_TYPES.has(typeById.get(id) ?? "")),
-    ),
-  ];
-  const chunkQuery = chunksForDocsSql(legislationIds);
-  const chunkRows = legislationIds.length ? await store.all(chunkQuery.sql, chunkQuery.binds) : [];
+  const pairs = new Map<string, { docId: string; ref: string }>();
+  for (const { row } of page) {
+    const base = baseArticleRef(asString(row.matched_ref));
+    if (!base || !LEGISLATION_TYPES.has(String(row.type))) continue;
+    const docId = String(row.id);
+    pairs.set(`${docId}\u0000${base}`, { docId, ref: base });
+  }
+  const pairList = [...pairs.values()];
+  const batches: { docId: string; ref: string }[][] = [];
+  for (let i = 0; i < pairList.length; i += ARTICLE_PAIRS_PER_QUERY) {
+    batches.push(pairList.slice(i, i + ARTICLE_PAIRS_PER_QUERY));
+  }
+  const chunkRows = (
+    await Promise.all(
+      batches.map((batch) => {
+        const query = chunksForArticlesSql(batch);
+        return store.all(query.sql, query.binds);
+      }),
+    )
+  ).flat();
   const chunksByDoc = new Map<string, StoreRow[]>();
   for (const chunk of chunkRows) {
     const docId = String(chunk.doc_id);
@@ -466,7 +486,9 @@ export async function answerQuestion(
   const quotes: AnswerQuote[] = [];
   for (const result of search.results) {
     if (quotes.length >= limit) break;
-    if (!result.snippet) continue;
+    // Only quote provisions: a law's title or a document without text is
+    // not an answer to anything.
+    if (!result.snippet || result.matched_kind === "title" || result.text_status === "metadata") continue;
     quotes.push({
       document_id: result.id,
       title: result.title,
@@ -476,15 +498,21 @@ export async function answerQuestion(
       url: result.matched_url ?? result.url,
       source_url: result.source_url,
       text_status: result.text_status,
+      // Measured on the quoted window itself: that is what the reader gets.
+      coverage: stemCoverage(result.snippet, params.q),
       score: result.score,
     });
   }
 
+  // Confidence describes the quoted passage, not the ranking score (canonical
+  // laws carry a fixed editorial score that says nothing about the passage).
   const top = quotes[0];
-  const confidence: AnswerResponse["confidence"] =
-    top && top.text_status === "full" && search.concepts.length > 0 && top.score >= 60
+  const covered = top ? top.coverage.total === 0 || top.coverage.found / top.coverage.total >= 0.5 : false;
+  const confidence: AnswerResponse["confidence"] = !top
+    ? "low"
+    : top.text_status === "full" && covered && top.coverage.found >= Math.min(2, top.coverage.total)
       ? "high"
-      : top && (top.text_status === "full" || top.score >= 30)
+      : top.coverage.found > 0
         ? "medium"
         : "low";
 

@@ -30,6 +30,8 @@ def test_gelir_vergisi_articles_are_split_despite_margin_notes() -> None:
     assert articles["Madde 6"].startswith("İstisnalar ve muaflıklar 6.")
     assert articles["Madde 8"].startswith("İndirilebilecek diğer giderler\n8. (1)")
     assert articles["Madde 33"].startswith("Vergi kesintisinde yükümlülük\n33. (1)")
+    # Margin notes between a heading and its article, across a blank line.
+    assert articles["Madde 52"].startswith("Matrah dilimleri ve Vergi Oranları\n\n52. (1)")
 
 
 def test_margin_notes_are_kept_behind_the_article() -> None:

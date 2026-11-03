@@ -47,6 +47,21 @@ check("concept detected", conceptSearch.body.concepts.some((concept) => concept.
 check("concept primary", conceptSearch.body.primary_documents > 0);
 check("concept statute first", conceptSearch.body.results[0]?.id === "yasa-1-1998");
 
+// An answer quotes a provision, never a law's title or a text-less record.
+const taxAnswer = await json(`/v1/answer?q=${encodeURIComponent("gelir vergisinden istisna edilen gelirler")}`);
+check("answer status", taxAnswer.res.ok);
+check(
+  "answer quotes articles",
+  taxAnswer.body.quotes.length > 0 &&
+    taxAnswer.body.quotes.every((quote) => quote.ref?.startsWith("Madde") && quote.text_status !== "metadata"),
+  JSON.stringify(taxAnswer.body.quotes.map((quote) => [quote.citation, quote.ref])),
+);
+check("answer coverage", taxAnswer.body.quotes.every((quote) => typeof quote.coverage?.found === "number"));
+
+// Fractions in words match both forms: "üçte iki" (Anayasa) and "2/3".
+const twoThirds = await json(`/v1/search?q=${encodeURIComponent("üçte iki")}&limit=3`);
+check("word fraction", twoThirds.res.ok && twoThirds.body.relaxed === false && twoThirds.body.results.length > 0);
+
 const kdvSearch = await json("/v1/search?q=KDV&limit=3");
 check("concept KDV", kdvSearch.body.results[0]?.id === "yasa-47-1992");
 

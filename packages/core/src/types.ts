@@ -47,6 +47,8 @@ export interface SearchParams {
   boost_ids?: string[];
   /** Internal: restrict to these document ids (primary-law lookup). */
   doc_ids?: string[];
+  /** Internal: skip title chunks, so a law's best passage is an article. */
+  exclude_title?: boolean;
   limit: number;
   offset: number;
 }
@@ -105,6 +107,8 @@ export interface AnswerQuote {
   url: string;
   source_url: string;
   text_status: string;
+  /** Query content words found in the quoted passage. */
+  coverage: { found: number; total: number };
   score: number;
 }
 
