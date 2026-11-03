@@ -32,7 +32,10 @@ concurrency:
 
 jobs:
   sync:
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    # Also after a failed refresh: the failure may be in a later step (smoke
+    # test, search eval, D1 read quota) after the Worker was deployed. The job
+    # checks the Worker's vector endpoints itself before doing anything.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'cancelled' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
