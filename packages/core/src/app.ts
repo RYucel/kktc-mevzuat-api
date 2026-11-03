@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import {
   ApiError,
+  answerMarkdown,
+  answerQuestion,
   apiMeta,
   articleMarkdown,
   documentMarkdown,
@@ -105,6 +107,7 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
       version: "v1",
       endpoints: {
         search: `${origin}/v1/search?q=nafaka`,
+        answer: `${origin}/v1/answer?q=nafaka`,
         document: `${origin}/v1/documents/{id}`,
         article: `${origin}/v1/documents/{id}/articles/12`,
         recent: `${origin}/v1/recent`,
@@ -149,6 +152,44 @@ export function createApp({ store, runtime = "unknown" }: AppOptions): Hono {
       offset: intParam(c.req.query("offset"), "offset", 0, 0, 1000),
     };
     return c.json(await searchDocuments(store, params, origin));
+  });
+
+  app.get("/v1/answer", async (c) => {
+    const origin = requestOrigin(c);
+    const query = c.req.query("q") ?? c.req.query("query") ?? c.req.query("soru") ?? "";
+    if (!query.trim()) {
+      throw new ApiError(400, "missing_query", "q parametresi zorunludur. Örnek: /v1/answer?q=nafaka");
+    }
+    const modeRaw = c.req.query("mode") ?? "auto";
+    if (!["auto", "all", "any", "phrase"].includes(modeRaw)) {
+      throw new ApiError(400, "invalid_mode", "mode auto, all, any veya phrase olmalıdır.");
+    }
+    const preferRaw = c.req.query("prefer");
+    if (preferRaw && !["mevzuat", "ictihat"].includes(preferRaw)) {
+      throw new ApiError(400, "invalid_prefer", "prefer mevzuat veya ictihat olmalıdır.");
+    }
+    const yearRaw = c.req.query("year");
+    const params: SearchParams = {
+      q: query,
+      mode: modeRaw as SearchParams["mode"],
+      type: typeParam(c.req.query("type")),
+      year: yearRaw ? intParam(yearRaw, "year", 0, 1900, 2100) : undefined,
+      source: c.req.query("source") || undefined,
+      court: c.req.query("court") || undefined,
+      prefer: (preferRaw || undefined) as SearchParams["prefer"],
+      min_score: floatParam(c.req.query("min_score"), "min_score", 0, 0, 1000),
+      limit: intParam(c.req.query("limit"), "limit", 3, 1, 5),
+      offset: 0,
+    };
+    const response = await answerQuestion(store, params, origin);
+    const format = (c.req.query("format") ?? "json").toLowerCase();
+    if (format === "markdown" || format === "md") {
+      return c.text(answerMarkdown(response), 200, {
+        "content-type": "text/markdown; charset=utf-8",
+        "cache-control": "public, max-age=300",
+      });
+    }
+    return c.json(response);
   });
 
   app.get("/v1/documents/:id", async (c) => {
@@ -353,6 +394,7 @@ function landingPage(origin: string): string {
 <p><strong>LLM'ler için:</strong> <a href="/llms.txt">/llms.txt</a> · <a href="/openapi.json">OpenAPI</a> · MCP: <code>${origin}/mcp</code></p>
 <h2>Hızlı başlangıç</h2>
 <pre>curl "${origin}/v1/search?q=nafaka&limit=5"
+curl "${origin}/v1/answer?q=nafaka&format=markdown"
 curl "${origin}/v1/documents/yasa-1-1998?format=markdown"
 curl "${origin}/v1/documents/yasa-1-1998/articles/4"
 curl "${origin}/v1/recent?type=karar&limit=5"
@@ -362,6 +404,7 @@ curl "${origin}/v1/stats"</pre>
 <table>
 <tr><th>Uç</th><th>Açıklama</th></tr>
 <tr><td><code>GET /v1/search</code></td><td>Tam metin arama (FTS5, Türkçe katlama)</td></tr>
+<tr><td><code>GET /v1/answer</code></td><td>Birebir alıntı + atıf (üretken değil)</td></tr>
 <tr><td><code>GET /v1/documents/{id}</code></td><td>Belge ve tam metin</td></tr>
 <tr><td><code>GET /v1/documents/{id}/articles/{ref}</code></td><td>Tek madde (ör. 4, 30A)</td></tr>
 <tr><td><code>GET /v1/documents/{id}/articles</code></td><td>Madde listesi</td></tr>

@@ -65,6 +65,19 @@ Bağlayıcı metin için resmî kaynağa (source_url) yönlendir.
    Bu uç, takip başladığından beri kaydedilen sürümleri ve değişen maddelerin eski/yeni
    metnini verir. Güncel olup olmadığını sorduğun bir maddede bunu kullan.
 
+## Hızlı alıntı: `GET /v1/answer`
+
+```http
+GET /v1/answer?q=mal%20paylaşımında%20eşlere%20düşen%20en%20az%20oran&format=markdown
+```
+
+- En iyi 1–5 pasajı **birebir** alıntılar; `answer_type=extractive`.
+- Her alıntıda `citation`, `source_url`, `url`, `text_status` ve `score` bulunur.
+- `confidence`: `high`, `medium`, `low`; kaynakların tam metin olup olmamasına ve kavram
+  eşleşmesine göre hesaplanır.
+- **Üretken değildir**; hukuki yorum yapmaz, metni yeniden yazmaz.
+- MCP’de `sor` aracı aynı davranışı verir.
+
 ## Arama ipuçları
 
 - Varsayılan `mode=auto` önce tüm sözcükleri arar; sonuç yoksa `any`'ye düşer. Tek sözcüklü
@@ -156,6 +169,7 @@ Araçlar ve tipik argümanlar:
 
 | Araç | Argümanlar | Kullanım |
 | --- | --- | --- |
+| `sor` | `soru`, `type?`, `prefer?`, `adet?` | Birebir alıntı + atıf; üretken değil |
 | `search_mevzuat` | `query`, `type?`, `year?`, `source?`, `court?`, `mode?`, `prefer?`, `min_score?`, `limit?`, `offset?` | Mevzuat + karar araması (varsayılan `prefer=mevzuat`) |
 | `ictihat_ara` | `ifade`, `mahkeme?`, `yil?`, `mod?`, `adet?`, `sayfa?` | Yalnız mahkeme kararları; sonuçlarda `citation` |
 | `karar_getir` | `id` | Kararın künyesi, atfı ve tam metni (Markdown) |
@@ -171,6 +185,7 @@ Araçlar ve tipik argümanlar:
 Örnek çağrılar:
 
 ```json
+{ "name": "sor", "arguments": { "soru": "mal paylaşımında eşlere düşen en az oran", "type": "yasa", "adet": 3 } }
 { "name": "search_mevzuat", "arguments": { "query": "iştirak nafakası", "type": "yasa", "source": "gov", "limit": 5 } }
 { "name": "ictihat_ara", "arguments": { "ifade": "nafaka", "mahkeme": "Yargıtay", "adet": 5 } }
 { "name": "karar_getir", "arguments": { "id": "karar-e-1-2012-21183" } }

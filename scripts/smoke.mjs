@@ -55,6 +55,19 @@ const natural = await json(
 check("auto fallback", natural.body.mode === "auto" && natural.body.relaxed === true);
 check("auto candidates", natural.body.candidate_documents > 0);
 
+const answer = await json(
+  "/v1/answer?q=mal%20payla%C5%9F%C4%B1m%C4%B1nda%20e%C5%9Flere%20d%C3%BC%C5%9Fen%20en%20az%20oran&limit=2",
+);
+check("answer status", answer.res.ok);
+check("answer extractive", answer.body.answer_type === "extractive");
+check("answer quote", answer.body.quotes.length > 0);
+check("answer article", answer.body.quotes[0]?.ref === "Madde 26");
+check("answer text", typeof answer.body.answer === "string" && answer.body.answer.includes("2/3"));
+check("answer citation", typeof answer.body.quotes[0]?.citation === "string");
+check("answer disclaimer", answer.body.disclaimer.includes("alıntı"));
+const answerMarkdown = await fetch(base + "/v1/answer?q=nafaka&format=markdown");
+check("answer markdown", answerMarkdown.ok && (await answerMarkdown.text()).includes("Atıf"));
+
 const fraction = await json(
   "/v1/search?q=mal%20payla%C5%9F%C4%B1m%C4%B1%202%2F3&prefer=mevzuat&type=yasa&limit=5",
 );
@@ -146,6 +159,7 @@ check("openapi version", openapi.body.openapi === "3.1.0");
 check(
   "openapi paths",
   !!openapi.body.paths["/v1/search"] &&
+    !!openapi.body.paths["/v1/answer"] &&
     !!openapi.body.paths["/v1/changes"] &&
     !!openapi.body.paths["/v1/documents/{id}/changes"],
 );
@@ -179,6 +193,7 @@ const toolNames = tools.body.result.tools.map((tool) => tool.name);
 check(
   "mcp tools",
   [
+    "sor",
     "search_mevzuat",
     "ictihat_ara",
     "karar_getir",
@@ -201,6 +216,14 @@ const call = await mcp({
   params: { name: "search_mevzuat", arguments: { query: "nafaka", type: "yasa", limit: 5 } },
 });
 check("mcp search tool", call.body.result.content[0].text.includes("yasa-1-1998"));
+
+const answerCall = await mcp({
+  jsonrpc: "2.0",
+  id: 31,
+  method: "tools/call",
+  params: { name: "sor", arguments: { soru: "nafaka", adet: 1 } },
+});
+check("mcp sor tool", answerCall.body.result.content[0].text.includes("extractive"));
 
 const caseCall = await mcp({
   jsonrpc: "2.0",

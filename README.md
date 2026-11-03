@@ -119,6 +119,7 @@ Canlı API örnekleri:
 BASE=https://kktc-mevzuat-api.stevevaius.workers.dev
 curl "$BASE/v1/search?q=nafaka&limit=5"
 curl "$BASE/v1/search?q=mal%20payla%C5%9F%C4%B1m%C4%B1&type=yasa&prefer=mevzuat&limit=5"
+curl "$BASE/v1/answer?q=mal%20payla%C5%9F%C4%B1m%C4%B1nda%20e%C5%9Flere%20d%C3%BC%C5%9Fen%20en%20az%20oran&format=markdown"
 curl "$BASE/v1/documents/yasa-1-1998?format=markdown"
 curl "$BASE/v1/documents/yasa-1-1998/articles/4"
 curl "$BASE/v1/recent?type=karar&limit=10"
@@ -132,6 +133,7 @@ Yerel geliştirmede adres `http://localhost:8787` olur.
 | Uç | Açıklama |
 | --- | --- |
 | `GET /v1/search` | `q` zorunlu; `mode=auto\|all\|any\|phrase`, `type`, `year`, `source`, `court`, `prefer=mevzuat\|ictihat`, `min_score`, `limit` (1–50), `offset` |
+| `GET /v1/answer` | Birebir alıntı + atıf; `q`, `type`, `prefer`, `limit` (1–5), `format=json\|markdown` |
 | `GET /v1/documents/{id}` | Künye + tam metin; `format=json\|markdown\|text`, `include_chunks=1` |
 | `GET /v1/documents/{id}/articles` | Madde referansları |
 | `GET /v1/documents/{id}/articles/{ref}` | Tek madde (`12`, `Madde 12`, `30A`) |
@@ -216,7 +218,8 @@ Araçlar:
 
 | Araç | Kullanım |
 | --- | --- |
-| `search_mevzuat` | Mevzuatta ve kararlarda arama; `query`, `type`, `year`, `source`, `court`, `mode`, `limit`, `offset` |
+| `sor` | Birebir alıntı + atıf; `soru`, `type`, `prefer`, `adet` |
+| `search_mevzuat` | Mevzuatta ve kararlarda arama; `query`, `type`, `year`, `source`, `court`, `mode`, `prefer`, `min_score`, `limit`, `offset` |
 | `ictihat_ara` | Yalnız mahkeme kararlarında arama; `ifade`, `mahkeme`, `yil`, `mod`, `adet`, `sayfa` |
 | `karar_getir` | Kararın künyesi, hazır atfı ve tam metni; `id` |
 | `list_courts` | Mahkemeler, karar sayıları ve yıl aralıkları |

@@ -22,6 +22,8 @@ import {
   truncate,
 } from "./text.js";
 import {
+  type AnswerQuote,
+  type AnswerResponse,
   type ApiMeta,
   type ArticleResponse,
   type Chunk,
@@ -433,6 +435,89 @@ export async function searchDocuments(
     results,
     _meta: apiMeta(origin),
   };
+}
+
+/**
+ * Extractive answer: retrieval-only. It returns the best passages verbatim
+ * with citations; it never generates or paraphrases legal text.
+ */
+export async function answerQuestion(
+  store: Store,
+  params: SearchParams,
+  origin: string,
+): Promise<AnswerResponse> {
+  const limit = Math.min(5, Math.max(1, params.limit));
+  const search = await searchDocuments(
+    store,
+    {
+      ...params,
+      prefer: params.prefer ?? "mevzuat",
+      limit,
+    },
+    origin,
+  );
+
+  const quotes: AnswerQuote[] = [];
+  for (const result of search.results) {
+    if (quotes.length >= limit) break;
+    if (!result.snippet) continue;
+    quotes.push({
+      document_id: result.id,
+      title: result.title,
+      ref: result.matched_ref,
+      citation: result.citation,
+      text: result.snippet,
+      url: result.matched_url ?? result.url,
+      source_url: result.source_url,
+      text_status: result.text_status,
+      score: result.score,
+    });
+  }
+
+  const top = quotes[0];
+  const confidence: AnswerResponse["confidence"] =
+    top && top.text_status === "full" && search.concepts.length > 0 && top.score >= 60
+      ? "high"
+      : top && (top.text_status === "full" || top.score >= 30)
+        ? "medium"
+        : "low";
+
+  return {
+    query: params.q,
+    answer: top?.text ?? null,
+    answer_type: "extractive",
+    quotes,
+    citations: [...new Set(quotes.map((quote) => quote.citation))],
+    confidence,
+    concepts: search.concepts,
+    disclaimer:
+      "Bu yanıt metinden birebir alıntıdır; hukuki yorum veya bağlayıcı görüş değildir. " +
+      "Resmî/bağlayıcı metin için source_url bağlantısına başvurun.",
+    _meta: apiMeta(origin),
+  };
+}
+
+export function answerMarkdown(response: AnswerResponse): string {
+  const lines: string[] = ["## Alıntı yanıt", ""];
+  if (!response.quotes.length) {
+    lines.push("_Bu soru için alıntılanabilir bir hüküm bulunamadı._");
+  } else {
+    const quote = response.quotes[0];
+    lines.push(`> ${quote.text.replace(/\n+/g, " ")}`, "");
+    lines.push(`- **Atıf:** ${quote.citation}`);
+    if (quote.ref) lines.push(`- **Madde:** ${quote.ref}`);
+    lines.push(`- **Kaynak:** ${quote.source_url}`);
+    lines.push(`- **API:** ${quote.url}`);
+    lines.push(`- **Güven:** ${response.confidence}`);
+    if (response.quotes.length > 1) {
+      lines.push("", "### Diğer ilgili pasajlar", "");
+      for (const other of response.quotes.slice(1)) {
+        lines.push(`- ${other.citation}${other.ref ? `, ${other.ref}` : ""} — ${other.url}`);
+      }
+    }
+  }
+  lines.push("", `> ${response.disclaimer}`, "", `API: ${response._meta.docs}`);
+  return lines.join("\n");
 }
 
 export async function getDocument(
