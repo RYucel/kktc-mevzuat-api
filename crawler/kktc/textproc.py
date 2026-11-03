@@ -730,3 +730,62 @@ def truncate(text: str, limit: int) -> str:
         return text
     cut = text.rfind(" ", 0, limit)
     return text[: cut if cut > limit * 0.6 else limit].rstrip() + "…"
+
+
+# Consolidated texts open with the list of amending laws. The wording varies:
+#   "(11/1985; ... ve 25/2026 sayılı Değişiklik Yasaları ile değiştirilmiş ve
+#    birleştirilmiş şekliyle)"
+#   "(31/1982 ve 14/1991 sayılı Yasalar İle Değiştirilmiş ve Birleştirilmiş Şekli)"
+#   "(30/2014, 34/2020 ve 8/2025 Sayılı Değişiklik Yasaları İle Birleştirilmiş Şekli)"
+#   "[(22.04.1982 – R.G.30 – EK III – A.E. 161) ve (...) Sayılı Tüzükler ile
+#    Birleştirilmiş Şekli]"  (regulations: amendments cited by date)
+# Matching runs on the Turkish-folded text (same length as the original), so
+# İ/ı/Ş casing does not matter.
+_CONSOLIDATION = (
+    re.compile(r"\(([^()]{0,4000}?)\bsayili\b[^()]{0,160}?birlestirilmis\s+sekl"),
+    re.compile(r"\[([^\[\]]{0,4000}?)\bsayili\b[^\[\]]{0,160}?birlestirilmis\s+sekl"),
+)
+# Fallback for headers with nested parentheses, e.g. "(15.2.2002 – R.G. 17 – EK
+# III – A.E. 85 Sayılı Tüzüğün, 22.7.2011 – ... ) Sayılı Tüzükle Birleştirilmiş
+# Şekli)": take the paragraph that ends at the anchor.
+_ANCHOR = re.compile(r"\bsayili\b[^\n]{0,160}?birlestirilmis\s+sekl")
+_LAW_NUMBER = re.compile(r"(?<![\d/.])(\d{1,3})\s*/\s*((?:19|20)\d{2})(?!\d)")
+_DATE = re.compile(r"(?<!\d)(\d{1,2})\.(\d{1,2})\.((?:19|20)\d{2})(?!\d)")
+
+
+def parse_consolidation(text: str) -> Optional[dict]:
+    """Amendments named in a consolidated text's header, oldest first.
+
+    Returns ``{"through": "25/2026", "amendments": [...], "count": n}``; for
+    regulations whose amendments are cited by date, ``through`` is the latest
+    date (YYYY-MM-DD). None when the text carries no such header (not
+    consolidated, or never amended).
+    """
+    head = clean_text(text or "")[:8000]
+    folded = fold_tr(head).lower()
+    match = None
+    for pattern in _CONSOLIDATION:
+        candidate = pattern.search(folded)
+        if candidate and (match is None or candidate.start() < match.start()):
+            match = candidate
+    if match:
+        span = head[match.start(1) : match.end()]
+    else:
+        anchor = _ANCHOR.search(folded)
+        if not anchor:
+            return None
+        start = max(folded.rfind("\n\n", 0, anchor.start()) + 1, anchor.start() - 2500)
+        span = head[start : anchor.end()]
+    numbers: list[tuple[int, int]] = []
+    for number, year in _LAW_NUMBER.findall(span):
+        key = (int(year), int(number))
+        if key not in numbers:
+            numbers.append(key)
+    if numbers:
+        amendments = [f"{n}/{y}" for y, n in sorted(numbers)]
+    else:
+        dates = sorted({f"{y}-{int(m):02d}-{int(d):02d}" for d, m, y in _DATE.findall(span)})
+        if not dates:
+            return None
+        amendments = dates
+    return {"through": amendments[-1], "amendments": amendments, "count": len(amendments)}

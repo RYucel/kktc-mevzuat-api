@@ -548,8 +548,11 @@ def fetch_text_for(
     if not force:
         cached = _read_text_cache(url)
         if cached is not None:
-            if not (revalidate and cached.get("text")):
+            if revalidate and cached.get("status") == "error":
+                cached = None  # a failed download is retried on revalidation runs
+            elif not (revalidate and cached.get("text")):
                 return cached
+        if cached is not None:
             fresh = _redownload(url, cached, client, max_bytes)
             if fresh is None:
                 return cached

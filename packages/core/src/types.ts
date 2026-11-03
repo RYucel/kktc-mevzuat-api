@@ -54,6 +54,7 @@ export interface SearchResult {
   source: string;
   court: string | null;
   citation: string;
+  consolidated_through: string | null;
   matched_ref: string | null;
   matched_kind: string;
   snippet: string;
@@ -77,6 +78,8 @@ export interface DocumentSummary {
   court: string | null;
   chamber: string | null;
   citation: string;
+  /** Last amendment the consolidated text includes, e.g. "25/2026" or "2024-02-13". */
+  consolidated_through: string | null;
   parties: string | null;
   subject: string | null;
   summary: string | null;

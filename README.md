@@ -29,8 +29,11 @@ mahkeme kararları** için anahtarsız, salt-okunur ve LLM-dostu bir arama API's
 
 Aynı belge iki kaynakta bulunduğunda **tür + numara** eşleşmesiyle birleştirilir; resmî
 birleştirilmiş metin (`gov`) tercih edilir, diğer kaynak `sources` alanında saklanır. Arama
-sonuçlarında `gov` belgeleri üst sıralara taşınır; yasa/tüzük sorularında `source=gov` filtresi
-güncel metne daraltır. Mahkeme kararları yalnızca `mahkemeler` kaynağındadır.
+sonuçlarında `gov` belgeleri üst sıralara taşınır. İki kaynak da birleştirilmiş metin yayımlar
+("… sayılı Değişiklik Yasaları ile değiştirilmiş ve birleştirilmiş şekliyle"), ama `gov` yasaların
+yalnızca küçük bir kısmını taşır: Gelir Vergisi, KDV, Sosyal Sigortalar gibi yasalar yalnızca
+`mahkemeler` kaynağındadır. Her belgenin `consolidated_through` alanı metnin içerdiği son değişikliği
+gösterir (ör. `25/2026`). Mahkeme kararları yalnızca `mahkemeler` kaynağındadır.
 
 ## Mimari
 
@@ -168,7 +171,7 @@ esas/karar numarası ve tarihi kendileri birleştirmesi yerine bu alanı aynen k
 - 3+ harfli sözcüklerde otomatik önek araması (`nafaka` → `nafaka*`).
 - Sonuçlar belge bazında tekilleştirilir; `score` büyük olan daha iyidir.
 - `matched_ref` eşleşmenin hangi maddede olduğunu gösterir; `snippet` Türkçe özgün metinden üretilir.
-- `citation` hazır atıftır; `source=gov` filtreleri güncel birleştirilmiş metne daraltır.
+- `citation` hazır atıftır; `consolidated_through` metnin hangi değişikliğe kadar birleştirildiğini gösterir.
 
 ### Belge kimlikleri
 
@@ -280,7 +283,7 @@ npm run smoke
 
 ## Sürüm geçmişi
 
-Her build, güncel birleştirilmiş metinleri (`source=gov`) `data/history.db` içindeki son sürümle karşılaştırır. Metin değişmişse yeni sürüm saklanır; fark madde madde (eklenen / kaldırılan / değişen) ve değişen maddelerin içinde kelime bazında kaydedilir.
+Her build, birleştirilmiş yasa ve tüzük metinlerini (`gov`; orada olmayan yasalar için `mahkemeler`) `data/history.db` içindeki son sürümle karşılaştırır. Metin değişmişse yeni sürüm saklanır; fark madde madde (eklenen / kaldırılan / değişen) ve değişen maddelerin içinde kelime bazında kaydedilir.
 
 - Takip ilk build ile başlar; o çalıştırma yalnızca başlangıç sürümünü (baseline) kaydeder. Öncesindeki değişiklikler bilinmez.
 - Bir çalıştırmada kaynağı alınamayan belgeler değişiklik sayılmaz; öncekinin %40'ından kısa çıkan metinler bozuk çıkarım kabul edilip atlanır.

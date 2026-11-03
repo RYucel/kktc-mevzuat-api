@@ -12,6 +12,7 @@ from typing import Any
 
 from .build import build_database, export_d1, read_stats
 from .history import copy_history_into, record_versions
+from .textproc import parse_consolidation
 from .config import DB_PATH, DIST_DIR, HISTORY_PATH, MAHKEMELER_BASE, GOV_BASE, GOV_TIMEOUT, ensure_dirs
 from .http import FetchError, HttpClient, MahkemelerClient
 from .sources import (
@@ -72,10 +73,16 @@ def cmd_crawl(args: argparse.Namespace) -> None:
             save_catalog("mahkemeler_karar", crawl_mahkemeler_karar(client))
 
 
+def _extension(url: str) -> str:
+    path = url.split("?", 1)[0].rsplit("/", 1)[-1]
+    return path.rsplit(".", 1)[-1].lower() if "." in path else ""
+
+
 def cmd_fetch_text(args: argparse.Namespace) -> None:
     ensure_dirs()
     docs = merge_documents(_catalogs())
     types = set(args.type.split(",")) if args.type else None
+    extensions = {e.strip().lower().lstrip(".") for e in args.ext.split(",") if e.strip()} if getattr(args, "ext", "") else None
     gov_client = HttpClient(GOV_BASE, verify=False, timeout=GOV_TIMEOUT)
     mah_client = MahkemelerClient(MAHKEMELER_BASE)
     done = 0
@@ -86,6 +93,8 @@ def cmd_fetch_text(args: argparse.Namespace) -> None:
         if args.source and doc.get("source") != args.source:
             continue
         if args.min_year and (not doc.get("year") or doc["year"] < args.min_year):
+            continue
+        if extensions and _extension(doc.get("pdf_url") or doc.get("source_url") or "") not in extensions:
             continue
         if doc.get("content") and len(doc["content"]) > 500:
             continue
@@ -137,6 +146,10 @@ def _merged_with_text() -> list[dict[str, Any]]:
         text = _content_for(doc)
         if text:
             doc["content"] = text
+            if doc.get("type") != "karar":
+                consolidation = parse_consolidation(text)
+                if consolidation:
+                    doc.setdefault("extra", {})["consolidation"] = consolidation
     return docs
 
 
@@ -176,6 +189,19 @@ def cmd_update(args: argparse.Namespace) -> None:
             revalidate=not args.full_text,
         )
         cmd_fetch_text(text_args)
+        # Laws found only on mevzuat.mahkemeler.net (consolidated Word files).
+        cmd_fetch_text(
+            argparse.Namespace(
+                type="yasa",
+                source="mahkemeler",
+                ext="doc,docx,rtf",
+                limit=args.text_limit,
+                after=0,
+                force=False,
+                min_year=0,
+                revalidate=True,
+            )
+        )
     build_args = argparse.Namespace(db=str(DB_PATH), out=str(DIST_DIR / "d1"), no_export=args.no_export, history=str(HISTORY_PATH), no_history=False)
     cmd_build(build_args)
 
@@ -212,6 +238,7 @@ def main(argv: list[str] | None = None) -> None:
         help="only fetch documents from this year onwards (older PDFs are often scans)",
     )
     text.add_argument("--force", action="store_true")
+    text.add_argument("--ext", default="", help="only these file types, e.g. doc,docx,rtf")
     text.add_argument(
         "--revalidate",
         action="store_true",
