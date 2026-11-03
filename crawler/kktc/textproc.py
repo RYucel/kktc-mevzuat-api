@@ -357,8 +357,9 @@ def _leading_margin_refs(line: str) -> int:
 _EFFECTIVE_LINE_RE = re.compile(r"^[ \t]*Yürürlük\s+tarihi\s*:[^\n]{1,40}$")
 _EFFECTIVE_NOTE_RE = re.compile(r"^(?P<note>Yürürlük\s+tarihi\s*:[^\n]{1,40}?)[ \t]+(?=\d{1,4}[A-Z]?\.[ \t])")
 _LEADING_ARTICLE_NUM_RE = re.compile(r"^(?P<num>\d{1,4}[A-Z]?\.)[ \t]+(?P<rest>\S.*)$")
-# A heading wrapped onto two lines: "İstisnalar ve\nmuaflıklar 6. Aşağıda ..."
-_WRAPPED_TITLE_TAIL_RE = re.compile(r"^[a-zçğıöşü][^\n.]{0,50}?[ \t]+\d{1,4}[A-Z]?\.[ \t]+\S")
+# A heading wrapped onto two lines: "İstisnalar ve\nmuaflıklar 6. Aşağıda ...",
+# or with a full stop after the heading: "Onaylanmış\nliman. 3. Bakanlar ...".
+_WRAPPED_TITLE_TAIL_RE = re.compile(r"^[a-zçğıöşü][^\n]{0,60}?[ \t]+\d{1,4}[A-Z]?\.[ \t]+\S")
 _TRANSITIONAL_RE = re.compile(r"[ \t]*(?:Geçici|GEÇİCİ|Gecici|GECICI|Ek|EK)\s+(?:Madde|MADDE)\b")
 
 

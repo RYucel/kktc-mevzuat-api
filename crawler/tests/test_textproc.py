@@ -6,6 +6,7 @@ from kktc.textproc import (
     extract_number,
     extract_year,
     fold_tr,
+    normalize_margin_notes,
     split_articles,
     split_paragraphs,
 )
@@ -155,6 +156,25 @@ Hayvanın Tutsak Edilmesi 9(2).17/2025 3. Yürürlükteki kurallar saklıdır.
     assert chunks[2].text.startswith("Hayvanın Tutsak Edilmesi 9(2).17/2025 3.")
 
 
+def test_normalize_margin_notes_moves_leading_refs_to_line_end() -> None:
+    text = "41/2002 2. (1) Metin.\n\n5. 11/1985\n6(1), 41/2002\n3. (1) Başka metin."
+    assert normalize_margin_notes(text).splitlines() == [
+        "2. (1) Metin. [41/2002]",
+        "",
+        "3. (1) Başka metin. [5. 11/1985; 6(1), 41/2002]",
+    ]
+
+
+def test_normalize_margin_notes_keeps_prose_citation() -> None:
+    text = "11/1985 sayılı Yasa uyarınca işlem yapılır."
+    assert normalize_margin_notes(text) == text
+
+
+def test_normalize_margin_notes_joins_wrapped_heading() -> None:
+    text = "Onaylanmış\nliman. 3. Bakanlar Kurulu ilan edebilir."
+    assert normalize_margin_notes(text) == "Onaylanmış liman. 3. Bakanlar Kurulu ilan edebilir."
+
+
 def test_split_articles_handles_number_alone_on_its_line() -> None:
     text = """Birinci Madde
 1.
@@ -167,6 +187,18 @@ Birinci maddenin metni.
     assert [c.ref for c in chunks] == ["Madde 1", "Madde 2"]
     assert chunks[0].text.startswith("Birinci Madde\n1.")
     assert "İkinci maddenin metni" not in chunks[0].text
+
+
+def test_split_articles_does_not_number_transitional_articles() -> None:
+    text = """Kısa İsim 1. Bu Yasa örnek yasadır.
+
+Geçici Madde 2. Geçici hüküm burada yer alır.
+
+Kapsam 3. Bu Yasa kapsamı düzenler.
+"""
+    chunks = split_articles(clean_text(text))
+    assert [c.ref for c in chunks] == ["Madde 1", "Madde 3"]
+    assert "Geçici Madde 2" in chunks[0].text
 
 
 def test_split_articles_handles_heading_joined_to_preamble() -> None:

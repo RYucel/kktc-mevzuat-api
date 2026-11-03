@@ -7,6 +7,7 @@ import logging
 import sqlite3
 import time
 from collections import Counter
+from datetime import date as _date
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -124,6 +125,27 @@ def _valid_year(doc: dict[str, Any]) -> Optional[int]:
     return None
 
 
+def _valid_date(doc: dict[str, Any]) -> Optional[str]:
+    """Keep plausible ISO dates; catalogue typos such as 2202-12-29 are dropped.
+
+    mevzuat.mahkemeler.net carries a few impossible dates (2202-12-29,
+    0198-04-12, 1878-12-05). They would otherwise become the "latest" date in
+    statistics and sort a document to the top for no reason. The original value
+    is preserved as ``extra.source_date_raw`` when it is rejected.
+    """
+    raw = str(doc.get("date") or "").strip()[:10]
+    if len(raw) != 10:
+        return None
+    try:
+        parsed = _date.fromisoformat(raw)
+    except ValueError:
+        return None
+    current_year = time.gmtime().tm_year
+    if 1900 <= parsed.year <= current_year + 1:
+        return parsed.isoformat()
+    return None
+
+
 def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[str, Any]:
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -158,6 +180,9 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
             status = "metadata"
         sources = doc.get("sources") or []
         extra = {k: v for k, v in (doc.get("extra") or {}).items() if v is not None}
+        date = _valid_date(doc)
+        if doc.get("date") and not date:
+            extra["source_date_raw"] = str(doc.get("date"))
         document_rows.append(
             (
                 doc_id,
@@ -167,7 +192,7 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
                 normalize_title(title),
                 doc.get("number"),
                 _valid_year(doc),
-                doc.get("date"),
+                date,
                 doc.get("language") or "tr",
                 doc.get("source") or "gov",
                 doc.get("source_url") or "",
