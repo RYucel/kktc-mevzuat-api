@@ -42,7 +42,9 @@ python -m kktc stats
 `python -m kktc build --no-history`, aynı adla değiştirilen gov PDF'lerini yakalamak için
 `python -m kktc fetch-text --source gov --revalidate` kullanın. Revalidate, önbellekteki tüm
 dosyaları yeniden indirir ve SHA-256 parmak izini karşılaştırır; yalnızca içeriği değişen dosyanın
-metni yeniden çıkarılır (~150 MB indirme, haftalık iş akışında kabul edilir).
+metni yeniden çıkarılır (~150 MB indirme, haftalık iş akışında kabul edilir). Parmak izi
+öncesinde oluşmuş eski önbellek kayıtlarında ilk çalıştırma yalnızca parmak izini kaydeder;
+aynı adlı bir değişiklik bir sonraki çalıştırmada yakalanır.
 
 > Dosya adlarındaki `-001`, `-002` parçaları 40 MB'lık bölümlerdir. Tek bir SQL ifadesi
 > 100 KB'ı aşmaz; metin parçaları en fazla ~2,4 KB'dir.
