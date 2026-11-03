@@ -215,7 +215,7 @@ def main(argv: list[str] | None = None) -> None:
     text.add_argument(
         "--revalidate",
         action="store_true",
-        help="HEAD cached files and re-download those changed on the server (same name, new content)",
+        help="download cached files again and re-extract those whose bytes changed (same name, new content)",
     )
     text.set_defaults(func=cmd_fetch_text)
 
