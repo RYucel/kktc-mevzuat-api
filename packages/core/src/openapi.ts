@@ -27,7 +27,8 @@ export function openapiDocument(origin: string): Record<string, unknown> {
       summary:
         "KKTC güncel yasa, tüzük, anayasa ve mahkeme kararları için tam metin arama API'si.",
       description:
-        "Türkçe diakritikten bağımsız FTS5 araması, madde bazlı erişim, Markdown çıktısı ve MCP araçları. " +
+        "Türkçe diakritikten bağımsız FTS5 araması, madde bazlı erişim, hazır atıf (citation), " +
+        "sürüm geçmişi/değişiklik akışı, Markdown çıktısı ve MCP araçları. " +
         "LLM kullanım talimatları için /llms.txt adresine bakın. Metinler otomatik derlenmiştir; " +
         "bağlayıcı metin için her belgedeki source_url kullanılmalıdır.",
       license: { name: "MIT" },
@@ -36,6 +37,7 @@ export function openapiDocument(origin: string): Record<string, unknown> {
     tags: [
       { name: "search", description: "Tam metin arama" },
       { name: "documents", description: "Belge ve madde erişimi" },
+      { name: "changes", description: "Sürüm geçmişi ve madde bazlı değişiklikler" },
       { name: "meta", description: "Kapsam ve istatistikler" },
     ],
     paths: {
@@ -221,9 +223,20 @@ export function openapiDocument(origin: string): Record<string, unknown> {
           tags: ["changes"],
           operationId: "listChanges",
           summary: "Mevzuatta saptanan değişiklikler (sürüm geçişleri)",
+          description:
+            "Yalnızca source=gov belgeleri izlenir. Takip ilk kayıttan başlar; tracking_since " +
+            "öncesindeki değişiklikler bilinmez. detected_at, değişikliğin kaynakta görüldüğü " +
+            "çalıştırmadır (yürürlük tarihi değildir).",
           parameters: [
             { name: "since", in: "query", description: "YYYY-AA-GG", schema: { type: "string" } },
-            { name: "type", in: "query", schema: { type: "string" } },
+            {
+              name: "type",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: ["yasa", "tuzuk", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"],
+              },
+            },
             { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } },
           ],
           responses: { "200": { description: "Değişiklik listesi; tracking_since takip başlangıcıdır." } },
@@ -234,9 +247,12 @@ export function openapiDocument(origin: string): Record<string, unknown> {
           tags: ["changes"],
           operationId: "getDocumentChanges",
           summary: "Bir belgenin sürüm geçmişi ve madde bazlı farkları",
+          description:
+            "versions: kayıtlı sürümler. changes: her sürüm geçişi için eklenen/kaldırılan/değişen " +
+            "maddeler; ops kelime bazlı farkı verir. Takip başlangıcından öncesi kayıtlı değildir.",
           parameters: [
             { name: "id", in: "path", required: true, schema: { type: "string" } },
-            { name: "version", in: "query", schema: { type: "integer", minimum: 2 } },
+            { name: "version", in: "query", description: "Yalnız bu sürüme geçiş.", schema: { type: "integer", minimum: 2 } },
             {
               name: "format",
               in: "query",
@@ -279,8 +295,9 @@ export function openapiDocument(origin: string): Record<string, unknown> {
           operationId: "mcpJsonRpc",
           summary: "Model Context Protocol (Streamable HTTP)",
           description:
-            "JSON-RPC 2.0. initialize, tools/list ve tools/call desteklenir. " +
-            "Araçlar: search_mevzuat, get_document, get_article, list_document_articles, list_recent, get_stats.",
+            "JSON-RPC 2.0. initialize, tools/list ve tools/call desteklenir. Araçlar: " +
+            "search_mevzuat, ictihat_ara, karar_getir, list_courts, son_degisiklikler, " +
+            "degisiklikleri_getir, get_document, get_article, list_document_articles, list_recent, get_stats.",
           requestBody: {
             required: true,
             content: {

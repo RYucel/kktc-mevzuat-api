@@ -33,8 +33,16 @@ python -m kktc stats
 - `dist/d1/010-documents-*.sql` — belge künyeleri
 - `dist/d1/020-chunks-*.sql` — metin parçaları
 - `dist/d1/030-fts-*.sql` — FTS5 içeriği
-- `dist/d1/090-meta.sql` — istatistikler
+- `dist/d1/040-history-*.sql` — sürüm geçmişi (`doc_versions`, `changes`); `history.db` yoksa boş
+- `dist/d1/090-meta-*.sql` — istatistikler
 - `dist/d1/import-order.txt` — önerilen sıra
+
+`data/history.db` build'ler arasında korunması gereken tek durumdur. Yerelde silmeyin; CI'da
+`history` adlı GitHub Release'inin eki olarak saklanır. Yeni bir sürüm kaydetmeden derlemek için
+`python -m kktc build --no-history`, aynı adla değiştirilen gov PDF'lerini yakalamak için
+`python -m kktc fetch-text --source gov --revalidate` kullanın. Revalidate, önbellekteki tüm
+dosyaları yeniden indirir ve SHA-256 parmak izini karşılaştırır; yalnızca içeriği değişen dosyanın
+metni yeniden çıkarılır (~150 MB indirme, haftalık iş akışında kabul edilir).
 
 > Dosya adlarındaki `-001`, `-002` parçaları 40 MB'lık bölümlerdir. Tek bir SQL ifadesi
 > 100 KB'ı aşmaz; metin parçaları en fazla ~2,4 KB'dir.
@@ -89,7 +97,8 @@ Get-Content dist/d1/import-order.txt | ForEach-Object {
 ```
 
 Sıra önemlidir: önce `documents`, sonra `chunks`, en son `chunks_fts`. FTS tablosu `chunks.id`
-değerlerini `rowid` olarak kullanır.
+değerlerini `rowid` olarak kullanır. `040-history-*.sql` varsa `doc_versions` ve `changes`
+tablolarını doldurur; yoksa `/v1/changes` uçları boş liste döndürür.
 
 ### 1.4 Doğrula
 
@@ -197,10 +206,14 @@ Cloud Run yeni revizyonu sağlık kontrolünden sonra trafiğe alır.
 
 `.github/workflows/data.yml`:
 
-1. Python crawler'ı çalıştırır (`crawl`, `fetch-text --source gov`, `build`).
-2. `data/text` önbelleğini Actions cache ile saklar; sonraki haftalarda yalnızca yeni belgeler indirilir.
-3. D1'e şema + veriyi yükler.
-4. Worker'ı yayımlar.
+1. Python crawler'ı çalıştırır (`crawl`, `fetch-text --source gov --revalidate`, `build`).
+2. `data/text` önbelleğini Actions cache ile saklar; sonraki haftalarda yalnızca yeni veya
+   sunucuda değişmiş belgeler indirilir.
+3. `history` Release'inden `data/history.db` dosyasını geri yükler; build sonrası güncel
+   `history.db` ve `history-prev.db` dosyalarını aynı Release'e yükler. Release indirilemezse
+   iş durur; böylece boş bir geçmiş gerçek geçmişin üzerine yazılmaz.
+4. D1'e şema + veriyi (`040-history-*.sql` dahil) yükler.
+5. Worker'ı yayımlar.
 
 Gereken repository secret'ları:
 

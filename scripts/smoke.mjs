@@ -31,6 +31,7 @@ check("search count", search.body.results.length === 3);
 check("search total", search.body.total_documents > 0);
 check("search meta", search.body._meta.docs.endsWith("/llms.txt"));
 check("search snippet", search.body.results.every((r) => r.snippet.length > 0));
+check("search citation", search.body.results.every((r) => typeof r.citation === "string" && r.citation.length > 0));
 check("search next", typeof search.body.next === "string");
 
 const lawSearch = await json("/v1/search?q=nafaka&type=yasa&limit=3");
@@ -50,6 +51,7 @@ const doc = await fetch(base + "/v1/documents/yasa-1-1998?format=markdown");
 const docText = await doc.text();
 check("document markdown status", doc.ok);
 check("document markdown title", docText.startsWith("# 1/1998"));
+check("document markdown citation", docText.includes("**Atıf:**"));
 check("document markdown body", docText.includes("Kısa İsim 1."));
 
 const article4 = await json("/v1/documents/yasa-1-1998/articles/4");
@@ -74,16 +76,49 @@ const recent = await json("/v1/recent?type=karar&limit=5");
 check("recent count", recent.body.results.length === 5);
 check("recent type", recent.body.results.every((r) => r.type === "karar"));
 check("recent dates", recent.body.results.every((r) => r.date));
+check("recent citation", recent.body.results.every((r) => typeof r.citation === "string" && r.citation.length > 0));
+
+const changes = await json("/v1/changes?limit=5");
+check("changes status", changes.res.ok);
+check("changes list", Array.isArray(changes.body.results));
+check("changes meta", changes.body._meta.docs.endsWith("/llms.txt"));
+
+const docChanges = await json("/v1/documents/yasa-1-1998/changes");
+check("document changes status", docChanges.res.ok);
+check("document changes versions", Array.isArray(docChanges.body.versions));
+check("document changes list", Array.isArray(docChanges.body.changes));
+check("document changes citation", typeof docChanges.body.document.citation === "string");
+
+const changesMd = await fetch(base + "/v1/documents/yasa-1-1998/changes?format=markdown");
+const changesMdText = await changesMd.text();
+check("changes markdown status", changesMd.ok);
+check("changes markdown title", changesMdText.includes("değişiklik geçmişi"));
+
+const viewer = await fetch(base + "/degisiklikler");
+const viewerText = await viewer.text();
+check("changes viewer status", viewer.ok);
+check("changes viewer title", viewerText.includes("Mevzuat değişiklikleri"));
 
 const llms = await fetch(base + "/llms.txt");
 const llmsText = await llms.text();
 check("llms status", llms.ok);
 check("llms base", llmsText.includes(base));
-check("llms endpoints", llmsText.includes("/v1/search") && llmsText.includes("/mcp"));
+check(
+  "llms endpoints",
+  llmsText.includes("/v1/search") &&
+    llmsText.includes("/v1/changes") &&
+    llmsText.includes("ictihat_ara") &&
+    llmsText.includes("/mcp"),
+);
 
 const openapi = await json("/openapi.json");
 check("openapi version", openapi.body.openapi === "3.1.0");
-check("openapi paths", !!openapi.body.paths["/v1/search"]);
+check(
+  "openapi paths",
+  !!openapi.body.paths["/v1/search"] &&
+    !!openapi.body.paths["/v1/changes"] &&
+    !!openapi.body.paths["/v1/documents/{id}/changes"],
+);
 
 async function mcp(payload) {
   const res = await fetch(base + "/mcp", {
@@ -110,7 +145,24 @@ const notified = await fetch(base + "/mcp", {
 check("mcp notification", notified.status === 202);
 
 const tools = await mcp({ jsonrpc: "2.0", id: 2, method: "tools/list" });
-check("mcp tools", tools.body.result.tools.length === 6);
+const toolNames = tools.body.result.tools.map((tool) => tool.name);
+check(
+  "mcp tools",
+  [
+    "search_mevzuat",
+    "ictihat_ara",
+    "karar_getir",
+    "list_courts",
+    "son_degisiklikler",
+    "degisiklikleri_getir",
+    "get_document",
+    "get_article",
+    "list_document_articles",
+    "list_recent",
+    "get_stats",
+  ].every((name) => toolNames.includes(name)),
+  toolNames.join(","),
+);
 
 const call = await mcp({
   jsonrpc: "2.0",
@@ -119,6 +171,31 @@ const call = await mcp({
   params: { name: "search_mevzuat", arguments: { query: "nafaka", type: "yasa", limit: 5 } },
 });
 check("mcp search tool", call.body.result.content[0].text.includes("yasa-1-1998"));
+
+const caseCall = await mcp({
+  jsonrpc: "2.0",
+  id: 4,
+  method: "tools/call",
+  params: { name: "ictihat_ara", arguments: { ifade: "nafaka", adet: 1 } },
+});
+check("mcp ictihat tool", caseCall.body.result.content[0].text.includes("karar-"));
+check("mcp ictihat citation", caseCall.body.result.content[0].text.includes("citation"));
+
+const recentChanges = await mcp({
+  jsonrpc: "2.0",
+  id: 5,
+  method: "tools/call",
+  params: { name: "son_degisiklikler", arguments: { limit: 5 } },
+});
+check("mcp changes tool", recentChanges.body.result.content[0].text.includes("tracking_since"));
+
+const historyCall = await mcp({
+  jsonrpc: "2.0",
+  id: 6,
+  method: "tools/call",
+  params: { name: "degisiklikleri_getir", arguments: { id: "yasa-1-1998" } },
+});
+check("mcp document history tool", historyCall.body.result.content[0].text.includes("değişiklik geçmişi"));
 
 console.log(failures === 0 ? "\nAll smoke tests passed." : `\n${failures} smoke test(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

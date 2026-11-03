@@ -8,6 +8,9 @@ mahkeme kararları** için anahtarsız, salt-okunur ve LLM-dostu bir arama API's
 
 - Türkçe diakritikten bağımsız tam metin arama (SQLite FTS5, `ı/i`, `ş/s`, `ğ/g`, `ü/u`, `ö/o`, `ç/c`)
 - Madde bazlı erişim: `GET /v1/documents/yasa-1-1998/articles/4`
+- Her sonuçta hazır atıf (`citation`): mahkeme, E./D. numarası ve tarih LLM'in uydurmadığı künyeden gelir
+- Haftalık sürüm takibi: `GET /v1/changes` ve `GET /v1/documents/{id}/changes`
+  (madde bazlı eski/yeni metin, yeşil/kırmızı görüntüleyici: `/degisiklikler`)
 - LLM'ler için Markdown çıktısı, `llms.txt`, OpenAPI 3.1 ve MCP araçları
 - İki çalışma ortamı: **Cloudflare Workers + D1** (birincil) ve **Node 22 + node:sqlite**
   (Google Cloud Run / herhangi bir konteyner)
@@ -115,6 +118,8 @@ curl "$BASE/v1/search?q=nafaka&limit=5"
 curl "$BASE/v1/documents/yasa-1-1998?format=markdown"
 curl "$BASE/v1/documents/yasa-1-1998/articles/4"
 curl "$BASE/v1/recent?type=karar&limit=10"
+curl "$BASE/v1/changes?since=2026-11-01"
+curl "$BASE/v1/documents/yasa-1-1998/changes?format=markdown"
 curl "$BASE/v1/stats"
 ```
 
@@ -127,7 +132,11 @@ Yerel geliştirmede adres `http://localhost:8787` olur.
 | `GET /v1/documents/{id}/articles` | Madde referansları |
 | `GET /v1/documents/{id}/articles/{ref}` | Tek madde (`12`, `Madde 12`, `30A`) |
 | `GET /v1/recent` | En yeni belgeler; `type`, `limit` (1–100) |
-| `GET /v1/stats` | Kapsam, tür/yıl/kaynak dağılımı, tam metin durumu |
+| `GET /v1/changes` | Saptanan mevzuat değişiklikleri; `since` (YYYY-AA-GG), `type`, `limit` (1–200) |
+| `GET /v1/documents/{id}/changes` | Belgenin sürümleri ve madde bazlı farkları; `version`, `format=json\|markdown\|html` |
+| `GET /degisiklikler` | İnsan için değişiklik akışı (yeşil = eklendi, kırmızı = kaldırıldı) |
+| `GET /degisiklikler/{id}` | Belgenin madde bazlı fark görüntüleyicisi |
+| `GET /v1/stats` | Kapsam, tür/yıl/kaynak dağılımı, tam metin durumu, mahkemeler |
 | `GET /llms.txt` | LLM kullanım talimatları (her yanıtta `_meta.docs` ile bağlantılı) |
 | `GET /openapi.json` | OpenAPI 3.1 |
 | `POST /mcp` | MCP Streamable HTTP (JSON-RPC 2.0) |
@@ -143,6 +152,15 @@ Her JSON yanıtında şu alan bulunur:
 }
 ```
 
+Arama sonuçları ve belge künyeleri ayrıca hazır bir `citation` alanı taşır. LLM'lerin mahkeme,
+esas/karar numarası ve tarihi kendileri birleştirmesi yerine bu alanı aynen kullanması gerekir:
+
+```json
+{
+  "citation": "Yargıtay Aile, E. 1/2012, D. 21183, 07.03.2014"
+}
+```
+
 ### Arama davranışı
 
 - Varsayılan `mode=all`: tüm sözcükler (VE). `any`: herhangi biri (VEYA). `phrase`: tam ifade.
@@ -150,6 +168,7 @@ Her JSON yanıtında şu alan bulunur:
 - 3+ harfli sözcüklerde otomatik önek araması (`nafaka` → `nafaka*`).
 - Sonuçlar belge bazında tekilleştirilir; `score` büyük olan daha iyidir.
 - `matched_ref` eşleşmenin hangi maddede olduğunu gösterir; `snippet` Türkçe özgün metinden üretilir.
+- `citation` hazır atıftır; `source=gov` filtreleri güncel birleştirilmiş metne daraltır.
 
 ### Belge kimlikleri
 
@@ -182,8 +201,21 @@ MCP istemcisi yapılandırması:
 }
 ```
 
-Araçlar: `search_mevzuat`, `get_document`, `get_article`, `list_document_articles`,
-`list_recent`, `get_stats`.
+Araçlar:
+
+| Araç | Kullanım |
+| --- | --- |
+| `search_mevzuat` | Mevzuatta ve kararlarda arama; `query`, `type`, `year`, `source`, `court`, `mode`, `limit`, `offset` |
+| `ictihat_ara` | Yalnız mahkeme kararlarında arama; `ifade`, `mahkeme`, `yil`, `mod`, `adet`, `sayfa` |
+| `karar_getir` | Kararın künyesi, hazır atfı ve tam metni; `id` |
+| `list_courts` | Mahkemeler, karar sayıları ve yıl aralıkları |
+| `son_degisiklikler` | Saptanan son mevzuat değişiklikleri; `since`, `type`, `limit` |
+| `degisiklikleri_getir` | Belgenin sürüm geçmişi ve madde farkları; `id`, `version` |
+| `get_document` | Belge künyesi + tam metin; `id`, `format` |
+| `get_article` | Tek madde; `id`, `ref` |
+| `list_document_articles` | Madde referansları; `id` |
+| `list_recent` | En yeni belgeler; `type`, `limit` |
+| `get_stats` | Kapsam istatistikleri |
 
 ## Dağıtım
 
@@ -256,6 +288,17 @@ Her build, güncel birleştirilmiş metinleri (`source=gov`) `data/history.db` i
 - `python -m kktc build --no-history` yeni sürüm kaydetmeden derler.
 - Saptanma tarihi değişikliğin kaynakta görüldüğü haftadır, yürürlük tarihi değildir.
 - mevzuat.gov.ct.tr dosyalarının çoğunun adında tarih yoktur (Ekim 2026: 324 dosyanın 275'i), yani değişiklik aynı adla gelebilir. Bu yüzden `fetch-text --revalidate` her hafta tüm dosyaları (~150 MB) yeniden indirir ve SHA-256 parmak izini karşılaştırır; yalnızca içeriği değişen dosyanın metni yeniden çıkarılır. Haftalık iş akışı bunu kullanır.
+
+Değişiklikleri programatik olarak okuyun:
+
+```bash
+curl "$BASE/v1/changes?since=2026-11-01"
+curl "$BASE/v1/documents/yasa-1-1998/changes?format=markdown"
+```
+
+`/v1/changes` yanıtındaki `tracking_since` takibin başladığı tarihtir; `detected_at` ise değişikliğin
+kaynakta görüldüğü çalıştırmadır. İnsan görünümü için <https://kktc-mevzuat-api.stevevaius.workers.dev/degisiklikler>
+adresini açın.
 
 ## Sınırlamalar
 

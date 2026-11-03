@@ -113,6 +113,7 @@ Yanıt (kısaltılmış):
     "id": "yasa-1-1998",
     "title": "1/1998 SAYILI AİLE (EVLENME VE BOŞANMA) YASASI",
     "number": "1/1998",
+    "citation": "1/1998 SAYILI AİLE (EVLENME VE BOŞANMA) YASASI",
     "matched_ref": "Madde 4",
     "snippet": "…",
     "score": 1.234,
@@ -242,6 +243,8 @@ curl "${origin}/v1/search?q=nafaka&limit=5"
 curl "${origin}/v1/documents/yasa-1-1998?format=markdown"
 curl "${origin}/v1/documents/yasa-1-1998/articles/4"
 curl "${origin}/v1/recent?type=karar&limit=5"
+curl "${origin}/v1/changes?since=2026-11-01"
+curl "${origin}/v1/documents/yasa-1-1998/changes?format=markdown"
 curl "${origin}/v1/stats"
 \`\`\`
 `;
