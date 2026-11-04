@@ -59,6 +59,13 @@ jobs:
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         run: npm --workspace apps/worker run deploy
 
+      - name: Derive admin token
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        run: |
+          ADMIN=$(python3 -c "import hashlib,os;print(hashlib.sha256((os.environ['CLOUDFLARE_API_TOKEN']+':kktc-vectors').encode()).hexdigest())")
+          echo "::add-mask::$ADMIN"
+          echo "ADMIN_TOKEN=$ADMIN" >> "$GITHUB_ENV"
+
       - name: Smoke test live API
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         env:

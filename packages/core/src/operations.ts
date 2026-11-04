@@ -15,7 +15,7 @@ import {
 } from "./sql.js";
 import { buildCitation } from "./citation.js";
 import { conceptMatch, matchConcepts } from "./legal-concepts.js";
-import { ANSWER_PASSAGES, RERANK_CANDIDATES, wantsRerank } from "./rerank.js";
+import { ANSWER_PASSAGES, RERANK_CANDIDATES, RerankLimitError, wantsRerank } from "./rerank.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
 import {
   baseArticleRef,
@@ -650,7 +650,11 @@ export async function answerQuestion(
     } catch (error) {
       // Quota, timeout or an unexpected answer: keep today's ranking.
       console.warn("rerank failed:", error instanceof Error ? error.message : error);
-      rerank = { model: "clef-flash", applied: false, error: "unavailable" };
+      rerank = {
+        model: "clef-flash",
+        applied: false,
+        error: error instanceof RerankLimitError ? "daily_limit" : "unavailable",
+      };
       candidates = rounds[0];
     }
   }

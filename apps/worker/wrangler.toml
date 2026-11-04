@@ -19,3 +19,15 @@ binding = "AI"
 [[vectorize]]
 binding = "VECTORS"
 index_name = "kktc-mevzuat-maddeler"
+
+# Per-client limit (cf-connecting-ip): 30 requests a minute, enough for a
+# person or an assistant, not for a bot draining the D1 quota. Approximate and
+# per Cloudflare location. /health, /admin/* and requests carrying the admin
+# token (our own GitHub jobs) are exempt; see apps/worker/src/index.ts.
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60

@@ -250,6 +250,8 @@ jobs:
           ADMIN=$(cd crawler && python -m kktc vectors admin-token)
           echo "::add-mask::$ADMIN"
           printf '%s' "$ADMIN" | npx wrangler secret put VECTOR_ADMIN_TOKEN --config apps/worker/wrangler.toml
+          # Smoke test and search eval below send it: exempt from the rate limit.
+          echo "ADMIN_TOKEN=$ADMIN" >> "$GITHUB_ENV"
 
       - name: Smoke test live API
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
