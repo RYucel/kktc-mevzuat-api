@@ -1,9 +1,11 @@
 import {
+  clefReranker,
   createApp,
   DECISION_MODELS,
   queryText,
   SEMANTIC_MODEL,
   type SemanticHit,
+  type Reranker,
   type SemanticIndex,
   type Store,
   type StoreRow,
@@ -20,12 +22,15 @@ export interface Env {
   VECTORS?: Vectorize;
   /** Bearer token for /admin/vectors/*; set by the vectors workflow. */
   VECTOR_ADMIN_TOKEN?: string;
+  /** "off" disables Clef answer reranking. */
+  RERANK?: string;
 }
 
 class D1Store implements Store {
   constructor(
     private readonly db: D1Database,
     readonly semantic?: SemanticIndex,
+    readonly rerank?: Reranker,
   ) {}
 
   async all(sql: string, binds: unknown[] = []): Promise<StoreRow[]> {
@@ -101,8 +106,14 @@ class VectorizeSemantic implements SemanticIndex, VectorWriter {
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
     const semantic = env.AI && env.VECTORS ? new VectorizeSemantic(env.AI, env.VECTORS) : undefined;
+    const decide = env.AI
+      ? (model: string, input: Record<string, unknown>) =>
+          env.AI!.run(`@cf/cloudflare/${model}` as Parameters<Ai["run"]>[0], input as never)
+      : undefined;
+    // Clef answer reranking (see packages/core/src/rerank.ts); RERANK=off disables it.
+    const rerank = decide && env.RERANK !== "off" ? clefReranker(decide) : undefined;
     const app = createApp({
-      store: new D1Store(env.DB, semantic),
+      store: new D1Store(env.DB, semantic, rerank),
       runtime: semantic ? "cloudflare-d1+vectorize" : "cloudflare-d1",
       vectors: semantic,
       adminToken: env.VECTOR_ADMIN_TOKEN,

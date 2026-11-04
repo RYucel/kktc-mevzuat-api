@@ -8,3 +8,4 @@ export * from "./openapi.js";
 export * from "./changes.js";
 export * from "./citation.js";
 export * from "./semantic.js";
+export * from "./rerank.js";

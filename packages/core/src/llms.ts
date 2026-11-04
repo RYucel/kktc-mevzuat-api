@@ -193,7 +193,7 @@ taşır. \`relevant_documents\` getirilen pencere içinde \`min_score\` eşiğin
 
 ### 1b) Alıntı yanıtı — \`GET /v1/answer\`
 
-Parametreler: \`q\` (zorunlu), \`type?\`, \`prefer?\`, \`mode?\`, \`limit\` (1–5), \`format=json|markdown\`.
+Parametreler: \`q\` (zorunlu), \`type?\`, \`prefer?\`, \`mode?\`, \`limit\` (1–5), \`rerank=0?\`, \`format=json|markdown\`.
 
 \`\`\`bash
 curl "${origin}/v1/answer?q=mal%20payla%C5%9F%C4%B1m%C4%B1nda%20e%C5%9Flere%20d%C3%BC%C5%9Fen%20en%20az%20oran&format=markdown"
@@ -201,6 +201,11 @@ curl "${origin}/v1/answer?q=mal%20payla%C5%9F%C4%B1m%C4%B1nda%20e%C5%9Flere%20d%
 
 Yanıt \`answer\`, \`quotes\`, \`citations\`, \`confidence\` ve \`disclaimer\` içerir. \`answer_type\`
 her zaman \`extractive\`dır: metin birebir alıntılanır, yeniden yazılmaz.
+
+Doğal dil sorularında (ör. "İşveren maaşımdan kesinti yapabilir mi?") ilk 10 aday Cloudflare
+Clef ile yeniden sıralanır; \`quotes[].probability\` ve \`rerank.top_probability\` pasajın soruyu
+cevaplama olasılığıdır ve \`confidence\` buradan gelir. \`confidence: low\` ise alıntıyı cevap
+saymayın, \`/v1/search\` ile daha geniş arayın. Kısa anahtar kelime aramaları yeniden sıralanmaz.
 
 ### 2) Belge — \`GET /v1/documents/{id}\`
 
