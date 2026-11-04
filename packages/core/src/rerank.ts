@@ -18,6 +18,12 @@ import { wantsSemantic } from "./semantic.js";
 export const RERANK_MODEL = "clef-flash";
 /** Candidates sent to Clef (the measured setting). */
 export const RERANK_CANDIDATES = 10;
+/**
+ * Articles per document offered to Clef (1 = the measured 2026-11-04 setup:
+ * the best article of 10 documents). /v1/answer?passages=2|3 tries more
+ * articles of fewer documents; scripts/eval-answer.mjs compares them.
+ */
+export const ANSWER_PASSAGES = 1;
 const PASSAGE_CHARS = 420;
 
 export interface RerankCandidate {

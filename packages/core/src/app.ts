@@ -190,6 +190,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       min_score: floatParam(c.req.query("min_score"), "min_score", 0, 0, 1000),
       exact_count: ["1", "true", "yes"].includes((c.req.query("exact_count") ?? "").toLowerCase()),
       semantic: !["0", "false", "no"].includes((c.req.query("semantic") ?? "").toLowerCase()),
+      passages: c.req.query("passages") ? intParam(c.req.query("passages"), "passages", 1, 1, 3) : undefined,
       limit: intParam(c.req.query("limit"), "limit", 10, 1, 50),
       offset: intParam(c.req.query("offset"), "offset", 0, 0, 1000),
     };
@@ -222,6 +223,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       min_score: floatParam(c.req.query("min_score"), "min_score", 0, 0, 1000),
       semantic: !["0", "false", "no"].includes((c.req.query("semantic") ?? "").toLowerCase()),
       rerank: !["0", "false", "no"].includes((c.req.query("rerank") ?? "").toLowerCase()),
+      passages: c.req.query("passages") ? intParam(c.req.query("passages"), "passages", 1, 1, 3) : undefined,
       limit: intParam(c.req.query("limit"), "limit", 3, 1, 5),
       offset: 0,
     };

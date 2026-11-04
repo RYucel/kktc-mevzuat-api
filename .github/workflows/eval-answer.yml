@@ -1,0 +1,41 @@
+name: Measure answers
+
+# End-to-end quality of /v1/answer on the live Worker: compares query-string
+# variants (rerank off, passages per document 1-3) on the same questions.
+# Each reranked question is one Clef call on the Workers AI daily allocation.
+
+on:
+  workflow_dispatch:
+    inputs:
+      variants:
+        description: "Karşılaştırılacak varyantlar (virgülle)"
+        default: "rerank=0,passages=1,passages=2,passages=3"
+      sets:
+        description: "Soru setleri: questions, keywords"
+        default: "questions"
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASE: ${{ vars.WORKER_URL || 'https://kktc-mevzuat-api.stevevaius.workers.dev' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Measure
+        env:
+          VARIANTS: ${{ inputs.variants }}
+          SETS: ${{ inputs.sets }}
+        run: node scripts/eval-answer.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-answer
+          path: eval-answer.json
+          if-no-files-found: ignore

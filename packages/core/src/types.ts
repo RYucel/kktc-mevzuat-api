@@ -59,6 +59,8 @@ export interface SearchParams {
   semantic?: boolean;
   /** Rerank answer candidates with Clef when available (default true; answer only). */
   rerank?: boolean;
+  /** Matching articles per document to return (1-3, default 1); extra ones go to other_passages. */
+  passages?: number;
   limit: number;
   offset: number;
 }
@@ -96,6 +98,11 @@ export interface SearchResult {
   score: number;
   url: string;
   source_url: string;
+  /**
+   * Other matching articles of the same document (best first), only when
+   * the request asks for more than one passage per document.
+   */
+  other_passages?: { ref: string; text: string; snippet: string; url: string }[];
 }
 
 export interface SearchGroupItem {
@@ -136,6 +143,7 @@ export interface AnswerResponse {
     model: string;
     applied: boolean;
     candidates?: number;
+    passages_per_document?: number;
     top_probability?: number;
     none_probability?: number;
     error?: string;
