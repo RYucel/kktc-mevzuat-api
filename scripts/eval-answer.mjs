@@ -37,7 +37,10 @@ async function answer(q, variant) {
   for (let attempt = 0; ; attempt++) {
     const started = Date.now();
     const response = await fetch(url);
-    if (response.ok) return { body: await response.json(), ms: Date.now() - started };
+    if (response.ok) {
+      const rows = response.headers.get("x-d1-rows-read");
+      return { body: await response.json(), ms: Date.now() - started, rowsRead: rows === null ? null : Number(rows) };
+    }
     if (attempt >= 2 || response.status < 500) throw new Error(`HTTP ${response.status}`);
     await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
   }
@@ -49,11 +52,12 @@ for (const [n, c] of cases.entries()) {
   const marks = [];
   for (const variant of variants) {
     try {
-      const { body, ms } = await answer(c.q, variant);
+      const { body, ms, rowsRead } = await answer(c.q, variant);
       const quotes = body.quotes ?? [];
       const top = quotes[0];
       const result = {
         ms,
+        rows_read: rowsRead,
         confidence: body.confidence,
         rerank: body.rerank ?? null,
         top: top ? { doc: top.document_id, ref: top.ref, p: top.probability ?? null } : null,
@@ -89,19 +93,23 @@ for (const variant of variants) {
     article5: ok.filter((v) => v.article5).length,
     reranked: ok.filter((v) => v.rerank?.applied).length,
     ms: ok.length ? Math.round(ok.reduce((s, v) => s + v.ms, 0) / ok.length) : null,
+    rows_read: (() => {
+      const counted = ok.filter((v) => typeof v.rows_read === "number" && v.rows_read > 0);
+      return counted.length ? Math.round(counted.reduce((s, v) => s + v.rows_read, 0) / counted.length) : null;
+    })(),
     byConfidence,
   };
 }
 writeFileSync(outPath, JSON.stringify({ base, generated_at: new Date().toISOString(), variants, summary, rows }, null, 1));
 
 const md = ["## /v1/answer ölçümü", "", `${rows.length} soru (${sets.join(", ")}). A = doğru madde, d = doğru yasa/yanlış madde, · = yanlış.`, ""];
-md.push("| Varyant | doğru yasa @1 | doğru madde @1 | doğru madde ilk 5'te | Clef uygulandı | ort. ms | high: isabet | medium: isabet | low: isabet |", "|---|---|---|---|---|---|---|---|---|");
+md.push("| Varyant | doğru yasa @1 | doğru madde @1 | doğru madde ilk 5'te | Clef uygulandı | ort. ms | D1 satır/soru | high: isabet | medium: isabet | low: isabet |", "|---|---|---|---|---|---|---|---|---|---|");
 for (const [variant, s] of Object.entries(summary)) {
   const conf = (label) => {
     const b = s.byConfidence[label];
     return b ? `${b.right}/${b.n}` : "–";
   };
-  md.push(`| ${variant} | ${pct(s.doc1, s.n)} | ${pct(s.article1, s.n)} | ${pct(s.article5, s.n)} | ${s.reranked}/${s.n} | ${s.ms ?? "–"} | ${conf("high")} | ${conf("medium")} | ${conf("low")} |`);
+  md.push(`| ${variant} | ${pct(s.doc1, s.n)} | ${pct(s.article1, s.n)} | ${pct(s.article5, s.n)} | ${s.reranked}/${s.n} | ${s.ms ?? "–"} | ${s.rows_read ?? "–"} | ${conf("high")} | ${conf("medium")} | ${conf("low")} |`);
 }
 const text = md.join("\n");
 console.log("\n" + text);
