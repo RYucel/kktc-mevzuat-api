@@ -254,6 +254,13 @@ export function openapiDocument(origin: string): Record<string, unknown> {
             },
             { name: "prefer", in: "query", schema: { type: "string", enum: ["mevzuat", "ictihat"] } },
             { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 5, default: 3 } },
+            {
+              name: "rerank",
+              in: "query",
+              description:
+                "Doğal dil sorularında ilk 10 aday Cloudflare Clef ile yeniden sıralanır ve güven Clef olasılığından gelir (rerank alanı). 0 ile kapatılır; kısa anahtar kelime aramalarında hiç kullanılmaz.",
+              schema: { type: "string", enum: ["1", "0"], default: "1" },
+            },
             { name: "format", in: "query", schema: { type: "string", enum: ["json", "markdown"], default: "json" } },
           ],
           responses: {
@@ -267,6 +274,18 @@ export function openapiDocument(origin: string): Record<string, unknown> {
                       query: { type: "string" },
                       answer: { type: ["string", "null"] },
                       answer_type: { type: "string", enum: ["extractive"] },
+                      rerank: {
+                        type: "object",
+                        description: "Yalnız soru yeniden sıralamaya gittiyse vardır.",
+                        properties: {
+                          model: { type: "string" },
+                          applied: { type: "boolean" },
+                          candidates: { type: "integer" },
+                          top_probability: { type: "number" },
+                          none_probability: { type: "number" },
+                          error: { type: "string" },
+                        },
+                      },
                       quotes: {
                         type: "array",
                         items: {

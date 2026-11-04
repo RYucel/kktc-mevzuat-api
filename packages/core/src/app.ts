@@ -221,6 +221,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       prefer: (preferRaw || undefined) as SearchParams["prefer"],
       min_score: floatParam(c.req.query("min_score"), "min_score", 0, 0, 1000),
       semantic: !["0", "false", "no"].includes((c.req.query("semantic") ?? "").toLowerCase()),
+      rerank: !["0", "false", "no"].includes((c.req.query("rerank") ?? "").toLowerCase()),
       limit: intParam(c.req.query("limit"), "limit", 3, 1, 5),
       offset: 0,
     };

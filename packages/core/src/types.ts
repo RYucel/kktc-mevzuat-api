@@ -1,4 +1,5 @@
 /** Shared types for the KKTC mevzuat API. */
+import type { Reranker } from "./rerank.js";
 import type { SemanticIndex } from "./semantic.js";
 
 export const DOC_TYPES = [
@@ -33,6 +34,8 @@ export interface Store {
   first(sql: string, binds?: unknown[]): Promise<StoreRow | null>;
   /** Optional vector index (Worker with Workers AI + Vectorize bindings). */
   semantic?: SemanticIndex;
+  /** Optional answer reranker (Clef on Workers AI); used by answerQuestion. */
+  rerank?: Reranker;
 }
 
 export interface SearchParams {
@@ -54,6 +57,8 @@ export interface SearchParams {
   exclude_title?: boolean;
   /** Use the vector index when available (default true). */
   semantic?: boolean;
+  /** Rerank answer candidates with Clef when available (default true; answer only). */
+  rerank?: boolean;
   limit: number;
   offset: number;
 }
@@ -115,6 +120,8 @@ export interface AnswerQuote {
   /** Query content words found in the quoted passage. */
   coverage: { found: number; total: number };
   score: number;
+  /** Clef's probability that this passage answers the question (when reranked). */
+  probability?: number;
 }
 
 export interface AnswerResponse {
@@ -124,6 +131,15 @@ export interface AnswerResponse {
   quotes: AnswerQuote[];
   citations: string[];
   confidence: "high" | "medium" | "low";
+  /** Present when the question went to the reranker. */
+  rerank?: {
+    model: string;
+    applied: boolean;
+    candidates?: number;
+    top_probability?: number;
+    none_probability?: number;
+    error?: string;
+  };
   concepts: { id: string; label: string }[];
   disclaimer: string;
   _meta: ApiMeta;

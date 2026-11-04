@@ -1,0 +1,68 @@
+name: Deploy Worker
+
+# Code-only deploy: ships Worker/API changes without re-importing data into
+# D1 (that is "Refresh data", which uses much of the D1 daily read quota).
+# Secrets such as VECTOR_ADMIN_TOKEN stay on the Worker across deploys.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/worker/**"
+      - "packages/core/**"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Shares the group with "Refresh data" so the two never deploy at once.
+  group: data-refresh
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Point Wrangler at the D1 database
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          D1_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          path = pathlib.Path("apps/worker/wrangler.toml")
+          text = path.read_text(encoding="utf-8")
+          text = re.sub(r'database_id\s*=\s*"[^"]*"', f'database_id = "{os.environ["D1_ID"]}"', text)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Deploy Worker
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        run: npm --workspace apps/worker run deploy
+
+      - name: Smoke test live API
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          BASE: ${{ vars.WORKER_URL || 'https://kktc-mevzuat-api.stevevaius.workers.dev' }}
+        run: |
+          sleep 5
+          node scripts/smoke.mjs

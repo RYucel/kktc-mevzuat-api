@@ -15,6 +15,7 @@ import {
 } from "./sql.js";
 import { buildCitation } from "./citation.js";
 import { conceptMatch, matchConcepts } from "./legal-concepts.js";
+import { RERANK_CANDIDATES, wantsRerank } from "./rerank.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
 import {
   baseArticleRef,
@@ -538,22 +539,56 @@ export async function answerQuestion(
   origin: string,
 ): Promise<AnswerResponse> {
   const limit = Math.min(5, Math.max(1, params.limit));
+  const reranker = params.rerank !== false && wantsRerank(params.q, params.mode) ? store.rerank : undefined;
   const search = await searchDocuments(
     store,
     {
       ...params,
       prefer: params.prefer ?? "mevzuat",
-      limit,
+      limit: reranker ? Math.max(limit, RERANK_CANDIDATES) : limit,
     },
     origin,
   );
 
+  // Only quote provisions: a law's title or a document without text is not
+  // an answer to anything.
+  let candidates = search.results.filter(
+    (result) => result.snippet && result.matched_kind !== "title" && result.text_status !== "metadata",
+  );
+  let probabilities: number[] | null = null;
+  let rerank: AnswerResponse["rerank"];
+  if (reranker && candidates.length > 1) {
+    candidates = candidates.slice(0, RERANK_CANDIDATES);
+    try {
+      const result = await reranker.rerank(
+        params.q,
+        candidates.map((c) => ({
+          label: `${c.citation ?? c.title}${c.matched_ref ? `, ${c.matched_ref}` : ""}`,
+          text: c.matched_text || c.snippet,
+        })),
+      );
+      const order = candidates
+        .map((c, i) => ({ c, i, p: result.probabilities[i] ?? 0 }))
+        .sort((a, b) => b.p - a.p || a.i - b.i);
+      candidates = order.map((o) => o.c);
+      probabilities = order.map((o) => o.p);
+      rerank = {
+        model: result.model,
+        applied: true,
+        candidates: order.length,
+        top_probability: round3(order[0]?.p ?? 0),
+        none_probability: round3(result.none),
+      };
+    } catch (error) {
+      // Quota, timeout or an unexpected answer: keep today's ranking.
+      console.warn("rerank failed:", error instanceof Error ? error.message : error);
+      rerank = { model: "clef-flash", applied: false, error: "unavailable" };
+    }
+  }
+
   const quotes: AnswerQuote[] = [];
-  for (const result of search.results) {
+  for (const [index, result] of candidates.entries()) {
     if (quotes.length >= limit) break;
-    // Only quote provisions: a law's title or a document without text is
-    // not an answer to anything.
-    if (!result.snippet || result.matched_kind === "title" || result.text_status === "metadata") continue;
     quotes.push({
       document_id: result.id,
       title: result.title,
@@ -566,6 +601,7 @@ export async function answerQuestion(
       // Measured on the quoted window itself: that is what the reader gets.
       coverage: stemCoverage(result.snippet, params.q),
       score: result.score,
+      ...(probabilities ? { probability: round3(probabilities[index]) } : {}),
     });
   }
 
@@ -575,7 +611,10 @@ export async function answerQuestion(
   const covered = top ? top.coverage.total === 0 || top.coverage.found / top.coverage.total >= 0.5 : false;
   const confidence: AnswerResponse["confidence"] = !top
     ? "low"
-    : top.text_status === "full" && covered && top.coverage.found >= Math.min(2, top.coverage.total)
+    : rerank?.applied
+      ? // Clef's probability is the measured, better-calibrated signal here.
+        rerankConfidence(rerank.top_probability ?? 0, rerank.none_probability ?? 0)
+      : top.text_status === "full" && covered && top.coverage.found >= Math.min(2, top.coverage.total)
       ? "high"
       : top.coverage.found > 0
         ? "medium"
@@ -588,12 +627,29 @@ export async function answerQuestion(
     quotes,
     citations: [...new Set(quotes.map((quote) => quote.citation))],
     confidence,
+    ...(rerank ? { rerank } : {}),
     concepts: search.concepts,
     disclaimer:
       "Bu yanıt metinden birebir alıntıdır; hukuki yorum veya bağlayıcı görüş değildir. " +
       "Resmî/bağlayıcı metin için source_url bağlantısına başvurun.",
     _meta: apiMeta(origin),
   };
+}
+
+function round3(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+/**
+ * Thresholds from the 2026-11-04 measurement: for questions, Clef's top
+ * probability >= 0.7 was right about two times in three and >= 0.9 four in
+ * five; below ~0.35 the top passage was usually wrong.
+ */
+function rerankConfidence(top: number, none: number): AnswerResponse["confidence"] {
+  if (none >= top) return "low";
+  if (top >= 0.7) return "high";
+  if (top >= 0.35) return "medium";
+  return "low";
 }
 
 export function answerMarkdown(response: AnswerResponse): string {

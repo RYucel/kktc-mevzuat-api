@@ -98,7 +98,7 @@ async function getJson(url, init) {
 
 const search = (q, semantic) =>
   getJson(`${base}/v1/search?q=${encodeURIComponent(q)}&limit=${topK}${semantic ? "" : "&semantic=0"}`);
-const answer = (q) => getJson(`${base}/v1/answer?q=${encodeURIComponent(q)}&limit=1`);
+const answer = (q) => getJson(`${base}/v1/answer?q=${encodeURIComponent(q)}&limit=1&rerank=0`);
 
 let quotaHit = null;
 async function decide(model, input) {
