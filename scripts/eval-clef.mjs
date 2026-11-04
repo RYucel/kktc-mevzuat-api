@@ -127,7 +127,12 @@ function toProb(value) {
     return null;
   }
   if (value && typeof value === "object") {
-    for (const key of ["probability", "prob", "p", "p_yes", "yes", "true", "value", "score", "answer"]) {
+    // Workers AI shape: { type: "noul", noul: 0.95 }
+    if (typeof value.type === "string" && value.type in value) {
+      const p = toProb(value[value.type]);
+      if (p !== null) return p;
+    }
+    for (const key of ["noul", "probability", "prob", "p", "p_yes", "yes", "true", "value", "score", "answer"]) {
       if (key in value) {
         const p = toProb(value[key]);
         if (p !== null) return p;
@@ -404,6 +409,9 @@ md.push("", "### Maliyet ve gecikme", "", "| Çağrı | adet | hata | çözümle
 for (const [k, u] of Object.entries(usage)) {
   md.push(`| ${k} | ${u.calls} | ${u.failures} | ${u.unparsed} | ${u.calls ? Math.round(u.ms / Math.max(1, u.calls - u.failures)) : "–"} | ${u.prompt_tokens} | ${u.completion_tokens} |`);
 }
+md.push("", "<details><summary>Ham yanıt örnekleri</summary>", "", "```json");
+for (const [k, list] of Object.entries(raw)) md.push(`// ${k}`, JSON.stringify(list[0]?.response ?? list[0]).slice(0, 1200));
+md.push("```", "</details>");
 const text = md.join("\n");
 console.log("\n" + text);
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, text + "\n");
