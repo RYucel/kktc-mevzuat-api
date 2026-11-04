@@ -22,7 +22,8 @@ async function json(path) {
 // On a day the D1 free-tier read quota is used up, every D1 query answers
 // 503 d1_quota_exceeded until 00:00 UTC. That says nothing about the code
 // being deployed, so the smoke test reports it and stops without failing.
-const probe = await json("/v1/stats");
+// Cache-busting query: /v1/stats is edge-cached and would hide the quota.
+const probe = await json(`/v1/search?q=nafaka&limit=1&_probe=${Date.now()}`);
 if (probe.res.status === 503 && probe.body?.error?.code === "d1_quota_exceeded") {
   console.log(`::warning::D1 günlük okuma kotası dolu (${probe.body.error.retry_at ?? "00:00 UTC"}'e kadar); smoke testi atlandı.`);
   process.exit(0);
