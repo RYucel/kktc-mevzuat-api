@@ -27,6 +27,10 @@ export interface Env {
 }
 
 class D1Store implements Store {
+  /** D1 rows read by this request (sent back as x-d1-rows-read). */
+  rowsRead = 0;
+  queries = 0;
+
   constructor(
     private readonly db: D1Database,
     readonly semantic?: SemanticIndex,
@@ -38,15 +42,15 @@ class D1Store implements Store {
       .prepare(sql)
       .bind(...binds)
       .all();
+    this.queries += 1;
+    this.rowsRead += Number((result.meta as { rows_read?: number } | undefined)?.rows_read ?? 0);
     return (result.results ?? []) as StoreRow[];
   }
 
   async first(sql: string, binds: unknown[] = []): Promise<StoreRow | null> {
-    const row = await this.db
-      .prepare(sql)
-      .bind(...binds)
-      .first();
-    return (row as StoreRow | undefined) ?? null;
+    // .all() rather than .first(): only .all() reports rows_read.
+    const rows = await this.all(sql, binds);
+    return rows[0] ?? null;
   }
 }
 
@@ -112,8 +116,9 @@ export default {
       : undefined;
     // Clef answer reranking (see packages/core/src/rerank.ts); RERANK=off disables it.
     const rerank = decide && env.RERANK !== "off" ? clefReranker(decide) : undefined;
+    const store = new D1Store(env.DB, semantic, rerank);
     const app = createApp({
-      store: new D1Store(env.DB, semantic, rerank),
+      store,
       runtime: semantic ? "cloudflare-d1+vectorize" : "cloudflare-d1",
       vectors: semantic,
       adminToken: env.VECTOR_ADMIN_TOKEN,
@@ -121,6 +126,13 @@ export default {
         ? (model, input) => env.AI!.run(DECISION_MODELS[model] as Parameters<Ai["run"]>[0], input as never)
         : undefined,
     });
-    return app.fetch(request, env, ctx);
+    // D1's free tier is 5M rows read a day; this header shows what each
+    // request costs (0 when served from the edge cache).
+    return Promise.resolve(app.fetch(request, env, ctx)).then((response) => {
+      const out = new Response(response.body, response);
+      out.headers.set("x-d1-rows-read", String(store.rowsRead));
+      out.headers.set("x-d1-queries", String(store.queries));
+      return out;
+    });
   },
 };

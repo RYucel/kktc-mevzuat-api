@@ -19,6 +19,15 @@ async function json(path) {
   return { res, body };
 }
 
+// On a day the D1 free-tier read quota is used up, every D1 query answers
+// 503 d1_quota_exceeded until 00:00 UTC. That says nothing about the code
+// being deployed, so the smoke test reports it and stops without failing.
+const probe = await json("/v1/stats");
+if (probe.res.status === 503 && probe.body?.error?.code === "d1_quota_exceeded") {
+  console.log(`::warning::D1 günlük okuma kotası dolu (${probe.body.error.retry_at ?? "00:00 UTC"}'e kadar); smoke testi atlandı.`);
+  process.exit(0);
+}
+
 const health = await json("/health");
 check("health", health.res.ok && health.body.status === "ok");
 
