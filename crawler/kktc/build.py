@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import sqlite3
@@ -238,12 +239,13 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
         document_rows,
     )
 
-    # Insert chunks first to obtain stable ids, then feed the FTS index.
-    chunk_ids: list[tuple[int, str]] = []
-    next_id = 1
+    # Chunk ids are derived from (doc_id, ord), so an unchanged document keeps
+    # its ids from build to build. That is what lets the D1 export send only
+    # changed documents (see export_d1).
+    chunk_ids: list[tuple[int, Any]] = []
+    used_ids: set[int] = set()
     for row in chunk_rows:
-        chunk_ids.append((next_id, row))
-        next_id += 1
+        chunk_ids.append((_chunk_id(row[0], row[1], used_ids), row))
 
     conn.executemany(
         "INSERT INTO chunks (id, doc_id, ord, kind, ref, text, chars) VALUES (?,?,?,?,?,?,?)",
@@ -318,6 +320,15 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
         meta["db_bytes"] / 1024 / 1024,
     )
     return meta
+
+
+def _chunk_id(doc_id: str, ord_: int, used: set[int]) -> int:
+    """Stable 52-bit id (safe as a JavaScript number); probes on the rare clash."""
+    value = int(hashlib.sha1(f"{doc_id}\x00{ord_}".encode("utf-8")).hexdigest()[:13], 16) or 1
+    while value in used:
+        value = value % (2**52 - 1) + 1
+    used.add(value)
+    return value
 
 
 def _checksum(text: str) -> str:
@@ -452,65 +463,177 @@ class SqlFileWriter:
         return self.files
 
 
-def export_d1(db_path: Path = DB_PATH, out_dir: Path = DIST_DIR / "d1") -> list[Path]:
-    """Export SQL files that can be imported with wrangler d1 execute."""
+D1_STATE_VERSION = 2  # bump when chunk ids or the D1 layout change: forces a full import
+D1_STATE_FILE = "d1-state.json"
+_DELETE_BATCH = 100
+_VOLATILE_COLUMNS = {"fetched_at", "updated_at"}
+
+
+def _fingerprints(conn: sqlite3.Connection) -> dict[str, str]:
+    """One hash per document over its row, chunks and FTS text."""
+    hashes: dict[str, Any] = {}
+    for row in conn.execute("SELECT * FROM documents ORDER BY id"):
+        h = hashlib.sha1()
+        # fetched_at/updated_at are stamped with the build time; they would
+        # mark every document as changed. D1 keeps the time of the last real
+        # change instead.
+        values = [row[k] for k in row.keys() if k not in _VOLATILE_COLUMNS]
+        h.update(json.dumps(values, ensure_ascii=False, default=str).encode("utf-8"))
+        hashes[row["id"]] = h
+    for row in conn.execute(
+        "SELECT c.doc_id, c.id, c.ord, c.kind, c.ref, c.text, c.chars, f.text_norm "
+        "FROM chunks c JOIN chunks_fts f ON f.rowid = c.id ORDER BY c.doc_id, c.ord"
+    ):
+        h = hashes.get(row["doc_id"])
+        if h is not None:
+            h.update(json.dumps(list(row), ensure_ascii=False).encode("utf-8"))
+    return {doc_id: h.hexdigest() for doc_id, h in hashes.items()}
+
+
+def _history_fingerprint(conn: sqlite3.Connection) -> Optional[str]:
+    has = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'changes'").fetchone()[0]
+    if not has:
+        return None
+    h = hashlib.sha1()
+    for table in ("doc_versions", "changes"):
+        for row in conn.execute(f"SELECT * FROM {table} ORDER BY 1, 2, 3"):
+            h.update(json.dumps(list(row), ensure_ascii=False, default=str).encode("utf-8"))
+    return h.hexdigest()
+
+
+def load_d1_state(path: Optional[Path]) -> Optional[dict[str, Any]]:
+    if not path or not Path(path).exists():
+        return None
+    try:
+        state = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        log.warning("d1: unreadable state %s; full import", path)
+        return None
+    if state.get("version") != D1_STATE_VERSION:
+        log.warning("d1: state version %s != %s; full import", state.get("version"), D1_STATE_VERSION)
+        return None
+    return state
+
+
+def export_d1(
+    db_path: Path = DB_PATH,
+    out_dir: Path = DIST_DIR / "d1",
+    previous_state: Optional[dict[str, Any]] = None,
+) -> list[Path]:
+    """Export SQL files that can be imported with wrangler d1 execute.
+
+    With ``previous_state`` (what is already in D1, from the last successful
+    import) only new, changed and removed documents are written: their old
+    chunks and FTS rows are deleted by doc_id and the new ones inserted. This
+    keeps a weekly refresh to a small share of the D1 free-tier daily row
+    read/write quota; a full reset rewrites every row. Without a usable state
+    the export is a full import, as before.
+
+    ``d1-state.json`` describing the exported database is written next to the
+    SQL files; the workflow keeps it only after the import succeeded.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
-    for stale in out_dir.glob("*.sql"):
-        stale.unlink()
+    for stale in list(out_dir.glob("*.sql")) + [out_dir / D1_STATE_FILE]:
+        if stale.exists():
+            stale.unlink()
     (out_dir / "001-schema.sql").write_text(D1_SCHEMA, encoding="utf-8")
-    (out_dir / "002-reset.sql").write_text(
-        "DELETE FROM chunks_fts;\nDELETE FROM chunks;\nDELETE FROM documents;\nDELETE FROM meta;\n"
-        "DELETE FROM changes;\nDELETE FROM doc_versions;\n",
-        encoding="utf-8",
-    )
 
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    writer = SqlFileWriter(out_dir / "010-documents.sql")
-    for row in conn.execute("SELECT * FROM documents ORDER BY id"):
-        cols = ",".join(row.keys())
-        values = ",".join(_sql(row[k]) for k in row.keys())
-        writer.write(f"INSERT OR REPLACE INTO documents ({cols}) VALUES ({values});")
-    files = writer.close()
-
-    writer = SqlFileWriter(out_dir / "020-chunks.sql")
-    for row in conn.execute("SELECT * FROM chunks ORDER BY id"):
-        writer.write(
-            "INSERT OR REPLACE INTO chunks (id,doc_id,ord,kind,ref,text,chars) VALUES "
-            f"({row['id']},{_sql(row['doc_id'])},{row['ord']},{_sql(row['kind'])},{_sql(row['ref'])},{_sql(row['text'])},{row['chars']});"
+    fingerprints = _fingerprints(conn)
+    history_fp = _history_fingerprint(conn)
+    incremental = previous_state is not None
+    old = (previous_state or {}).get("docs", {})
+    if incremental:
+        changed = sorted(doc_id for doc_id, fp in fingerprints.items() if old.get(doc_id) != fp)
+        removed = sorted(doc_id for doc_id in old if doc_id not in fingerprints)
+        write_history = history_fp != (previous_state or {}).get("history")
+    else:
+        changed = sorted(fingerprints)
+        removed = []
+        write_history = history_fp is not None
+        (out_dir / "002-reset.sql").write_text(
+            "DELETE FROM chunks_fts;\nDELETE FROM chunks;\nDELETE FROM documents;\nDELETE FROM meta;\n"
+            "DELETE FROM changes;\nDELETE FROM doc_versions;\n",
+            encoding="utf-8",
         )
-    files += writer.close()
 
-    writer = SqlFileWriter(out_dir / "030-fts.sql")
-    for row in conn.execute("SELECT rowid, text_norm FROM chunks_fts ORDER BY rowid"):
-        writer.write(f"INSERT INTO chunks_fts (rowid, text_norm) VALUES ({row['rowid']},{_sql(row['text_norm'])});")
-    files += writer.close()
+    if incremental and (changed or removed):
+        writer = SqlFileWriter(out_dir / "005-delete.sql")
+        targets = changed + removed
+        for start in range(0, len(targets), _DELETE_BATCH):
+            ids = ",".join(_sql(doc_id) for doc_id in targets[start : start + _DELETE_BATCH])
+            # FTS rows are keyed by chunk id, so they go before the chunks.
+            writer.write(f"DELETE FROM chunks_fts WHERE rowid IN (SELECT id FROM chunks WHERE doc_id IN ({ids}));")
+            writer.write(f"DELETE FROM chunks WHERE doc_id IN ({ids});")
+            writer.write(f"DELETE FROM documents WHERE id IN ({ids});")
+        writer.close()
 
-    # Version history: rebuilt from history.db on every build, like the rest.
-    has_history = conn.execute(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'changes'"
-    ).fetchone()[0]
-    if has_history:
+    conn.execute("CREATE TEMP TABLE export_ids (id TEXT PRIMARY KEY)")
+    conn.executemany("INSERT INTO export_ids (id) VALUES (?)", [(doc_id,) for doc_id in changed])
+
+    if changed:
+        writer = SqlFileWriter(out_dir / "010-documents.sql")
+        for row in conn.execute("SELECT d.* FROM documents d JOIN export_ids e ON e.id = d.id ORDER BY d.id"):
+            cols = ",".join(row.keys())
+            values = ",".join(_sql(row[k]) for k in row.keys())
+            writer.write(f"INSERT OR REPLACE INTO documents ({cols}) VALUES ({values});")
+        writer.close()
+
+        writer = SqlFileWriter(out_dir / "020-chunks.sql")
+        for row in conn.execute("SELECT c.* FROM chunks c JOIN export_ids e ON e.id = c.doc_id ORDER BY c.doc_id, c.ord"):
+            writer.write(
+                "INSERT OR REPLACE INTO chunks (id,doc_id,ord,kind,ref,text,chars) VALUES "
+                f"({row['id']},{_sql(row['doc_id'])},{row['ord']},{_sql(row['kind'])},{_sql(row['ref'])},{_sql(row['text'])},{row['chars']});"
+            )
+        writer.close()
+
+        writer = SqlFileWriter(out_dir / "030-fts.sql")
+        for row in conn.execute(
+            "SELECT f.rowid AS rowid, f.text_norm FROM chunks_fts f JOIN chunks c ON c.id = f.rowid "
+            "JOIN export_ids e ON e.id = c.doc_id ORDER BY c.doc_id, c.ord"
+        ):
+            writer.write(f"INSERT INTO chunks_fts (rowid, text_norm) VALUES ({row['rowid']},{_sql(row['text_norm'])});")
+        writer.close()
+
+    # Version history: small; rewritten whole, and only when it changed.
+    if write_history:
         writer = SqlFileWriter(out_dir / "040-history.sql")
+        if incremental:
+            writer.write("DELETE FROM changes;")
+            writer.write("DELETE FROM doc_versions;")
         for table in ("doc_versions", "changes"):
             for row in conn.execute(f"SELECT * FROM {table}"):
                 cols = ",".join(row.keys())
                 values = ",".join(_sql(row[k]) for k in row.keys())
                 writer.write(f"INSERT OR REPLACE INTO {table} ({cols}) VALUES ({values});")
-        files += writer.close()
+        writer.close()
 
     writer = SqlFileWriter(out_dir / "090-meta.sql")
     for row in conn.execute("SELECT key, value FROM meta"):
         writer.write(f"INSERT OR REPLACE INTO meta (key, value) VALUES ({_sql(row['key'])},{_sql(row['value'])});")
-    files += writer.close()
+    writer.close()
     conn.close()
 
+    summary = {
+        "mode": "incremental" if incremental else "full",
+        "documents": len(fingerprints),
+        "written": len(changed),
+        "removed": len(removed),
+        "history": bool(write_history),
+    }
+    (out_dir / D1_STATE_FILE).write_text(
+        json.dumps({"version": D1_STATE_VERSION, "docs": fingerprints, "history": history_fp, "last_export": summary}),
+        encoding="utf-8",
+    )
+    (out_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     manifest = out_dir / "import-order.txt"
+    files = sorted(out_dir.glob("*.sql"))
     manifest.write_text(
         "# Run in this order with:\n"
         "#   npx wrangler d1 execute kktc-mevzuat --remote --file=dist/d1/<file>\n"
-        + "\n".join(p.name for p in sorted(out_dir.glob("*.sql"))),
+        + "\n".join(p.name for p in files),
         encoding="utf-8",
     )
-    log.info("exported %d SQL files to %s", len(files) + 2, out_dir)
-    return sorted(out_dir.glob("*.sql"))
+    log.info("d1 export: %s (%d SQL files)", summary, len(files))
+    return files

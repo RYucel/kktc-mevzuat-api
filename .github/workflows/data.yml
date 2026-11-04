@@ -10,6 +10,10 @@ on:
         description: "Mahkemeler yasa PDF'lerini ve tüzüklerini de indir (uzun sürer)"
         type: boolean
         default: false
+      full_import:
+        description: "D1'i sıfırdan yükle (normalde yalnız değişen belgeler yazılır)"
+        type: boolean
+        default: false
 
 permissions:
   # write: history.db is kept as an asset of the "history" release
@@ -113,10 +117,26 @@ jobs:
           else
             echo "::notice::history.db bulunamadı; bu çalıştırma sürüm takibinin başlangıcı (baseline) olacak."
           fi
+          # What is in D1 now (written after the last successful import). With
+          # it the export sends only changed documents; without it, everything.
+          if [[ "${{ inputs.full_import }}" != "true" ]] && \
+             gh release view history --json assets --jq '.assets[].name' 2>/dev/null | grep -qx d1-state.json; then
+            gh release download history --pattern d1-state.json --dir data --clobber
+          fi
 
       - name: Build SQLite + D1 export
         working-directory: crawler
-        run: python -m kktc build
+        run: |
+          state=../data/d1-state.json
+          if [[ -f "$state" ]]; then
+            python -m kktc build --d1-state "$state"
+          else
+            python -m kktc build
+          fi
+          echo "### D1 dışa aktarımı" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat ../dist/d1/summary.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       # Article units for the semantic index (see vectors.yml). Exported from
       # the fresh database so chunk ordinals match D1.
@@ -164,15 +184,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler d1 execute kktc-mevzuat --remote --yes --file=dist/d1/001-schema.sql
-          npx wrangler d1 execute kktc-mevzuat --remote --yes --file=dist/d1/002-reset.sql
+          # A full import starts with a reset. Drop the saved state first, so
+          # that if this import stops halfway the next run is a full one again
+          # instead of an incremental one on top of a half-empty D1.
+          if [[ -f dist/d1/002-reset.sql ]]; then
+            gh release delete-asset history d1-state.json --yes 2>/dev/null || true
+          fi
           while IFS= read -r file; do
             [[ -z "$file" || "$file" == \#* ]] && continue
-            [[ "$file" == "001-schema.sql" || "$file" == "002-reset.sql" ]] && continue
             echo "::group::Import $file"
             npx wrangler d1 execute kktc-mevzuat --remote --yes --file="dist/d1/$file"
             echo "::endgroup::"
           done < <(grep -vE '^\s*(#|$)' dist/d1/import-order.txt)
+          # D1 now matches this build: the next export diffs against it.
+          gh release upload history dist/d1/d1-state.json --clobber
 
       # Informational only. It reads D1, so on a day the free-tier read quota is
       # already used up it fails; that must not stop the Worker deploy and the
