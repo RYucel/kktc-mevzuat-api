@@ -16,6 +16,13 @@
 import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
 
 const base = (process.env.BASE ?? "http://localhost:8787").replace(/\/$/, "");
+// Our own jobs send the admin token, so the Worker's per-client rate limit
+// (30 requests a minute) does not apply to them.
+if (process.env.ADMIN_TOKEN) {
+  const plainFetch = globalThis.fetch;
+  globalThis.fetch = (url, init = {}) =>
+    plainFetch(url, { ...init, headers: { ...(init.headers ?? {}), authorization: `Bearer ${process.env.ADMIN_TOKEN}` } });
+}
 const variants = (process.env.VARIANTS ?? "rerank=0,passages=1,passages=2,passages=3").split(",").map((v) => v.trim()).filter(Boolean);
 const sets = (process.env.SETS ?? "questions").split(",").map((s) => s.trim());
 const outPath = process.env.OUT ?? "eval-answer.json";

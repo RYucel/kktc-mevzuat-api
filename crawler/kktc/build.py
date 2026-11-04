@@ -417,6 +417,14 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     text_norm,
     tokenize = 'unicode61 remove_diacritics 2'
 );
+
+-- Worker-side daily counters (Clef budget); never reset by the data import.
+CREATE TABLE IF NOT EXISTS usage_counters (
+    day TEXT NOT NULL,
+    key TEXT NOT NULL,
+    n INTEGER NOT NULL,
+    PRIMARY KEY (day, key)
+);
 """ + HISTORY_TABLES_SQL
 
 

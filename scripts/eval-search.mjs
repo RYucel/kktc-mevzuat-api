@@ -8,6 +8,13 @@
 // non-zero when the thresholds are missed.
 
 const base = (process.env.BASE ?? "http://localhost:8787").replace(/\/$/, "");
+// Our own jobs send the admin token, so the Worker's per-client rate limit
+// (30 requests a minute) does not apply to them.
+if (process.env.ADMIN_TOKEN) {
+  const plainFetch = globalThis.fetch;
+  globalThis.fetch = (url, init = {}) =>
+    plainFetch(url, { ...init, headers: { ...(init.headers ?? {}), authorization: `Bearer ${process.env.ADMIN_TOKEN}` } });
+}
 const minRecall = Number(process.env.MIN_RECALL ?? 0.75);
 const minMrr = Number(process.env.MIN_MRR ?? 0.55);
 const minHit1 = Number(process.env.MIN_HIT1 ?? 0.55);

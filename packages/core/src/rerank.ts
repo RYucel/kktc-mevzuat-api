@@ -26,6 +26,14 @@ export const RERANK_CANDIDATES = 10;
 export const ANSWER_PASSAGES = 1;
 const PASSAGE_CHARS = 420;
 
+/** The runtime's daily Clef budget is used up; answers fall back to search order. */
+export class RerankLimitError extends Error {
+  constructor(message = "Clef daily limit reached") {
+    super(message);
+    this.name = "RerankLimitError";
+  }
+}
+
 export interface RerankCandidate {
   label: string;
   text: string;

@@ -2,6 +2,13 @@
 //   npm run smoke
 //   BASE=https://api.example.com npm run smoke
 const base = (process.env.BASE ?? "http://localhost:8787").replace(/\/$/, "");
+// Our own jobs send the admin token, so the Worker's per-client rate limit
+// (30 requests a minute) does not apply to them.
+if (process.env.ADMIN_TOKEN) {
+  const plainFetch = globalThis.fetch;
+  globalThis.fetch = (url, init = {}) =>
+    plainFetch(url, { ...init, headers: { ...(init.headers ?? {}), authorization: `Bearer ${process.env.ADMIN_TOKEN}` } });
+}
 let failures = 0;
 
 function check(name, condition, extra = "") {
