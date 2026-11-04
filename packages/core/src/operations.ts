@@ -15,7 +15,7 @@ import {
 } from "./sql.js";
 import { buildCitation } from "./citation.js";
 import { conceptMatch, matchConcepts } from "./legal-concepts.js";
-import { RERANK_CANDIDATES, wantsRerank } from "./rerank.js";
+import { ANSWER_PASSAGES, RERANK_CANDIDATES, wantsRerank } from "./rerank.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
 import {
   baseArticleRef,
@@ -277,6 +277,19 @@ export async function searchDocuments(
       (primaryOrder.get(String(a.id)) ?? 999) - (primaryOrder.get(String(b.id)) ?? 999),
   );
 
+  // Every matching article per document, best first, for other_passages.
+  const passagesPerDoc = Math.min(3, Math.max(1, params.passages ?? 1));
+  const refsByDoc = new Map<string, string[]>();
+  const noteRef = (docId: string, ref: unknown) => {
+    if (passagesPerDoc < 2) return;
+    const base = baseArticleRef(asString(ref));
+    if (!base) return;
+    const list = refsByDoc.get(docId) ?? [];
+    if (!list.includes(base)) list.push(base);
+    refsByDoc.set(docId, list);
+  };
+  let semanticHits: SemanticHit[] = [];
+
   const byId = new Map<string, { row: StoreRow; score: number }>();
   for (const row of rows) {
     const id = String(row.id);
@@ -323,6 +336,7 @@ export async function searchDocuments(
       // The index is optional (e.g. not filled yet); lexical search still works.
       console.warn("semantic search unavailable:", error instanceof Error ? error.message : error);
     }
+    semanticHits = hits;
     const bestHit = new Map<string, SemanticHit>();
     for (const hit of hits) if (!bestHit.has(hit.doc_id)) bestHit.set(hit.doc_id, hit);
     if (bestHit.size) {
@@ -374,12 +388,24 @@ export async function searchDocuments(
   const filtered = minScore > 0 ? deduped.filter((item) => item.score >= minScore) : deduped;
   const page = filtered.slice(params.offset, params.offset + params.limit);
 
+  // Alternatives: the vector index's articles first (it ranks by meaning),
+  // then the lexical, concept and canonical-statute matches.
+  if (passagesPerDoc > 1) {
+    for (const hit of semanticHits) noteRef(hit.doc_id, hit.ref);
+    for (const row of [...rows, ...conceptRows, ...primaryRows]) noteRef(String(row.id), row.matched_ref);
+  }
+  const alternatesByDoc = new Map<string, string[]>();
   const pairs = new Map<string, { docId: string; ref: string }>();
   for (const { row } of page) {
-    const base = baseArticleRef(asString(row.matched_ref));
-    if (!base || !LEGISLATION_TYPES.has(String(row.type))) continue;
+    if (!LEGISLATION_TYPES.has(String(row.type))) continue;
     const docId = String(row.id);
-    pairs.set(`${docId}\u0000${base}`, { docId, ref: base });
+    const base = baseArticleRef(asString(row.matched_ref));
+    if (base) pairs.set(`${docId}\u0000${base}`, { docId, ref: base });
+    if (passagesPerDoc > 1) {
+      const alternates = (refsByDoc.get(docId) ?? []).filter((ref) => ref !== base).slice(0, passagesPerDoc - 1);
+      alternatesByDoc.set(docId, alternates);
+      for (const ref of alternates) pairs.set(`${docId}\u0000${ref}`, { docId, ref });
+    }
   }
   const pairList = [...pairs.values()];
   const batches: { docId: string; ref: string }[][] = [];
@@ -434,6 +460,25 @@ export async function searchDocuments(
       matchedUrl = articleUrl(origin, summary.id, base);
     }
 
+    let otherPassages: SearchResult["other_passages"];
+    if (passagesPerDoc > 1) {
+      otherPassages = [];
+      for (const ref of alternatesByDoc.get(summary.id) ?? []) {
+        const full = (chunksByDoc.get(summary.id) ?? [])
+          .filter((chunk) => baseArticleRef(asString(chunk.ref)) === ref)
+          .map((chunk) => String(chunk.text))
+          .join("\n\n")
+          .trim();
+        if (!full) continue;
+        otherPassages.push({
+          ref,
+          text: capText(full, MATCHED_TEXT_LIMIT).text,
+          snippet: makeSnippet(full, params.q),
+          url: articleUrl(origin, summary.id, ref),
+        });
+      }
+    }
+
     return {
       id: summary.id,
       type: summary.type,
@@ -460,6 +505,7 @@ export async function searchDocuments(
       score: Number(score.toFixed(6)),
       url: summary.url,
       source_url: summary.source_url,
+      ...(otherPassages ? { other_passages: otherPassages } : {}),
     };
   });
 
@@ -540,21 +586,42 @@ export async function answerQuestion(
 ): Promise<AnswerResponse> {
   const limit = Math.min(5, Math.max(1, params.limit));
   const reranker = params.rerank !== false && wantsRerank(params.q, params.mode) ? store.rerank : undefined;
+  // With reranking, Clef sees RERANK_CANDIDATES passages: either the best
+  // article of that many documents, or several articles of fewer documents
+  // (the right law with the wrong article was the main miss on 2026-11-04).
+  const passages = reranker ? Math.min(3, Math.max(1, params.passages ?? ANSWER_PASSAGES)) : 1;
   const search = await searchDocuments(
     store,
     {
       ...params,
       prefer: params.prefer ?? "mevzuat",
-      limit: reranker ? Math.max(limit, RERANK_CANDIDATES) : limit,
+      limit: reranker ? Math.max(limit, Math.ceil(RERANK_CANDIDATES / passages)) : limit,
+      passages,
     },
     origin,
   );
 
   // Only quote provisions: a law's title or a document without text is not
   // an answer to anything.
-  let candidates = search.results.filter(
-    (result) => result.snippet && result.matched_kind !== "title" && result.text_status !== "metadata",
-  );
+  type Passage = { result: SearchResult; ref: string | null; text: string; snippet: string; url: string };
+  const rounds: Passage[][] = [[]];
+  for (const result of search.results) {
+    if (result.text_status === "metadata") continue;
+    if (result.snippet && result.matched_kind !== "title") {
+      rounds[0].push({
+        result,
+        ref: result.matched_ref,
+        text: result.matched_text || result.snippet,
+        snippet: result.snippet,
+        url: result.matched_url ?? result.url,
+      });
+    }
+    (result.other_passages ?? []).forEach((other, i) => {
+      (rounds[i + 1] ??= []).push({ result, ref: other.ref, text: other.text, snippet: other.snippet, url: other.url });
+    });
+  }
+  // Best article of every document first, then each document's second, ...
+  let candidates: Passage[] = rounds.flat();
   let probabilities: number[] | null = null;
   let rerank: AnswerResponse["rerank"];
   if (reranker && candidates.length > 1) {
@@ -563,8 +630,8 @@ export async function answerQuestion(
       const result = await reranker.rerank(
         params.q,
         candidates.map((c) => ({
-          label: `${c.citation ?? c.title}${c.matched_ref ? `, ${c.matched_ref}` : ""}`,
-          text: c.matched_text || c.snippet,
+          label: `${c.result.citation ?? c.result.title}${c.ref ? `, ${c.ref}` : ""}`,
+          text: c.text,
         })),
       );
       const order = candidates
@@ -576,6 +643,7 @@ export async function answerQuestion(
         model: result.model,
         applied: true,
         candidates: order.length,
+        passages_per_document: passages,
         top_probability: round3(order[0]?.p ?? 0),
         none_probability: round3(result.none),
       };
@@ -583,23 +651,25 @@ export async function answerQuestion(
       // Quota, timeout or an unexpected answer: keep today's ranking.
       console.warn("rerank failed:", error instanceof Error ? error.message : error);
       rerank = { model: "clef-flash", applied: false, error: "unavailable" };
+      candidates = rounds[0];
     }
   }
 
   const quotes: AnswerQuote[] = [];
-  for (const [index, result] of candidates.entries()) {
+  for (const [index, passage] of candidates.entries()) {
     if (quotes.length >= limit) break;
+    const result = passage.result;
     quotes.push({
       document_id: result.id,
       title: result.title,
-      ref: result.matched_ref,
+      ref: passage.ref,
       citation: result.citation,
-      text: result.snippet,
-      url: result.matched_url ?? result.url,
+      text: passage.snippet,
+      url: passage.url,
       source_url: result.source_url,
       text_status: result.text_status,
       // Measured on the quoted window itself: that is what the reader gets.
-      coverage: stemCoverage(result.snippet, params.q),
+      coverage: stemCoverage(passage.snippet, params.q),
       score: result.score,
       ...(probabilities ? { probability: round3(probabilities[index]) } : {}),
     });

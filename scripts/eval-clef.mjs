@@ -193,7 +193,8 @@ const candidateOf = (r) => ({
   text: passage(r),
 });
 const isDoc = (c, item) => c.id === item.expect;
-const isArticle = (c, item) => isDoc(c, item) && (!item.ref || (c.ref ?? "").startsWith(item.ref));
+// "Madde 3" must not match "Madde 30"; a part suffix ("Madde 3 (2/2)") is fine.
+const isArticle = (c, item) => isDoc(c, item) && (!item.ref || c.ref === item.ref || (c.ref ?? "").startsWith(`${item.ref} `));
 
 const raw = {};
 const keepRaw = (key, value) => {
@@ -282,7 +283,7 @@ for (const [n, item] of cases.entries()) {
       const top = extractive.quotes?.[0];
       row.answer_baseline = {
         confidence: extractive.confidence,
-        correct: Boolean(top && top.document_id === item.expect && (!item.ref || (top.ref ?? "").startsWith(item.ref))),
+        correct: Boolean(top && top.document_id === item.expect && (!item.ref || top.ref === item.ref || (top.ref ?? "").startsWith(`${item.ref} `))),
       };
     }
     if (token && candidates.length) {
