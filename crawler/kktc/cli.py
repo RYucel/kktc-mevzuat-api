@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .build import build_database, export_d1, read_stats
+from .build import build_database, export_d1, load_d1_state, read_stats
 from .history import copy_history_into, record_versions
 from .textproc import parse_consolidation
 from .config import DATA_DIR, DB_PATH, DIST_DIR, HISTORY_PATH, MAHKEMELER_BASE, GOV_BASE, GOV_TIMEOUT, ensure_dirs
@@ -168,7 +168,7 @@ def cmd_build(args: argparse.Namespace) -> None:
         stats["history"]["this_run"] = history
     print(json.dumps(stats, ensure_ascii=False, indent=2))
     if not args.no_export:
-        export_d1(Path(args.db), Path(args.out))
+        export_d1(Path(args.db), Path(args.out), load_d1_state(getattr(args, "d1_state", None)))
 
 
 def cmd_update(args: argparse.Namespace) -> None:
@@ -202,7 +202,7 @@ def cmd_update(args: argparse.Namespace) -> None:
                 revalidate=True,
             )
         )
-    build_args = argparse.Namespace(db=str(DB_PATH), out=str(DIST_DIR / "d1"), no_export=args.no_export, history=str(HISTORY_PATH), no_history=False)
+    build_args = argparse.Namespace(db=str(DB_PATH), out=str(DIST_DIR / "d1"), no_export=args.no_export, history=str(HISTORY_PATH), no_history=False, d1_state=None)
     cmd_build(build_args)
 
 
@@ -282,6 +282,7 @@ def main(argv: list[str] | None = None) -> None:
     build.add_argument("--db", default=str(DB_PATH))
     build.add_argument("--out", default=str(DIST_DIR / "d1"))
     build.add_argument("--no-export", action="store_true")
+    build.add_argument("--d1-state", default=None, help="d1-state.json from the last successful D1 import; export only what changed since (missing/old = full import)")
     build.add_argument("--history", default=str(HISTORY_PATH), help="persistent version history database")
     build.add_argument(
         "--no-history",
@@ -293,7 +294,8 @@ def main(argv: list[str] | None = None) -> None:
     export = sub.add_parser("export", help="export the database as D1 SQL files")
     export.add_argument("--db", default=str(DB_PATH))
     export.add_argument("--out", default=str(DIST_DIR / "d1"))
-    export.set_defaults(func=lambda a: export_d1(Path(a.db), Path(a.out)))
+    export.add_argument("--d1-state", default=None, help="d1-state.json from the last successful D1 import; export only what changed since (missing/old = full import)")
+    export.set_defaults(func=lambda a: export_d1(Path(a.db), Path(a.out), load_d1_state(a.d1_state)))
 
     update = sub.add_parser("update", help="crawl, fetch text, build and export")
     update.add_argument("--text-limit", type=int, default=0)
