@@ -19,11 +19,14 @@ export const RERANK_MODEL = "clef-flash";
 /** Candidates sent to Clef (the measured setting). */
 export const RERANK_CANDIDATES = 10;
 /**
- * Articles per document offered to Clef (1 = the measured 2026-11-04 setup:
- * the best article of 10 documents). /v1/answer?passages=2|3 tries more
- * articles of fewer documents; scripts/eval-answer.mjs compares them.
+ * Articles per document offered to Clef. Measured 2026-11-05 on 35
+ * natural-language questions (scripts/eval-answer.mjs, live /v1/answer):
+ *   passages=1: right article first 20.0%, in top 5 22.9%, "high" right 7/17
+ *   passages=2: 45.7%, 45.7%, 13/19
+ *   passages=3: 45.7%, 51.4%, 15/18 (all six "low" answers were wrong)
+ * Right statute first stayed at 60% for all three; 3 costs ~0.2 s more.
  */
-export const ANSWER_PASSAGES = 1;
+export const ANSWER_PASSAGES = 3;
 const PASSAGE_CHARS = 420;
 
 /** The runtime's daily Clef budget is used up; answers fall back to search order. */
