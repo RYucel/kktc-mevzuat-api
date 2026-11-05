@@ -75,6 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(doc_id, ord);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     text_norm,
+    scope,
     tokenize = 'unicode61 remove_diacritics 2'
 );
 """
@@ -251,9 +252,10 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
         "INSERT INTO chunks (id, doc_id, ord, kind, ref, text, chars) VALUES (?,?,?,?,?,?,?)",
         [(cid, *row) for cid, row in chunk_ids],
     )
+    doc_types = {row[0]: row[1] for row in document_rows}
     conn.executemany(
-        "INSERT INTO chunks_fts (rowid, text_norm) VALUES (?, ?)",
-        [(cid, index_text(row[4])) for cid, row in chunk_ids],
+        "INSERT INTO chunks_fts (rowid, text_norm, scope) VALUES (?, ?, ?)",
+        [(cid, index_text(row[4]), scope_tokens(doc_types.get(row[0], "yasa"))) for cid, row in chunk_ids],
     )
 
     # Precompute the /v1/stats payload. Reading it back is one meta row instead
@@ -320,6 +322,18 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
         meta["db_bytes"] / 1024 / 1024,
     )
     return meta
+
+
+# Document type and group as FTS tokens (column "scope"), so a search can be
+# restricted to legislation or court decisions inside the FTS index itself and
+# only the top matches are read from D1 (see packages/core/src/sql.ts). The
+# "xq" prefix keeps them from matching any word of the text.
+LEGISLATION_TYPES = {"yasa", "tuzuk", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"}
+
+
+def scope_tokens(doc_type: str) -> str:
+    group = "mevzuat" if doc_type in LEGISLATION_TYPES else "ictihat" if doc_type == "karar" else "diger"
+    return f"xqt{doc_type} xqg{group}"
 
 
 def _chunk_id(doc_id: str, ord_: int, used: set[int]) -> int:
@@ -415,6 +429,7 @@ CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(doc_id, ord);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     text_norm,
+    scope,
     tokenize = 'unicode61 remove_diacritics 2'
 );
 
@@ -471,8 +486,12 @@ class SqlFileWriter:
         return self.files
 
 
-D1_STATE_VERSION = 2  # bump when chunk ids or the D1 layout change: forces a full import
+D1_STATE_VERSION = 3  # bump when chunk ids or the D1 layout change: forces a full import
+# v3: chunks_fts gained the "scope" column.
 D1_STATE_FILE = "d1-state.json"
+_FTS_CREATE = """
+CREATE VIRTUAL TABLE chunks_fts USING fts5(text_norm, scope, tokenize = 'unicode61 remove_diacritics 2');
+"""
 _DELETE_BATCH = 100
 _VOLATILE_COLUMNS = {"fetched_at", "updated_at"}
 
@@ -489,7 +508,7 @@ def _fingerprints(conn: sqlite3.Connection) -> dict[str, str]:
         h.update(json.dumps(values, ensure_ascii=False, default=str).encode("utf-8"))
         hashes[row["id"]] = h
     for row in conn.execute(
-        "SELECT c.doc_id, c.id, c.ord, c.kind, c.ref, c.text, c.chars, f.text_norm "
+        "SELECT c.doc_id, c.id, c.ord, c.kind, c.ref, c.text, c.chars, f.text_norm, f.scope "
         "FROM chunks c JOIN chunks_fts f ON f.rowid = c.id ORDER BY c.doc_id, c.ord"
     ):
         h = hashes.get(row["doc_id"])
@@ -560,8 +579,13 @@ def export_d1(
         changed = sorted(fingerprints)
         removed = []
         write_history = history_fp is not None
+        # The FTS table is dropped and recreated rather than emptied: that
+        # picks up schema changes (CREATE ... IF NOT EXISTS would keep an old
+        # table) and costs no row reads.
         (out_dir / "002-reset.sql").write_text(
-            "DELETE FROM chunks_fts;\nDELETE FROM chunks;\nDELETE FROM documents;\nDELETE FROM meta;\n"
+            "DROP TABLE IF EXISTS chunks_fts;\n"
+            + _FTS_CREATE.strip()
+            + "\nDELETE FROM chunks;\nDELETE FROM documents;\nDELETE FROM meta;\n"
             "DELETE FROM changes;\nDELETE FROM doc_versions;\n",
             encoding="utf-8",
         )
@@ -598,10 +622,12 @@ def export_d1(
 
         writer = SqlFileWriter(out_dir / "030-fts.sql")
         for row in conn.execute(
-            "SELECT f.rowid AS rowid, f.text_norm FROM chunks_fts f JOIN chunks c ON c.id = f.rowid "
+            "SELECT f.rowid AS rowid, f.text_norm, f.scope FROM chunks_fts f JOIN chunks c ON c.id = f.rowid "
             "JOIN export_ids e ON e.id = c.doc_id ORDER BY c.doc_id, c.ord"
         ):
-            writer.write(f"INSERT INTO chunks_fts (rowid, text_norm) VALUES ({row['rowid']},{_sql(row['text_norm'])});")
+            writer.write(
+                f"INSERT INTO chunks_fts (rowid, text_norm, scope) VALUES ({row['rowid']},{_sql(row['text_norm'])},{_sql(row['scope'])});"
+            )
         writer.close()
 
     # Version history: small; rewritten whole, and only when it changed.
