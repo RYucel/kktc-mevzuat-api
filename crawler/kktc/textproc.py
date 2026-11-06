@@ -9,6 +9,7 @@ without asking SQLite for them.
 from __future__ import annotations
 
 import re
+import statistics
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Iterable, Optional
@@ -60,8 +61,12 @@ _TOC_MARKER_RE = re.compile(
     r"(?mi)^[ \t]*(?:İÇDÜZENİ|İÇİNDEKİLER|İÇERİK|CONTENTS|MADDE[ \t]*D[İI]Z[İI]N[İI][ \t]*:?)[ \t]*$"
 )
 _TOC_ENTRY_RE = re.compile(r"(?m)^[ \t]*(?:MADDE|Madde)[ \t]+\d{1,4}[A-Z]?\b[^\n]*$")
+# Word files of the old chapters omit the space after the article number
+# ("Kısa isim. 1.Bu Yasa", "2.(1)Bu Yasa"); the patterns below accept that,
+# but not abbreviations such as "4.A.E. 541/24" (margin note: article 4 of
+# A.E. 541/2024).
 _TITLE_NUM_RE = re.compile(
-    r"(?m)^[ \t]*(?P<title>[A-ZÇĞİÖŞÜ][^\n]{1,80}?)[ \t]+(?P<num>\d{1,4})(?P<suf>[A-Z])?\.[ \t]+(?P<rest>[^\n]*)$"
+    r"(?m)^[ \t]*(?P<title>[“\"]?[A-ZÇĞİÖŞÜ][^\n]{1,80}?)[ \t]+(?P<num>\d{1,4})(?P<suf>[A-Z])?\.(?:[ \t]+|(?=[A-ZÇĞİÖŞÜ(])(?![A-ZÇĞİÖŞÜ]\.))(?P<rest>[^\n]*)$"
 )
 # Heading + number where the body starts on the next (possibly blank) line:
 #   "Kısa İsim 1.\n\nBu Yasa ..."
@@ -70,12 +75,12 @@ _TITLE_BARE_NUM_RE = re.compile(
 )
 # Heading printed with a full stop before the number ("Kısa isim. 1. ...").
 _TITLE_PERIOD_NUM_RE = re.compile(
-    r"(?m)^[ \t]*(?P<title>[A-ZÇĞİÖŞÜ][^\n.]{1,80}?)\.[ \t]+(?P<num>\d{1,4})(?P<suf>[A-Z])?\.[ \t]+(?P<rest>[A-ZÇĞİÖŞÜ(][^\n]*)$"
+    r"(?m)^[ \t]*(?P<title>[“\"]?[A-ZÇĞİÖŞÜ][^\n.]{1,110}?)\.[ \t]+(?P<num>\d{1,4})(?P<suf>[A-Z])?\.(?:[ \t]+|(?![A-ZÇĞİÖŞÜ]\.))(?P<rest>[A-ZÇĞİÖŞÜ(][^\n]*)$"
 )
 # PDF extraction may join the heading to the previous sentence:
 #   "... aşağıdaki Tüzüğü yapar: Kısa İsim 1. Bu Tüzük ..."
 _JOINED_TITLE_NUM_RE = re.compile(
-    r"(?m)(?:^|[.:;]\s+)(?P<title>[A-ZÇĞİÖŞÜ][^\n:;]{1,80}?)[ \t]+(?P<num>\d{1,4})(?P<suf>[A-Z])?\.[ \t]+(?P<rest>[A-ZÇĞİÖŞÜ(][^\n]*)$"
+    r"(?m)(?:^|[.:;]\s+)(?P<title>[A-ZÇĞİÖŞÜ][^\n:;]{1,80}?)[ \t]+(?P<num>\d{1,4})(?P<suf>[A-Z])?\.(?:[ \t]+|(?![A-ZÇĞİÖŞÜ]\.))(?P<rest>[A-ZÇĞİÖŞÜ(][^\n]*)$"
 )
 # Amendment footnotes printed between an article heading and its number, e.g.
 # "Hayvanın Tutsak Edilmesi 9(2).17/2025 383. ...".
@@ -83,7 +88,7 @@ _TITLE_FOOTNOTE_SUFFIX_RE = re.compile(
     r"[ \t]+(?:\d{1,3}\s*\(\d+\)\.\s*\d{1,4}\s*/\s*\d{4}|\d{1,3}\.\s*\d{1,4}\s*/\s*\d{4})[ \t]*$"
 )
 _NUM_RE = re.compile(
-    r"(?m)^[ \t]*(?P<num>\d{1,4})(?P<suf>[A-Z])?\.[ \t]+(?P<rest>[A-ZÇĞİÖŞÜ(][^\n]*)$"
+    r"(?m)^[ \t]*(?P<num>\d{1,4})(?P<suf>[A-Z])?\.(?:[ \t]+|(?![A-ZÇĞİÖŞÜ]\.))(?P<rest>[A-ZÇĞİÖŞÜ(][^\n]*)$"
 )
 # A footnote may sit on its own line between the heading and the number:
 #   "Hayvanı Terk Etmek\n9(2).17/2025 385. (1) ..."
@@ -333,17 +338,32 @@ def _suffix_rank(suffix: str) -> int:
     return (ord(suffix) - 64) if suffix else 0
 
 
-def _looks_like_title(line: str) -> bool:
-    """True for short heading lines such as "Kısa İsim" or "TEFSİR"."""
+_OPENING_QUOTES = "“\"'‘«"
+
+
+def _looks_like_title(line: str, max_words: int = 9) -> bool:
+    """True for short heading lines such as "Kısa İsim" or "TEFSİR".
+
+    Headings of the old chapters may open with a quoted term
+    ("“Zorlama”nın tanımlanması").
+    """
     line = line.strip()
     if not line or len(line) > 90:
         return False
     if line[-1] in ".:;,)" or line[0] in "([":
         return False
-    if not line[0].isupper():
+    first = line.lstrip(_OPENING_QUOTES)
+    if not first or not first[0].isupper():
         return False
+    if first != line:
+        # A quoted heading names and defines a term ("“Zorlama”nın
+        # tanımlanması"); a bare quoted term ("“Meclis”") is a definition-list
+        # entry, not a heading.
+        close = max(line.rfind("”"), line.rfind('"'), line.rfind("’"))
+        if close <= 0 or not re.search(r"[A-Za-zÇĞİÖŞÜçğıöşü]{3,}", line[close + 1 :]):
+            return False
     words = line.split()
-    if len(words) > 9:
+    if len(words) > max_words:
         return False
     if any(ch.isdigit() for ch in line):
         return False
@@ -379,12 +399,18 @@ def _leading_margin_refs(line: str) -> int:
         pos = match.end()
 
 
+# Old chapters print other chapters and two-digit-year laws as margin notes
+# before the article number: "Bölüm 154. 15.(1) ...", "2, 7/56 11. (1) ...".
+_OLD_MARGIN_PREFIX_RE = re.compile(
+    r"^[ \t]*(?P<note>Bölüm[ \t]+\d{1,3}\.|(?:\d{1,3}[ \t]*[.,][ \t]*)?\d{1,3}[ \t]*/[ \t]*\d{2}(?!\d))[ \t]+(?=\d{1,4}[A-Z]?\.)"
+)
+_OLD_MARGIN_LINE_RE = re.compile(r"^[ \t]*Bölüm[ \t]+\d{1,3}\.[ \t]*$")
 _EFFECTIVE_LINE_RE = re.compile(r"^[ \t]*Yürürlük\s+tarihi\s*:[^\n]{1,40}$")
 _EFFECTIVE_NOTE_RE = re.compile(r"^(?P<note>Yürürlük\s+tarihi\s*:[^\n]{1,40}?)[ \t]+(?=\d{1,4}[A-Z]?\.[ \t])")
 _LEADING_ARTICLE_NUM_RE = re.compile(r"^(?P<num>\d{1,4}[A-Z]?\.)[ \t]+(?P<rest>\S.*)$")
 # A heading wrapped onto two lines: "İstisnalar ve\nmuaflıklar 6. Aşağıda ...",
 # or with a full stop after the heading: "Onaylanmış\nliman. 3. Bakanlar ...".
-_WRAPPED_TITLE_TAIL_RE = re.compile(r"^[a-zçğıöşü][^\n]{0,60}?[ \t]+\d{1,4}[A-Z]?\.[ \t]+\S")
+_WRAPPED_TITLE_TAIL_RE = re.compile(r"^[a-zçğıöşü][^\n]{0,70}?\.?[ \t]+\d{1,4}[A-Z]?\.(?:[ \t]+|(?=[A-ZÇĞİÖŞÜ(]))\S")
 _TRANSITIONAL_RE = re.compile(r"[ \t]*(?:Geçici|GEÇİCİ|Gecici|GECICI|Ek|EK)\s+(?:Madde|MADDE)\b")
 
 
@@ -399,6 +425,13 @@ def normalize_margin_notes(text: str) -> str:
             pending.clear()
 
     for line in text.split("\n"):
+        if _OLD_MARGIN_LINE_RE.match(line):
+            pending.append(line.strip())
+            continue
+        old = _OLD_MARGIN_PREFIX_RE.match(line)
+        if old:
+            pending.append(old.group("note"))
+            line = line[old.end():]
         run = _leading_margin_refs(line)
         if run and not line[run:].strip():
             pending.append(re.sub(r"\s+", " ", line.strip().rstrip(",;")))
@@ -437,9 +470,9 @@ def normalize_margin_notes(text: str) -> str:
         if (
             out
             and _WRAPPED_TITLE_TAIL_RE.match(line)
-            and out[-1].strip()
+            and out[-1].strip().lstrip(_OPENING_QUOTES)
             and len(out[-1].strip()) <= 50
-            and out[-1].strip()[0].isupper()
+            and out[-1].strip().lstrip(_OPENING_QUOTES)[0].isupper()
             and out[-1].rstrip()[-1] not in ".:;,)"
         ):
             out[-1] = out[-1].rstrip() + " " + line.lstrip()
@@ -493,7 +526,9 @@ def _article_candidates(text: str) -> list[dict]:
     for m in _TITLE_PERIOD_NUM_RE.finditer(text):
         rest = (m.group("rest") or "").strip()
         title = m.group("title").strip()
-        if _AMENDMENT_REF_RE.match(rest) or not _looks_like_title(title):
+        # "Title. N." headings of the old chapters run longer ("İvazları ve
+        # amaçları kısmen yasa dışı olan anlaşmaların geçersiz olması. 24.").
+        if _AMENDMENT_REF_RE.match(rest) or not _looks_like_title(title, max_words=14):
             continue
         add(m.start(), int(m.group("num")), m.group("suf") or "", title, 1)
 
@@ -736,13 +771,68 @@ def _strip_toc_run(text: str) -> str:
     return text[:removed_start] + "\n" + text[body_start:]
 
 
+def _strip_numbered_toc(text: str) -> str:
+    """Remove a table of contents written as bare numbered headings.
+
+    mevzuat.mahkemeler.net Word files of the old Cyprus chapters (Sözleşmeler,
+    Şirketler, Hukuk Muhakemeleri Usulü, Haksız Fiiller, ...) open with an
+    index such as "1.\n\nKısa isim\n2. Yasanın genel yorum kuralı" with no
+    "İÇDÜZENİ" heading and no "Madde" keyword, so neither _strip_toc nor
+    _strip_toc_run sees it. Taken as articles, the index swallowed the real
+    articles: the whole body ended up under the last index entry (audit of
+    2026-11-05: 38 of 626 laws, among them Fasıl 113, 149, 6 and 148).
+
+    The index is recognised by its shape: a run of at least ten numbered
+    entries packed closely together (median gap < 150 characters), after
+    which the numbering restarts at 1 or 2 and the entries are spaced like
+    article bodies.
+    """
+    # Laws whose articles say "MADDE N" (with bodies after them) have their
+    # index handled by _strip_toc / _strip_toc_run; numbered paragraphs inside
+    # those articles would look like an index here (1960 Anayasası).
+    keyword_starts = [m.start() for m in _ARTICLE_RE.finditer(text)] + [len(text)]
+    if sum(1 for a, b in zip(keyword_starts, keyword_starts[1:]) if b - a >= 200) >= 10:
+        return text
+    candidates = _article_candidates(text)
+    if len(candidates) < 20:
+        return text
+    peak = 0
+    for idx, cand in enumerate(candidates):
+        if cand["num"] <= 2 and peak >= 10 and idx >= 10:
+            run = candidates[:idx]
+            gaps = [b["pos"] - a["pos"] for a, b in zip(run, run[1:])]
+            following = candidates[idx : idx + 8]
+            body_gaps = [b["pos"] - a["pos"] for a, b in zip(following, following[1:])]
+            increasing = sum(1 for a, b in zip(run, run[1:]) if b["num"] > a["num"]) / max(1, len(run) - 1)
+            body_peak = max((c["num"] for c in candidates[idx:]), default=0)
+            if (
+                gaps
+                # An index sits at the top of the document ...
+                and run[0]["pos"] < 0.2 * len(text)
+                and cand["pos"] < 0.5 * len(text)
+                # ... is a dense, mostly increasing list ...
+                and statistics.median(gaps) < 150
+                and increasing >= 0.8
+                # ... and the body after it is spaced like articles and
+                # numbered up to roughly where the index ended. A numbered
+                # list inside an article (items 1..12, then "1." again) fails
+                # these tests.
+                and body_gaps
+                and statistics.median(body_gaps) >= 2 * statistics.median(gaps)
+                and body_peak >= 0.6 * peak
+            ):
+                return text[: run[0]["pos"]] + text[cand["pos"] :]
+        peak = max(peak, cand["num"])
+    return text
+
+
 def split_articles(text: str) -> list[Chunk]:
     """Split a consolidated law text into article chunks.
 
     Returns an empty list when the text does not look like an article-based
     law; callers then fall back to paragraph chunking.
     """
-    text = _strip_toc_run(_strip_toc(normalize_margin_notes(text)))
+    text = _strip_numbered_toc(_strip_toc_run(_strip_toc(normalize_margin_notes(text))))
     candidates = _article_candidates(text)
     if len(candidates) < 2:
         return []
