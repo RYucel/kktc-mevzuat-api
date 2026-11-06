@@ -117,3 +117,27 @@ def test_old_or_missing_state_means_full_import(tmp_path: Path) -> None:
     old = tmp_path / "old.json"
     old.write_text(json.dumps({"version": 1, "docs": {}}))
     assert load_d1_state(old) is None
+
+
+def test_fts_scope_column_filters_by_type_and_group(tmp_path: Path) -> None:
+    db = tmp_path / "a.db"
+    build_database(_docs("a"), db)
+    conn = sqlite3.connect(db)
+    try:
+        def docs(match: str) -> set[str]:
+            return {
+                r[0]
+                for r in conn.execute(
+                    "SELECT c.doc_id FROM chunks_fts f JOIN chunks c ON c.id = f.rowid WHERE chunks_fts MATCH ?", (match,)
+                )
+            }
+
+        everything = docs("metni OR yasa*")
+        assert docs("(metni OR yasa*) AND scope:xqgictihat") == {"karar-1"}
+        assert "karar-1" not in docs("(metni OR yasa*) AND scope:xqgmevzuat")
+        assert docs("(metni OR yasa*) AND scope:xqtyasa") == everything - {"karar-1"}
+        assert docs("(metni OR yasa*) NOT scope:xqgmevzuat") == {"karar-1"}
+        # Scope tokens never match ordinary words.
+        assert not docs("xqt*") - everything
+    finally:
+        conn.close()

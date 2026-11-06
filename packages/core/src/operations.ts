@@ -3,6 +3,7 @@ import {
   articleSql,
   buildCountSql,
   buildSearchSql,
+  buildSearchSqlFull,
   ARTICLE_PAIRS_PER_QUERY,
   CHUNK_PAIRS_PER_QUERY,
   chunkRowsSql,
@@ -161,6 +162,9 @@ export function mapSummary(row: StoreRow, origin: string): DocumentSummary {
   return { ...summary, citation: buildCitation(summary), consolidated_through: consolidatedThrough(extra) };
 }
 
+/** Set once per isolate when D1's chunks_fts lacks the scope column. */
+let ftsScopeMissing = false;
+
 export async function searchDocuments(
   store: Store,
   params: SearchParams,
@@ -197,7 +201,20 @@ export async function searchDocuments(
   };
 
   const fetchRows = async (match: string, overrides: Partial<SearchParams> = {}) => {
-    const search = buildSearchSql(match, { ...searchParams, ...overrides });
+    const merged = { ...searchParams, ...overrides };
+    if (!ftsScopeMissing) {
+      const search = buildSearchSql(match, merged);
+      try {
+        return await store.all(search.sql, search.binds);
+      } catch (error) {
+        // D1 not yet re-imported with the FTS "scope" column: use the old
+        // single query until the next full import (and remember that).
+        if (!/no such column|scope/i.test(String(error instanceof Error ? error.message : error))) throw error;
+        ftsScopeMissing = true;
+        console.warn("chunks_fts has no scope column yet; using the full-scan search");
+      }
+    }
+    const search = buildSearchSqlFull(match, merged);
     return store.all(search.sql, search.binds);
   };
 

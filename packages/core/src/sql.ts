@@ -43,9 +43,16 @@ function filters(params: SearchParams): { sql: string[]; binds: unknown[] } {
   return { sql, binds };
 }
 
-export function buildSearchSql(match: string, params: SearchParams): { sql: string; binds: unknown[] } {
-  const f = filters(params);
-  const fetchLimit = Math.min(1000, Math.max(params.limit + params.offset, 1) * 20);
+/** FTS candidates read per channel: D1 bills every row the FTS index yields. */
+export const FTS_TOP_K = 400;
+const LEGISLATION = ["yasa", "tuzuk", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"];
+
+/** Same groups as crawler/kktc/build.py scope_tokens(). */
+function scopeGroup(type: string): string {
+  return LEGISLATION.includes(type) ? "mevzuat" : type === "karar" ? "ictihat" : "diger";
+}
+
+function rankingSql(params: SearchParams, score: string): string {
   const prefer =
     params.prefer === "mevzuat"
       ? "CASE WHEN d.type IN ('yasa', 'tuzuk', 'anayasa') THEN 1.6 ELSE 1.0 END"
@@ -57,11 +64,8 @@ export function buildSearchSql(match: string, params: SearchParams): { sql: stri
         .map((id) => `'${id.replace(/'/g, "''")}'`)
         .join(", ")}) THEN 4.0 ELSE 1.0 END`
     : "1.0";
-  const sql = `
-    SELECT
-      c.doc_id, c.ref AS matched_ref, c.kind AS matched_kind, c.text AS chunk_text,
-      ${DOC_COLUMNS},
-      bm25(chunks_fts) * CASE
+  return `
+      ${score} * CASE
         -- Court titles duplicate their subject tags; do not let them bury statutes.
         WHEN c.kind = 'title' AND d.type = 'karar' THEN 1.25
         WHEN c.kind = 'title' THEN 1.8
@@ -76,7 +80,88 @@ export function buildSearchSql(match: string, params: SearchParams): { sql: stri
         -- mevzuat.gov.ct.tr carries the consolidated, currently in-force text.
         WHEN 'gov' THEN 1.25
         ELSE 1.0
-      END AS rank
+      END`;
+}
+
+/**
+ * Two-phase search: the FTS index returns only its best FTS_TOP_K matches
+ * (ORDER BY rank inside FTS5), and only those are joined with chunks and
+ * documents and re-ranked. The old single query scored every match in SQL,
+ * so D1 read every matching chunk and document row: ~250K rows for one
+ * natural-language question on 4 November 2026, against a 5M daily quota.
+ *
+ * Type and preference are applied inside the index through the "scope"
+ * column (xqt<type>, xqg<mevzuat|ictihat|diger>), so a preferred group cannot
+ * be crowded out of the top K. Year, source and court filters are not in the
+ * index; those requests use buildSearchSqlFull.
+ */
+export function buildSearchSql(match: string, params: SearchParams): { sql: string; binds: unknown[] } {
+  if (params.year || params.source || params.court) return buildSearchSqlFull(match, params);
+  const fetchLimit = Math.min(1000, Math.max(params.limit + params.offset, 1) * 20);
+  const k = Math.max(FTS_TOP_K, fetchLimit);
+  const channels: { match: string; limit: number; restrict?: string[] }[] = [];
+  const base = `(${match})`;
+  if (params.doc_ids?.length) {
+    channels.push({ match: base, limit: k, restrict: params.doc_ids });
+  } else if (params.type) {
+    channels.push({ match: `${base} AND scope:xqt${params.type.replace(/[^a-z]/g, "")}`, limit: k });
+  } else if (params.prefer) {
+    const group = params.prefer === "mevzuat" ? "xqgmevzuat" : "xqgictihat";
+    channels.push({ match: `${base} AND scope:${group}`, limit: k });
+    channels.push({ match: `${base} NOT scope:${group}`, limit: Math.max(100, Math.floor(k / 4)) });
+  } else {
+    channels.push({ match: base, limit: k });
+  }
+
+  const binds: unknown[] = [];
+  const parts = channels.map((channel) => {
+    binds.push(channel.match);
+    let restrict = "";
+    if (channel.restrict) {
+      // Only the chunks of these documents: the index is probed per rowid.
+      restrict = ` AND rowid IN (SELECT id FROM chunks WHERE doc_id IN (${channel.restrict.map(() => "?").join(", ")}))`;
+      binds.push(...channel.restrict);
+    }
+    binds.push(channel.limit);
+    return `SELECT * FROM (SELECT rowid AS id, rank AS r FROM chunks_fts WHERE chunks_fts MATCH ?${restrict} ORDER BY rank LIMIT ?)`;
+  });
+
+  const extra: string[] = [];
+  if (params.exclude_title) extra.push("c.kind != 'title'");
+  if (params.type) {
+    extra.push("d.type = ?");
+    binds.push(params.type);
+  }
+  const sql = `
+    WITH top AS (${parts.join(" UNION ALL ")})
+    SELECT
+      c.doc_id, c.ref AS matched_ref, c.kind AS matched_kind, c.text AS chunk_text,
+      ${DOC_COLUMNS},
+      ${rankingSql(params, "top.r")} AS rank
+    FROM top
+    JOIN chunks c ON c.id = top.id
+    JOIN documents d ON d.id = c.doc_id
+    ${extra.length ? `WHERE ${extra.join(" AND ")}` : ""}
+    ORDER BY rank
+    LIMIT ?
+  `;
+  binds.push(fetchLimit);
+  return { sql, binds };
+}
+
+/**
+ * Single query that scores every match: exact for any filter, but reads every
+ * matching row. Used for year/source/court filters and while D1 still has the
+ * FTS table without the scope column (see searchDocuments).
+ */
+export function buildSearchSqlFull(match: string, params: SearchParams): { sql: string; binds: unknown[] } {
+  const f = filters(params);
+  const fetchLimit = Math.min(1000, Math.max(params.limit + params.offset, 1) * 20);
+  const sql = `
+    SELECT
+      c.doc_id, c.ref AS matched_ref, c.kind AS matched_kind, c.text AS chunk_text,
+      ${DOC_COLUMNS},
+      ${rankingSql(params, "bm25(chunks_fts)")} AS rank
     FROM chunks_fts
     JOIN chunks c ON c.id = chunks_fts.rowid
     JOIN documents d ON d.id = c.doc_id
