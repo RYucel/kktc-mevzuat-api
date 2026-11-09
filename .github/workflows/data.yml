@@ -179,6 +179,20 @@ jobs:
           path.write_text(text, encoding="utf-8")
           PY
 
+      # Diagnosis (2026-11-09): which columns make the incremental export
+      # rewrite unchanged documents? Compares this build with D1 before the
+      # import. Read-only; never fails the run.
+      - name: Compare build with D1 (diagnosis)
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute kktc-mevzuat --remote --json --command "SELECT * FROM documents" > /tmp/d1-docs.json
+          npx wrangler d1 execute kktc-mevzuat --remote --json --command "SELECT doc_id, COUNT(*) AS n, SUM(LENGTH(text)) AS chars, SUM(id % 1000003) AS idsum FROM chunks GROUP BY doc_id" > /tmp/d1-chunks.json
+          python scripts/d1_diff.py data/kktc.db /tmp/d1-docs.json /tmp/d1-chunks.json | tee /tmp/d1-diff.txt
+          { echo "### Derleme ile D1 farkı"; echo '```'; head -60 /tmp/d1-diff.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Import schema and data into D1
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         shell: bash
