@@ -152,6 +152,22 @@ md.push("", "### Teşhis: kaçan sorular nerede kaçtı?", "", "| Varyant | doğ
 for (const [variant, s] of Object.entries(summary)) {
   md.push(`| ${variant} | ${s.candidates_known ? `${s.candidates_article}/${s.candidates_known}` : "–"} | ${s.miss_not_retrieved} | ${s.miss_wrong_article} | ${s.miss_not_chosen} | ${s.unanswerable ? `${s.unanswerable_abstained}/${s.unanswerable}` : "–"} |`);
 }
+// Every miss of the first variant, with where the right law stood among
+// what Clef saw (focus candidates first, then the first-step candidates).
+const first = variants[0];
+md.push("", `### Kaçan sorular (${first})`, "", "| Soru | Beklenen | Seçilen (olasılık) | Güven | Beklenen yasa Clef listesinde |", "|---|---|---|---|---|");
+for (const r of rows) {
+  const v = r.variants[first];
+  if (!v || v.error || r.unanswerable || v.article1) continue;
+  const list = v.rerank?.debug_candidates ?? [];
+  const where = list
+    .map((x, i) => (x.document_id === r.expect ? `#${i + 1} ${x.ref ?? ""} (${x.probability})` : null))
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(", ");
+  const top = v.top ? `${v.top.doc} ${v.top.ref ?? ""} (${v.top.p ?? "–"})` : "–";
+  md.push(`| ${r.q} | ${r.expect} ${r.refs.join("/")} | ${top} | ${v.confidence} | ${where || "yok"} |`);
+}
 const text = md.join("\n");
 console.log("\n" + text);
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, text + "\n");
