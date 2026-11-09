@@ -33,6 +33,9 @@ def _apply(out_dir: Path, target: Path) -> None:
     order = [l for l in (out_dir / "import-order.txt").read_text().splitlines() if l and not l.startswith("#")]
     for name in order:
         conn.executescript((out_dir / name).read_text(encoding="utf-8"))
+    # data.yml merges the index after every import (contentless FTS keeps
+    # deleted rows' statistics until then).
+    conn.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('optimize')")
     conn.commit()
     conn.close()
 
@@ -47,9 +50,14 @@ def _snapshot(path: Path) -> dict:
             for row in conn.execute("SELECT * FROM documents ORDER BY id")
         ],
         "chunks": conn.execute("SELECT * FROM chunks ORDER BY id").fetchall(),
-        "fts": conn.execute("SELECT rowid, text_norm FROM chunks_fts ORDER BY rowid").fetchall(),
-        # The FTS index itself must answer the same queries.
-        "match": conn.execute("SELECT rowid FROM chunks_fts WHERE chunks_fts MATCH 'fonlarini OR sabit' ORDER BY rowid").fetchall(),
+        # D1's FTS table is contentless, so compare what the index answers:
+        # every chunk is found by its own scope and the queries below agree.
+        "fts": [
+            conn.execute(
+                "SELECT rowid, rank FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY rowid", (match,)
+            ).fetchall()
+            for match in ("fonlarini OR sabit", "yasa OR kapsar OR karar", "scope:xqgmevzuat", "scope:xqgictihat")
+        ],
     }
     conn.close()
     return snap
@@ -76,7 +84,12 @@ def test_incremental_export_matches_full_import(tmp_path: Path) -> None:
     assert summary["removed"] == 1
     assert not (out_b / "002-reset.sql").exists()
     _apply(out_b, d1)
-    assert _snapshot(d1) == _snapshot(db_b)
+    got, want = _snapshot(d1), _snapshot(db_b)
+    # Same rows and the same matches. bm25 values may drift a little after
+    # deletes in a contentless table (FTS5 keeps the deleted rows' length
+    # statistics); the next full import resets them.
+    assert {k: v for k, v in got.items() if k != "fts"} == {k: v for k, v in want.items() if k != "fts"}
+    assert [[r for r, _ in q] for q in got["fts"]] == [[r for r, _ in q] for q in want["fts"]]
 
 
 def test_unchanged_build_writes_no_documents(tmp_path: Path) -> None:
