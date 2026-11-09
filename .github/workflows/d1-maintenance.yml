@@ -14,7 +14,7 @@ on:
       task:
         description: "Görev"
         type: choice
-        options: [optimize, info, inventory]
+        options: [optimize, info, inventory, texts]
         default: optimize
 
 permissions:
@@ -62,3 +62,16 @@ jobs:
       - name: Account inventory
         if: ${{ inputs.task == 'inventory' }}
         run: python3 scripts/cf-inventory.py
+      - name: Statute text report
+        if: ${{ inputs.task == 'texts' }}
+        working-directory: apps/worker
+        run: |
+          npx wrangler d1 execute kktc-mevzuat --remote --json --command "SELECT id, type, title, source, text_status, content_chars, chunk_count, pdf_url, sources_json FROM documents WHERE type != 'karar' ORDER BY id" > /tmp/texts.json
+          python3 - <<'PY'
+          import json
+          rows = json.load(open("/tmp/texts.json"))[0]["results"]
+          print("TEXTS-JSON-BEGIN")
+          for r in rows:
+              print(json.dumps(r, ensure_ascii=False))
+          print("TEXTS-JSON-END")
+          PY
