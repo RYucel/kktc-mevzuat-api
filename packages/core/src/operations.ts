@@ -122,7 +122,12 @@ const MAX_PASSAGES = 20;
  * "high" right 20/35 -> 25/36, unanswerable "low" 6/7 unchanged, +0.7-0.9 s.
  */
 export const FOCUS_DEFAULT = 12;
-/** Below this first-step probability ("high"), the focus step covers the two leading statutes. */
+/**
+ * focus2=1 only: below this first-step probability ("high"), the focus step
+ * covers the two leading statutes. Measured 2026-11-09 against the single
+ * statute focus: right article first 52.7% -> 50.9%, "high" right 28/35 ->
+ * 27/36, so it stays off by default.
+ */
 const FOCUS_TWO_BELOW = 0.7;
 /** ... if the second statute got at least this much of Clef's probability. */
 const FOCUS_TWO_MIN_MASS = 0.05;
@@ -740,7 +745,7 @@ export async function answerQuestion(
     const first = candidates[0].result;
     if (laws[0]?.id === first.id && none < (probs[0] ?? 0)) {
       const second = laws[1];
-      const both = params.focus_two !== false && (probs[0] ?? 0) < FOCUS_TWO_BELOW && second && massOf(second.id) >= FOCUS_TWO_MIN_MASS;
+      const both = params.focus_two === true && (probs[0] ?? 0) < FOCUS_TWO_BELOW && second && massOf(second.id) >= FOCUS_TWO_MIN_MASS;
       const targets = both
         ? [
             { law: first, count: Math.ceil(focusCount * 0.6) },

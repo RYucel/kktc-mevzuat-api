@@ -65,7 +65,7 @@ export interface SearchParams {
   debug?: boolean;
   /** /v1/answer: after Clef picks a statute, ask again among this many of its articles (0 = off). */
   focus?: number;
-  /** /v1/answer: when Clef is not sure of the statute, focus on the two leading ones (default true). */
+  /** /v1/answer: when Clef is not sure of the statute, focus on the two leading ones (default false; measured worse). */
   focus_two?: boolean;
   /** /v1/answer: show Clef the part of each article that matches the question (default true). */
   window?: boolean;

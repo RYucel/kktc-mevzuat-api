@@ -227,7 +227,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       passages: c.req.query("passages") ? intParam(c.req.query("passages"), "passages", 1, 1, 3) : undefined,
       debug: ["1", "true", "yes"].includes((c.req.query("debug") ?? "").toLowerCase()),
       focus: focusParam(c.req.query("focus")),
-      focus_two: !["0", "false", "no"].includes((c.req.query("focus2") ?? "").toLowerCase()),
+      focus_two: ["1", "true", "yes"].includes((c.req.query("focus2") ?? "").toLowerCase()),
       window: !["0", "false", "no"].includes((c.req.query("window") ?? "").toLowerCase()),
       limit: intParam(c.req.query("limit"), "limit", 3, 1, 5),
       offset: 0,
