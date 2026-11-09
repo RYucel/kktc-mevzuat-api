@@ -122,6 +122,10 @@ const MAX_PASSAGES = 20;
  * "high" right 20/35 -> 25/36, unanswerable "low" 6/7 unchanged, +0.7-0.9 s.
  */
 export const FOCUS_DEFAULT = 12;
+/** Below this first-step probability ("high"), the focus step covers the two leading statutes. */
+const FOCUS_TWO_BELOW = 0.7;
+/** ... if the second statute got at least this much of Clef's probability. */
+const FOCUS_TWO_MIN_MASS = 0.05;
 
 function capText(text: string, limit: number): { text: string; truncated: boolean } {
   if (text.length <= limit) return { text, truncated: false };
@@ -720,28 +724,45 @@ export async function answerQuestion(
 
   // Focus: Clef found the statute but often not the article (the right law
   // with the wrong article was the largest miss on 2026-11-09). Ask again
-  // among up to `focus` articles of the chosen statute.
+  // among up to `focus` articles of the chosen statute; when Clef was not
+  // sure of it (below "high"), of the two leading statutes together.
   const focusCount = params.focus ?? FOCUS_DEFAULT;
   if (focusCount > 1 && reranker && rerank?.applied && probabilities && candidates.length) {
-    const chosen = candidates[0].result;
+    const probs = probabilities;
     const none = rerank.none_probability ?? 0;
-    if (LEGISLATION_TYPES.has(chosen.type) && candidates[0].ref && none < (probabilities[0] ?? 0)) {
-      const focus = await focusStatute(store, reranker, params, origin, chosen, candidates, semanticSink, focusCount);
+    const massOf = (id: string) => candidates.reduce((sum, c, i) => sum + (c.result.id === id ? probs[i] ?? 0 : 0), 0);
+    const laws: SearchResult[] = [];
+    for (const c of candidates) {
+      if (!LEGISLATION_TYPES.has(c.result.type) || !c.ref || laws.some((law) => law.id === c.result.id)) continue;
+      laws.push(c.result);
+      if (laws.length === 2) break;
+    }
+    const first = candidates[0].result;
+    if (laws[0]?.id === first.id && none < (probs[0] ?? 0)) {
+      const second = laws[1];
+      const both = params.focus_two !== false && (probs[0] ?? 0) < FOCUS_TWO_BELOW && second && massOf(second.id) >= FOCUS_TWO_MIN_MASS;
+      const targets = both
+        ? [
+            { law: first, count: Math.ceil(focusCount * 0.6) },
+            { law: second, count: focusCount - Math.ceil(focusCount * 0.6) },
+          ]
+        : [{ law: first, count: focusCount }];
+      const focus = await focusStatutes(store, reranker, params, origin, targets, candidates, semanticSink);
       rerank.focus = focus.info;
       if (focus.passages) {
-        // The statute's articles in Clef's new order, then the other statutes.
-        const lawMass = candidates.reduce((sum, c, i) => sum + (c.result.id === chosen.id ? probabilities![i] ?? 0 : 0), 0);
+        const focused = new Set(targets.map((t) => t.law.id));
         const rest = candidates
-          .map((c, i) => ({ c, p: probabilities![i] ?? 0 }))
-          .filter(({ c }) => c.result.id !== chosen.id);
+          .map((c, i) => ({ c, p: probs[i] ?? 0 }))
+          .filter(({ c }) => !focused.has(c.result.id));
+        // Reported probability: the article's within the focused statutes,
+        // capped by how sure the first step was about those statutes.
+        const mass = targets.reduce((sum, t) => sum + massOf(t.law.id), 0);
         candidates = [...focus.passages.map((f) => f.passage), ...rest.map((r) => r.c)];
-        // Reported probability: the article's within the statute, capped by
-        // how sure the first step was about the statute itself.
-        probabilities = [...focus.passages.map((f) => Math.min(f.p, lawMass)), ...rest.map((r) => r.p)];
+        probabilities = [...focus.passages.map((f) => Math.min(f.p, mass)), ...rest.map((r) => r.p)];
         rerank.top_probability = round3(probabilities[0] ?? 0);
         if (params.debug) {
           rerank.debug_candidates = [
-            ...focus.passages.map((f) => ({ document_id: chosen.id, ref: f.passage.ref, probability: round3(f.p) })),
+            ...focus.passages.map((f) => ({ document_id: f.passage.result.id, ref: f.passage.ref, probability: round3(f.p) })),
             ...(rerank.debug_candidates ?? []),
           ];
         }
@@ -802,60 +823,68 @@ export async function answerQuestion(
 
 type Passage = { result: SearchResult; ref: string | null; text: string; snippet: string; url: string };
 
-async function focusStatute(
+async function focusStatutes(
   store: Store,
   reranker: NonNullable<Store["rerank"]>,
   params: SearchParams,
   origin: string,
-  chosen: SearchResult,
+  targets: { law: SearchResult; count: number }[],
   seen: Passage[],
   semanticHits: { doc_id: string; ref: string | null }[],
-  focusCount: number,
 ): Promise<{ info: NonNullable<NonNullable<AnswerResponse["rerank"]>["focus"]>; passages?: { passage: Passage; p: number }[] }> {
-  const info: NonNullable<NonNullable<AnswerResponse["rerank"]>["focus"]> = { document_id: chosen.id, candidates: 0, applied: false };
-  // Articles Clef already saw for this statute lead the vector hits.
-  const hints = [
-    ...seen.filter((c) => c.result.id === chosen.id).map((c) => ({ doc_id: chosen.id, ref: c.ref })),
-    ...semanticHits.filter((hit) => hit.doc_id === chosen.id),
-  ];
-  const search = await searchDocuments(
-    store,
-    {
-      q: params.q,
-      mode: params.mode,
-      doc_ids: [chosen.id],
-      exclude_title: true,
-      semantic_hits: hints,
-      passages: focusCount,
-      limit: 1,
-      offset: 0,
-    },
-    origin,
+  const info: NonNullable<NonNullable<AnswerResponse["rerank"]>["focus"]> = {
+    document_id: targets[0].law.id,
+    ...(targets.length > 1 ? { document_ids: targets.map((t) => t.law.id) } : {}),
+    candidates: 0,
+    applied: false,
+  };
+  const lists = await Promise.all(
+    targets.map(async ({ law, count }) => {
+      // Articles Clef already saw for this statute lead the vector hits.
+      const hints = [
+        ...seen.filter((c) => c.result.id === law.id).map((c) => ({ doc_id: law.id, ref: c.ref })),
+        ...semanticHits.filter((hit) => hit.doc_id === law.id),
+      ];
+      const search = await searchDocuments(
+        store,
+        {
+          q: params.q,
+          mode: params.mode,
+          doc_ids: [law.id],
+          exclude_title: true,
+          semantic_hits: hints,
+          passages: count,
+          limit: 1,
+          offset: 0,
+        },
+        origin,
+      );
+      // What Clef already saw for this statute comes first and always stays in.
+      const passages: Passage[] = seen.filter((c) => c.result.id === law.id);
+      const result = search.results.find((r) => r.id === law.id);
+      if (result?.matched_ref && result.matched_kind !== "title") {
+        passages.push({
+          result: law,
+          ref: result.matched_ref,
+          text: result.matched_text || result.snippet,
+          snippet: result.snippet,
+          url: result.matched_url ?? result.url,
+        });
+      }
+      for (const other of result?.other_passages ?? []) {
+        passages.push({ result: law, ref: other.ref, text: other.text, snippet: other.snippet, url: other.url });
+      }
+      return passages.filter((p, i) => passages.findIndex((q) => q.ref === p.ref) === i).slice(0, Math.max(count, 2));
+    }),
   );
-  const result = search.results.find((r) => r.id === chosen.id);
-  if (!result) return { info };
-  // What Clef already saw for this statute comes first and always stays in.
-  const passages: Passage[] = seen.filter((c) => c.result.id === chosen.id);
-  if (result.matched_ref && result.matched_kind !== "title") {
-    passages.push({
-      result: chosen,
-      ref: result.matched_ref,
-      text: result.matched_text || result.snippet,
-      snippet: result.snippet,
-      url: result.matched_url ?? result.url,
-    });
-  }
-  for (const other of result.other_passages ?? []) {
-    passages.push({ result: chosen, ref: other.ref, text: other.text, snippet: other.snippet, url: other.url });
-  }
-  const unique = passages.filter((p, i) => passages.findIndex((q) => q.ref === p.ref) === i).slice(0, focusCount);
+  const unique = lists.flat();
   info.candidates = unique.length;
   if (unique.length < 2) return { info };
   try {
     const answer = await reranker.rerank(
       params.q,
       unique.map((c) => ({
-        label: `${chosen.citation ?? chosen.title}${c.ref ? `, ${c.ref}` : ""}`,
+        label: `${c.result.citation ?? c.result.title}${c.ref ? `, ${c.ref}` : ""}`,
         text: params.window === false ? c.text : clefPassage(c.text, params.q),
       })),
     );
@@ -865,8 +894,7 @@ async function focusStatute(
     info.applied = true;
     info.top_probability = round3(order[0]?.p ?? 0);
     info.none_probability = round3(answer.none);
-    // "None of these articles" while the first step was sure of the statute:
-    // keep the first step's choice.
+    // "None of these articles": keep the first step's choice.
     if (answer.none >= (order[0]?.p ?? 0)) return { info };
     return { info, passages: order.map(({ passage, p }) => ({ passage, p })) };
   } catch (error) {

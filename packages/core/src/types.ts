@@ -65,6 +65,8 @@ export interface SearchParams {
   debug?: boolean;
   /** /v1/answer: after Clef picks a statute, ask again among this many of its articles (0 = off). */
   focus?: number;
+  /** /v1/answer: when Clef is not sure of the statute, focus on the two leading ones (default true). */
+  focus_two?: boolean;
   /** /v1/answer: show Clef the part of each article that matches the question (default true). */
   window?: boolean;
   /** Internal: receives the vector hits of this search (answer focus step). */
@@ -155,7 +157,7 @@ export interface AnswerResponse {
     candidates?: number;
     passages_per_document?: number;
     /** Focus step: Clef asked again among more articles of its chosen statute. */
-    focus?: { document_id: string; candidates: number; applied: boolean; top_probability?: number; none_probability?: number; error?: string };
+    focus?: { document_id: string; document_ids?: string[]; candidates: number; applied: boolean; top_probability?: number; none_probability?: number; error?: string };
     /** Only with debug=1: every candidate Clef saw, best first. */
     debug_candidates?: { document_id: string; ref: string | null; probability: number }[];
     top_probability?: number;
