@@ -155,9 +155,22 @@ def crawl_gov(client: Optional[HttpClient] = None, *, categories: Iterable[str] 
 
 
 def _mahkemeler_abs(link: str) -> str:
+    """Absolute mahkemeler.net file URL without its random cache-buster.
+
+    The API adds "?rnd=NNNNN" to every DownloadLink, a new number on each
+    request. Kept, it changed pdf_url and sources_json of 10,390 of 10,595
+    documents on every run, so the incremental D1 export rewrote them all
+    (diagnosed 2026-11-09), and it missed the text cache, which is keyed by
+    URL. The files are served without it.
+    """
     if not link:
         return ""
-    return urllib.parse.urljoin(MAHKEMELER_BASE + "/", link)
+    url = urllib.parse.urljoin(MAHKEMELER_BASE + "/", link)
+    parts = urllib.parse.urlsplit(url)
+    if not parts.query:
+        return url
+    query = [(k, v) for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True) if k.lower() != "rnd"]
+    return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
 
 
 def crawl_mahkemeler_yasa(client: MahkemelerClient) -> list[dict[str, Any]]:
