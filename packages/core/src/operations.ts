@@ -10,6 +10,7 @@ import {
   chunksForArticlesSql,
   chunksSql,
   documentSql,
+  inDocArticlesSql,
   primaryDocsSql,
   recentSql,
   STATS_SQL,
@@ -111,6 +112,10 @@ const LEGISLATION_TYPES = new Set([
 const MATCHED_TEXT_LIMIT = 8000;
 const CONCEPT_BOOST = 8;
 const SEMANTIC_TOP_K = 30;
+/** Articles per document at most (the public API allows 3; the answer focus step more). */
+const MAX_PASSAGES = 20;
+/** Articles of the chosen statute shown to Clef in the focus step (focus=1). */
+export const FOCUS_DEFAULT = 12;
 
 function capText(text: string, limit: number): { text: string; truncated: boolean } {
   if (text.length <= limit) return { text, truncated: false };
@@ -295,7 +300,7 @@ export async function searchDocuments(
   );
 
   // Every matching article per document, best first, for other_passages.
-  const passagesPerDoc = Math.min(3, Math.max(1, params.passages ?? 1));
+  const passagesPerDoc = Math.min(MAX_PASSAGES, Math.max(1, params.passages ?? 1));
   const refsByDoc = new Map<string, string[]>();
   const noteRef = (docId: string, ref: unknown) => {
     if (passagesPerDoc < 2) return;
@@ -354,6 +359,7 @@ export async function searchDocuments(
       console.warn("semantic search unavailable:", error instanceof Error ? error.message : error);
     }
     semanticHits = hits;
+    params.semantic_sink?.push(...hits);
     const bestHit = new Map<string, SemanticHit>();
     for (const hit of hits) if (!bestHit.has(hit.doc_id)) bestHit.set(hit.doc_id, hit);
     if (bestHit.size) {
@@ -408,7 +414,26 @@ export async function searchDocuments(
   // Alternatives: the vector index's articles first (it ranks by meaning),
   // then the lexical, concept and canonical-statute matches.
   if (passagesPerDoc > 1) {
-    for (const hit of semanticHits) noteRef(hit.doc_id, hit.ref);
+    // The vector index's articles first, then the statute's own best
+    // articles for the question's words (found even when the global search
+    // only reached the statute through another article), then the rest.
+    const inDoc = await inDocArticles(store, params.q, page.map(({ row }) => row), ftsScopeMissing);
+    const semanticRefs = new Map<string, string[]>();
+    for (const hit of params.semantic_hits ?? semanticHits) {
+      const base = baseArticleRef(asString(hit.ref));
+      if (!base) continue;
+      const list = semanticRefs.get(hit.doc_id) ?? [];
+      if (!list.includes(base)) list.push(base);
+      semanticRefs.set(hit.doc_id, list);
+    }
+    for (const docId of new Set([...semanticRefs.keys(), ...inDoc.keys()])) {
+      const a = semanticRefs.get(docId) ?? [];
+      const b = inDoc.get(docId) ?? [];
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if (i < a.length) noteRef(docId, a[i]);
+        if (i < b.length) noteRef(docId, b[i]);
+      }
+    }
     for (const row of [...rows, ...conceptRows, ...primaryRows]) noteRef(String(row.id), row.matched_ref);
   }
   const alternatesByDoc = new Map<string, string[]>();
@@ -607,10 +632,12 @@ export async function answerQuestion(
   // article of that many documents, or several articles of fewer documents
   // (the right law with the wrong article was the main miss on 2026-11-04).
   const passages = reranker ? Math.min(3, Math.max(1, params.passages ?? ANSWER_PASSAGES)) : 1;
+  const semanticSink: { doc_id: string; ref: string | null }[] = [];
   const search = await searchDocuments(
     store,
     {
       ...params,
+      semantic_sink: semanticSink,
       prefer: params.prefer ?? "mevzuat",
       limit: reranker ? Math.max(limit, Math.ceil(RERANK_CANDIDATES / passages)) : limit,
       passages,
@@ -620,7 +647,6 @@ export async function answerQuestion(
 
   // Only quote provisions: a law's title or a document without text is not
   // an answer to anything.
-  type Passage = { result: SearchResult; ref: string | null; text: string; snippet: string; url: string };
   const rounds: Passage[][] = [[]];
   for (const result of search.results) {
     if (result.text_status === "metadata") continue;
@@ -686,6 +712,36 @@ export async function answerQuestion(
     }
   }
 
+  // Focus: Clef found the statute but often not the article (the right law
+  // with the wrong article was the largest miss on 2026-11-09). Ask again
+  // among up to `focus` articles of the chosen statute.
+  if ((params.focus ?? 0) > 1 && reranker && rerank?.applied && probabilities && candidates.length) {
+    const chosen = candidates[0].result;
+    const none = rerank.none_probability ?? 0;
+    if (LEGISLATION_TYPES.has(chosen.type) && candidates[0].ref && none < (probabilities[0] ?? 0)) {
+      const focus = await focusStatute(store, reranker, params, origin, chosen, candidates, semanticSink);
+      rerank.focus = focus.info;
+      if (focus.passages) {
+        // The statute's articles in Clef's new order, then the other statutes.
+        const lawMass = candidates.reduce((sum, c, i) => sum + (c.result.id === chosen.id ? probabilities![i] ?? 0 : 0), 0);
+        const rest = candidates
+          .map((c, i) => ({ c, p: probabilities![i] ?? 0 }))
+          .filter(({ c }) => c.result.id !== chosen.id);
+        candidates = [...focus.passages.map((f) => f.passage), ...rest.map((r) => r.c)];
+        // Reported probability: the article's within the statute, capped by
+        // how sure the first step was about the statute itself.
+        probabilities = [...focus.passages.map((f) => Math.min(f.p, lawMass)), ...rest.map((r) => r.p)];
+        rerank.top_probability = round3(probabilities[0] ?? 0);
+        if (params.debug) {
+          rerank.debug_candidates = [
+            ...focus.passages.map((f) => ({ document_id: chosen.id, ref: f.passage.ref, probability: round3(f.p) })),
+            ...(rerank.debug_candidates ?? []),
+          ];
+        }
+      }
+    }
+  }
+
   const quotes: AnswerQuote[] = [];
   for (const [index, passage] of candidates.entries()) {
     if (quotes.length >= limit) break;
@@ -735,6 +791,77 @@ export async function answerQuestion(
       "Resmî/bağlayıcı metin için source_url bağlantısına başvurun.",
     _meta: apiMeta(origin),
   };
+}
+
+type Passage = { result: SearchResult; ref: string | null; text: string; snippet: string; url: string };
+
+async function focusStatute(
+  store: Store,
+  reranker: NonNullable<Store["rerank"]>,
+  params: SearchParams,
+  origin: string,
+  chosen: SearchResult,
+  seen: Passage[],
+  semanticHits: { doc_id: string; ref: string | null }[],
+): Promise<{ info: NonNullable<NonNullable<AnswerResponse["rerank"]>["focus"]>; passages?: { passage: Passage; p: number }[] }> {
+  const info: NonNullable<NonNullable<AnswerResponse["rerank"]>["focus"]> = { document_id: chosen.id, candidates: 0, applied: false };
+  // Articles Clef already saw for this statute lead the vector hits.
+  const hints = [
+    ...seen.filter((c) => c.result.id === chosen.id).map((c) => ({ doc_id: chosen.id, ref: c.ref })),
+    ...semanticHits.filter((hit) => hit.doc_id === chosen.id),
+  ];
+  const search = await searchDocuments(
+    store,
+    {
+      q: params.q,
+      mode: params.mode,
+      doc_ids: [chosen.id],
+      exclude_title: true,
+      semantic_hits: hints,
+      passages: params.focus,
+      limit: 1,
+      offset: 0,
+    },
+    origin,
+  );
+  const result = search.results.find((r) => r.id === chosen.id);
+  if (!result) return { info };
+  // What Clef already saw for this statute comes first and always stays in.
+  const passages: Passage[] = seen.filter((c) => c.result.id === chosen.id);
+  if (result.matched_ref && result.matched_kind !== "title") {
+    passages.push({
+      result: chosen,
+      ref: result.matched_ref,
+      text: result.matched_text || result.snippet,
+      snippet: result.snippet,
+      url: result.matched_url ?? result.url,
+    });
+  }
+  for (const other of result.other_passages ?? []) {
+    passages.push({ result: chosen, ref: other.ref, text: other.text, snippet: other.snippet, url: other.url });
+  }
+  const unique = passages.filter((p, i) => passages.findIndex((q) => q.ref === p.ref) === i).slice(0, params.focus ?? FOCUS_DEFAULT);
+  info.candidates = unique.length;
+  if (unique.length < 2) return { info };
+  try {
+    const answer = await reranker.rerank(
+      params.q,
+      unique.map((c) => ({ label: `${chosen.citation ?? chosen.title}${c.ref ? `, ${c.ref}` : ""}`, text: c.text })),
+    );
+    const order = unique
+      .map((passage, i) => ({ passage, i, p: answer.probabilities[i] ?? 0 }))
+      .sort((a, b) => b.p - a.p || a.i - b.i);
+    info.applied = true;
+    info.top_probability = round3(order[0]?.p ?? 0);
+    info.none_probability = round3(answer.none);
+    // "None of these articles" while the first step was sure of the statute:
+    // keep the first step's choice.
+    if (answer.none >= (order[0]?.p ?? 0)) return { info };
+    return { info, passages: order.map(({ passage, p }) => ({ passage, p })) };
+  } catch (error) {
+    info.error = error instanceof RerankLimitError ? "daily_limit" : "unavailable";
+    return { info };
+  }
 }
 
 function round3(value: number): number {
@@ -984,4 +1111,42 @@ export class ApiError extends Error {
 
 export function short(text: string, limit = 600): string {
   return truncate(text, limit);
+}
+
+/** Statutes whose articles are searched again, per answer. */
+const IN_DOC_STATUTES = 4;
+
+/** Best articles for the question's stems inside the top statutes (doc id -> base refs, best first). */
+async function inDocArticles(
+  store: Store,
+  q: string,
+  rows: StoreRow[],
+  ftsScopeMissing: boolean,
+): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  const stems = stemMatch(q);
+  if (!stems || ftsScopeMissing) return result;
+  const docIds = [...new Set(rows.filter((row) => LEGISLATION_TYPES.has(String(row.type))).map((row) => String(row.id)))].slice(
+    0,
+    IN_DOC_STATUTES,
+  );
+  if (!docIds.length) return result;
+  const query = inDocArticlesSql(stems, docIds);
+  let found: StoreRow[];
+  try {
+    found = await store.all(query.sql, query.binds);
+  } catch (error) {
+    // Extra candidates only; the answer still works without them.
+    console.warn("in-statute article search failed", error);
+    return result;
+  }
+  for (const row of found) {
+    const base = baseArticleRef(asString(row.ref));
+    if (!base) continue;
+    const docId = String(row.doc_id);
+    const list = result.get(docId) ?? [];
+    if (!list.includes(base)) list.push(base);
+    result.set(docId, list);
+  }
+  return result;
 }

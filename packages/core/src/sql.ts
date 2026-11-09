@@ -52,6 +52,25 @@ export function docToken(docId: string): string {
   return "xqd" + Array.from(new TextEncoder().encode(docId), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Articles fetched by the in-statute search (all documents together). */
+export const IN_DOC_ARTICLES = 80;
+
+/**
+ * Best-matching articles inside the given statutes, for the answer
+ * candidates: the question's stems searched again, restricted to these
+ * documents with their FTS scope tokens (cheap: one MATCH, LIMIT rows).
+ */
+export function inDocArticlesSql(stems: string, docIds: string[], limit = IN_DOC_ARTICLES): { sql: string; binds: unknown[] } {
+  const docs = docIds.map((id) => `scope:${docToken(id)}`).join(" OR ");
+  return {
+    sql:
+      "SELECT c.doc_id AS doc_id, c.ref AS ref FROM " +
+      "(SELECT rowid AS id, rank AS r FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY rank LIMIT ?) t " +
+      "JOIN chunks c ON c.id = t.id WHERE c.kind = 'article' ORDER BY t.r",
+    binds: [`(${stems}) AND (${docs})`, limit],
+  };
+}
+
 /** Same groups as crawler/kktc/build.py scope_tokens(). */
 function scopeGroup(type: string): string {
   return LEGISLATION.includes(type) ? "mevzuat" : type === "karar" ? "ictihat" : "diger";

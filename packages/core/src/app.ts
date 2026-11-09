@@ -13,6 +13,7 @@ import {
   listArticleRefs,
   listRecent,
   searchDocuments,
+  FOCUS_DEFAULT,
 } from "./operations.js";
 import { DOC_TYPES, type SearchParams, type Store, TYPE_LABELS } from "./types.js";
 import { llmsText } from "./llms.js";
@@ -225,6 +226,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       rerank: !["0", "false", "no"].includes((c.req.query("rerank") ?? "").toLowerCase()),
       passages: c.req.query("passages") ? intParam(c.req.query("passages"), "passages", 1, 1, 3) : undefined,
       debug: ["1", "true", "yes"].includes((c.req.query("debug") ?? "").toLowerCase()),
+      focus: focusParam(c.req.query("focus")),
       limit: intParam(c.req.query("limit"), "limit", 3, 1, 5),
       offset: 0,
     };
@@ -616,4 +618,16 @@ curl "${origin}/v1/stats"</pre>
 <p class="muted">Metinler otomatik derlenmiştir; resmî/bağlayıcı metin için belgedeki <code>source_url</code> adresine başvurun.</p>
 </body>
 </html>`;
+}
+
+/** focus=1|true -> the default article count; focus=N -> N articles (2-20); 0 or absent -> off. */
+function focusParam(raw: string | undefined): number | undefined {
+  const value = (raw ?? "").trim().toLowerCase();
+  if (!value || ["0", "false", "no"].includes(value)) return undefined;
+  if (["1", "true", "yes"].includes(value)) return FOCUS_DEFAULT;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 2 || n > 20) {
+    throw new ApiError(400, "invalid_focus", "focus 0, 1 veya 2-20 arası bir sayı olmalıdır.");
+  }
+  return n;
 }

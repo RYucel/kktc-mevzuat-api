@@ -63,6 +63,12 @@ export interface SearchParams {
   passages?: number;
   /** /v1/answer: list every candidate the reranker saw (for measurement). */
   debug?: boolean;
+  /** /v1/answer: after Clef picks a statute, ask again among this many of its articles (0 = off). */
+  focus?: number;
+  /** Internal: receives the vector hits of this search (answer focus step). */
+  semantic_sink?: { doc_id: string; ref: string | null }[];
+  /** Internal: vector hits to use instead of querying the index (with doc_ids). */
+  semantic_hits?: { doc_id: string; ref: string | null }[];
   limit: number;
   offset: number;
 }
@@ -146,6 +152,8 @@ export interface AnswerResponse {
     applied: boolean;
     candidates?: number;
     passages_per_document?: number;
+    /** Focus step: Clef asked again among more articles of its chosen statute. */
+    focus?: { document_id: string; candidates: number; applied: boolean; top_probability?: number; none_probability?: number; error?: string };
     /** Only with debug=1: every candidate Clef saw, best first. */
     debug_candidates?: { document_id: string; ref: string | null; probability: number }[];
     top_probability?: number;
