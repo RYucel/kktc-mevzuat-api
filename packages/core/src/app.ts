@@ -620,10 +620,11 @@ curl "${origin}/v1/stats"</pre>
 </html>`;
 }
 
-/** focus=1|true -> the default article count; focus=N -> N articles (2-20); 0 or absent -> off. */
+/** Absent -> the default (on); focus=1|true -> the default count; focus=N -> N articles (2-20); 0 -> off. */
 function focusParam(raw: string | undefined): number | undefined {
   const value = (raw ?? "").trim().toLowerCase();
-  if (!value || ["0", "false", "no"].includes(value)) return undefined;
+  if (!value) return undefined;
+  if (["0", "false", "no"].includes(value)) return 0;
   if (["1", "true", "yes"].includes(value)) return FOCUS_DEFAULT;
   const n = Number(value);
   if (!Number.isInteger(n) || n < 2 || n > 20) {

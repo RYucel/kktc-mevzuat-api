@@ -261,6 +261,13 @@ export function openapiDocument(origin: string): Record<string, unknown> {
                 "Doğal dil sorularında ilk 10 aday Cloudflare Clef ile yeniden sıralanır ve güven Clef olasılığından gelir (rerank alanı). 0 ile kapatılır; kısa anahtar kelime aramalarında hiç kullanılmaz.",
               schema: { type: "string", enum: ["1", "0"], default: "1" },
             },
+            {
+              name: "focus",
+              in: "query",
+              description:
+                "Clef bir yasa seçtikten sonra o yasanın bu kadar maddesi arasından ikinci kez seçer (varsayılan 12; 0 kapatır). Doğru madde oranını belirgin artırır, ~0,8 sn ekler.",
+              schema: { type: "integer", minimum: 0, maximum: 20, default: 12 },
+            },
             { name: "format", in: "query", schema: { type: "string", enum: ["json", "markdown"], default: "json" } },
           ],
           responses: {
