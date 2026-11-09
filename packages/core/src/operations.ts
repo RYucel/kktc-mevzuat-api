@@ -18,6 +18,8 @@ import {
 import { buildCitation } from "./citation.js";
 import { conceptMatch, matchConcepts } from "./legal-concepts.js";
 import { ANSWER_PASSAGES, RERANK_CANDIDATES, RerankLimitError, wantsRerank } from "./rerank.js";
+import { legislationTitles } from "./titles.js";
+import { resolveLaws, RewriteLimitError } from "./rewrite.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
 import {
   baseArticleRef,
@@ -40,6 +42,7 @@ import {
   type DocumentDetail,
   type DocumentResponse,
   type DocumentSummary,
+  type QueryRewriteInfo,
   type RecentResponse,
   type SearchGroupItem,
   type SearchParams,
@@ -206,13 +209,37 @@ export async function searchDocuments(
   );
   const conceptMatches = matchConcepts(params.q);
   const detected = conceptMatches.map((match) => match.concept);
-  const concepts = queryWords >= 4 || naturalQuestion ? detected : [];
+  const concepts = queryWords >= 4 || naturalQuestion ? [...detected] : [];
   // Only the leading concept(s) contribute canonical statutes; otherwise a
   // generic trigger such as "ceza" injects the Criminal Code into tax queries.
   const topConceptScore = conceptMatches[0]?.score ?? 0;
   const primaryConcepts = conceptMatches
     .filter((match) => match.score >= topConceptScore * 0.85)
     .map((match) => match.concept);
+
+  // LLM rewrite (answers only): its legal terms become one more concept
+  // channel and its statute names canonical statutes, after the dictionary's.
+  let semanticText = params.q;
+  if (params.rewrite && store.rewriter && !params.doc_ids?.length) {
+    const info: QueryRewriteInfo = { terms: [], laws: [], documents: [] };
+    try {
+      const rewrite = await store.rewriter.rewrite(params.q);
+      info.terms = rewrite.terms;
+      info.laws = rewrite.laws;
+      info.documents = rewrite.laws.length ? resolveLaws(await legislationTitles(store), rewrite.laws) : [];
+      const concept = { id: "llm", label: "LLM", triggers: [], expand: info.terms, primary: info.documents, weight: 1 };
+      if (info.terms.length) {
+        concepts.push(concept);
+        semanticText = `${params.q} ${info.terms.join(" ")}`;
+      }
+      if (info.documents.length || info.terms.length) detected.push(concept);
+      if (info.documents.length) primaryConcepts.push(concept);
+    } catch (error) {
+      info.error = error instanceof RewriteLimitError ? "daily_limit" : "unavailable";
+      console.warn("query rewrite failed:", error instanceof Error ? error.message : error);
+    }
+    params.rewrite_sink?.push(info);
+  }
   const primaryIds = [...new Set(primaryConcepts.flatMap((concept) => concept.primary ?? []))];
   const searchParams: SearchParams = {
     ...params,
@@ -368,7 +395,7 @@ export async function searchDocuments(
   ) {
     let hits: SemanticHit[] = [];
     try {
-      hits = await store.semantic.query(params.q, { topK: SEMANTIC_TOP_K, type: params.type });
+      hits = await store.semantic.query(semanticText, { topK: SEMANTIC_TOP_K, type: params.type });
     } catch (error) {
       // The index is optional (e.g. not filled yet); lexical search still works.
       console.warn("semantic search unavailable:", error instanceof Error ? error.message : error);
@@ -648,11 +675,14 @@ export async function answerQuestion(
   // (the right law with the wrong article was the main miss on 2026-11-04).
   const passages = reranker ? Math.min(3, Math.max(1, params.passages ?? ANSWER_PASSAGES)) : 1;
   const semanticSink: { doc_id: string; ref: string | null }[] = [];
+  const rewriteSink: QueryRewriteInfo[] = [];
   const search = await searchDocuments(
     store,
     {
       ...params,
       semantic_sink: semanticSink,
+      rewrite: !!reranker && params.rewrite !== false,
+      rewrite_sink: rewriteSink,
       prefer: params.prefer ?? "mevzuat",
       limit: reranker ? Math.max(limit, Math.ceil(RERANK_CANDIDATES / passages)) : limit,
       passages,
@@ -817,6 +847,7 @@ export async function answerQuestion(
     quotes,
     citations: [...new Set(quotes.map((quote) => quote.citation))],
     confidence,
+    ...(rewriteSink[0] ? { query_rewrite: rewriteSink[0] } : {}),
     ...(rerank ? { rerank } : {}),
     concepts: search.concepts,
     disclaimer:

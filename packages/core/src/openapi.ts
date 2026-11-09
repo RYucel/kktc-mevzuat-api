@@ -268,6 +268,13 @@ export function openapiDocument(origin: string): Record<string, unknown> {
                 "Clef bir yasa seçtikten sonra o yasanın bu kadar maddesi arasından ikinci kez seçer (varsayılan 12; 0 kapatır). Doğru madde oranını belirgin artırır, ~0,8 sn ekler.",
               schema: { type: "integer", minimum: 0, maximum: 20, default: 12 },
             },
+            {
+              name: "rewrite",
+              in: "query",
+              description:
+                "Doğal dil sorularında bir LLM soruyu hukuki terimlere ve olası yasa adlarına çevirir; bunlar yalnızca aramayı besler, cevap yine birebir alıntıdır (query_rewrite alanı). 0 ile kapatılır.",
+              schema: { type: "string", enum: ["1", "0"], default: "1" },
+            },
             { name: "format", in: "query", schema: { type: "string", enum: ["json", "markdown"], default: "json" } },
           ],
           responses: {
