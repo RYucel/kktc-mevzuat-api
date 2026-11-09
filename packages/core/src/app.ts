@@ -228,6 +228,8 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       debug: ["1", "true", "yes"].includes((c.req.query("debug") ?? "").toLowerCase()),
       focus: focusParam(c.req.query("focus")),
       rewrite: !["0", "false", "no"].includes((c.req.query("rewrite") ?? "").toLowerCase()),
+      rewrite_model: (["20b", "120b"] as const).find((m) => m === (c.req.query("rewrite_model") ?? "").toLowerCase()),
+      rewrite_wait: ["1", "true", "yes"].includes((c.req.query("rewrite_wait") ?? "").toLowerCase()),
       focus_two: ["1", "true", "yes"].includes((c.req.query("focus2") ?? "").toLowerCase()),
       window: !["0", "false", "no"].includes((c.req.query("window") ?? "").toLowerCase()),
       limit: intParam(c.req.query("limit"), "limit", 3, 1, 5),

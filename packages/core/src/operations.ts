@@ -16,7 +16,7 @@ import {
   STATS_SQL,
 } from "./sql.js";
 import { buildCitation } from "./citation.js";
-import { conceptMatch, matchConcepts } from "./legal-concepts.js";
+import { conceptMatch, type LegalConcept, matchConcepts } from "./legal-concepts.js";
 import { ANSWER_PASSAGES, RERANK_CANDIDATES, RerankLimitError, wantsRerank } from "./rerank.js";
 import { legislationTitles } from "./titles.js";
 import { resolveLaws, RewriteLimitError } from "./rewrite.js";
@@ -219,27 +219,24 @@ export async function searchDocuments(
 
   // LLM rewrite (answers only): its legal terms become one more concept
   // channel and its statute names canonical statutes, after the dictionary's.
+  // It runs while the main lexical query does (rewrite_wait=1: before it, so
+  // its statutes also get the ranking boost there).
   let semanticText = params.q;
-  if (params.rewrite && store.rewriter && !params.doc_ids?.length) {
-    const info: QueryRewriteInfo = { terms: [], laws: [], documents: [] };
-    try {
-      const rewrite = await store.rewriter.rewrite(params.q);
-      info.terms = rewrite.terms;
-      info.laws = rewrite.laws;
-      info.documents = rewrite.laws.length ? resolveLaws(await legislationTitles(store), rewrite.laws) : [];
-      const concept = { id: "llm", label: "LLM", triggers: [], expand: info.terms, primary: info.documents, weight: 1 };
+  const rewriteTask =
+    params.rewrite && store.rewriter && !params.doc_ids?.length ? runRewrite(store, params) : null;
+  const applyRewrite = (result: { info: QueryRewriteInfo; concept: LegalConcept | null }) => {
+    const { info, concept } = result;
+    if (concept) {
       if (info.terms.length) {
         concepts.push(concept);
         semanticText = `${params.q} ${info.terms.join(" ")}`;
       }
-      if (info.documents.length || info.terms.length) detected.push(concept);
+      detected.push(concept);
       if (info.documents.length) primaryConcepts.push(concept);
-    } catch (error) {
-      info.error = error instanceof RewriteLimitError ? "daily_limit" : "unavailable";
-      console.warn("query rewrite failed:", error instanceof Error ? error.message : error);
     }
     params.rewrite_sink?.push(info);
-  }
+  };
+  if (rewriteTask && params.rewrite_wait) applyRewrite(await rewriteTask);
   const primaryIds = [...new Set(primaryConcepts.flatMap((concept) => concept.primary ?? []))];
   const searchParams: SearchParams = {
     ...params,
@@ -283,6 +280,8 @@ export async function searchDocuments(
       }
     }
   }
+
+  if (rewriteTask && !params.rewrite_wait) applyRewrite(await rewriteTask);
 
   // Concept channel: "en az oran" -> "2/3'ünden fazla olamaz", "mal rejimi"...
   const conceptRows: StoreRow[] = [];
@@ -1186,6 +1185,25 @@ export class ApiError extends Error {
 
 export function short(text: string, limit = 600): string {
   return truncate(text, limit);
+}
+
+async function runRewrite(
+  store: Store,
+  params: SearchParams,
+): Promise<{ info: QueryRewriteInfo; concept: LegalConcept | null }> {
+  const info: QueryRewriteInfo = { terms: [], laws: [], documents: [] };
+  try {
+    const rewrite = await store.rewriter!.rewrite(params.q, { model: params.rewrite_model });
+    info.terms = rewrite.terms;
+    info.laws = rewrite.laws;
+    info.documents = rewrite.laws.length ? resolveLaws(await legislationTitles(store), rewrite.laws) : [];
+    if (!info.terms.length && !info.documents.length) return { info, concept: null };
+    return { info, concept: { id: "llm", label: "LLM", triggers: [], expand: info.terms, primary: info.documents, weight: 1 } };
+  } catch (error) {
+    info.error = error instanceof RewriteLimitError ? "daily_limit" : "unavailable";
+    console.warn("query rewrite failed:", error instanceof Error ? error.message : error);
+    return { info, concept: null };
+  }
 }
 
 /** Statutes whose articles are searched again, per answer. */
