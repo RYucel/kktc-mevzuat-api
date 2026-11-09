@@ -2,7 +2,11 @@ import {
   clefReranker,
   createApp,
   DECISION_MODELS,
+  parseRewrite,
+  type QueryRewriter,
   queryText,
+  REWRITE_INSTRUCTIONS,
+  RewriteLimitError,
   SEMANTIC_MODEL,
   type SemanticHit,
   type Reranker,
@@ -32,6 +36,13 @@ export interface Env {
   CLEF_DAILY_LIMIT?: string;
   /** Clef calls per UTC day for our own jobs (admin token: evals, smoke), counted apart (default 1500). */
   CLEF_ADMIN_DAILY_LIMIT?: string;
+  /** "off" disables the LLM query rewrite. */
+  REWRITE?: string;
+  /** Workers AI model for the query rewrite (default @cf/openai/gpt-oss-120b). */
+  REWRITE_MODEL?: string;
+  /** Rewrites per UTC day for users (default 400) and for our own jobs (default 600). */
+  REWRITE_DAILY_LIMIT?: string;
+  REWRITE_ADMIN_DAILY_LIMIT?: string;
   /** Per-client request limit (wrangler.toml [[ratelimits]]). */
   RATE_LIMITER?: RateLimit;
   /** Global per-minute circuit breaker (Durable Object, see gate.ts). */
@@ -98,6 +109,58 @@ function limitedReranker(inner: Reranker, db: D1Database, limit: number, key = "
   };
 }
 
+/**
+ * Query rewrite with a Workers AI LLM (packages/core/src/rewrite.ts). One
+ * short call (~450 input, a few hundred output tokens with low reasoning,
+ * ~30-40 neurons with gpt-oss-120b); counted per day like Clef, fail-closed,
+ * and cut off after REWRITE_TIMEOUT_MS so a slow model never holds the answer.
+ */
+const DEFAULT_REWRITE_MODEL = "@cf/openai/gpt-oss-120b";
+const DEFAULT_REWRITE_DAILY_LIMIT = 400;
+const DEFAULT_REWRITE_ADMIN_DAILY_LIMIT = 600;
+const REWRITE_TIMEOUT_MS = 6000;
+
+/** Text of a Workers AI text-generation result (Responses API or classic "response"). */
+function modelText(output: unknown): string {
+  const o = output as { response?: unknown; output?: unknown; output_text?: unknown } | null;
+  if (typeof o?.output_text === "string") return o.output_text;
+  if (Array.isArray(o?.output)) {
+    const parts: string[] = [];
+    for (const item of o!.output as { type?: string; content?: { type?: string; text?: string }[] }[]) {
+      if (item?.type !== "message") continue;
+      for (const c of item.content ?? []) if (typeof c?.text === "string") parts.push(c.text);
+    }
+    if (parts.length) return parts.join("\n");
+  }
+  if (typeof o?.response === "string") return o.response;
+  if (o?.response && typeof o.response === "object") return JSON.stringify(o.response);
+  return "";
+}
+
+function llmRewriter(ai: Ai, db: D1Database, model: string, limit: number, key: string): QueryRewriter {
+  return {
+    async rewrite(question) {
+      let allowed: boolean;
+      try {
+        allowed = await takeDaily(db, key, limit);
+      } catch (error) {
+        throw new Error(`rewrite counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      if (!allowed) throw new RewriteLimitError();
+      const run = ai.run(model as Parameters<Ai["run"]>[0], {
+        instructions: REWRITE_INSTRUCTIONS,
+        input: `Soru: ${question.slice(0, 500)}`,
+        reasoning: { effort: "low" },
+      } as never);
+      const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("rewrite timeout")), REWRITE_TIMEOUT_MS));
+      const output = await Promise.race([run, timeout]);
+      const parsed = parseRewrite(modelText(output));
+      if (!parsed) throw new Error(`rewrite unparsable: ${modelText(output).slice(0, 200)}`);
+      return parsed;
+    },
+  };
+}
+
 function bearerIsAdmin(request: Request, env: Env): boolean {
   const token = env.VECTOR_ADMIN_TOKEN;
   return !!token && request.headers.get("authorization") === `Bearer ${token}`;
@@ -131,6 +194,7 @@ class D1Store implements Store {
     private readonly db: D1Database,
     readonly semantic?: SemanticIndex,
     readonly rerank?: Reranker,
+    readonly rewriter?: QueryRewriter,
   ) {}
 
   async all(sql: string, binds: unknown[] = []): Promise<StoreRow[]> {
@@ -249,7 +313,14 @@ export default {
       decide && env.RERANK !== "off" && clefLimit > 0
         ? limitedReranker(clefReranker(decide), env.DB, clefLimit, admin ? "clef-admin" : "clef")
         : undefined;
-    const store = new D1Store(env.DB, semantic, rerank);
+    const rewriteLimit = admin
+      ? Number(env.REWRITE_ADMIN_DAILY_LIMIT ?? DEFAULT_REWRITE_ADMIN_DAILY_LIMIT)
+      : Number(env.REWRITE_DAILY_LIMIT ?? DEFAULT_REWRITE_DAILY_LIMIT);
+    const rewriter =
+      env.AI && env.REWRITE !== "off" && rewriteLimit > 0
+        ? llmRewriter(env.AI, env.DB, env.REWRITE_MODEL ?? DEFAULT_REWRITE_MODEL, rewriteLimit, admin ? "llm-admin" : "llm")
+        : undefined;
+    const store = new D1Store(env.DB, semantic, rerank, rewriter);
     const app = createApp({
       store,
       runtime: semantic ? "cloudflare-d1+vectorize" : "cloudflare-d1",

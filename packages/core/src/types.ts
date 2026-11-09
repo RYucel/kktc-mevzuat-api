@@ -1,3 +1,4 @@
+import type { QueryRewriter } from "./rewrite.js";
 /** Shared types for the KKTC mevzuat API. */
 import type { Reranker } from "./rerank.js";
 import type { SemanticIndex } from "./semantic.js";
@@ -36,6 +37,8 @@ export interface Store {
   semantic?: SemanticIndex;
   /** Optional answer reranker (Clef on Workers AI); used by answerQuestion. */
   rerank?: Reranker;
+  /** Optional LLM query rewriter (Workers AI); used by answerQuestion. */
+  rewriter?: QueryRewriter;
 }
 
 export interface SearchParams {
@@ -71,6 +74,10 @@ export interface SearchParams {
   window?: boolean;
   /** Internal: receives the vector hits of this search (answer focus step). */
   semantic_sink?: { doc_id: string; ref: string | null }[];
+  /** /v1/answer: rewrite the question into legal terms and statute names with an LLM (default true). */
+  rewrite?: boolean;
+  /** Internal: receives what the rewriter returned. */
+  rewrite_sink?: QueryRewriteInfo[];
   /** Internal: vector hits to use instead of querying the index (with doc_ids). */
   semantic_hits?: { doc_id: string; ref: string | null }[];
   limit: number;
@@ -150,6 +157,8 @@ export interface AnswerResponse {
   quotes: AnswerQuote[];
   citations: string[];
   confidence: "high" | "medium" | "low";
+  /** Present when an LLM rewrote the question for the search (never the answer). */
+  query_rewrite?: QueryRewriteInfo;
   /** Present when the question went to the reranker. */
   rerank?: {
     model: string;
@@ -278,4 +287,12 @@ export interface RecentResponse {
 export interface StatsResponse {
   stats: Record<string, unknown>;
   _meta: ApiMeta;
+}
+
+export interface QueryRewriteInfo {
+  terms: string[];
+  laws: string[];
+  /** Statutes the names resolved to (they join the candidates). */
+  documents: string[];
+  error?: string;
 }
