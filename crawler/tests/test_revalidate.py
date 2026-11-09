@@ -95,3 +95,42 @@ def test_failed_downloads_are_retried_on_revalidation(extractions: list[bytes]) 
     assert fetch_text_for(doc, server)["status"] == "error"
     # A revalidation run tries again.
     assert fetch_text_for(doc, server, revalidate=True)["text"] == "simdi var"
+
+
+class FlakyServer:
+    """Fails once (as a busy server would), then serves the file."""
+
+    def __init__(self, content: bytes, error: str = "HTTP 503"):
+        self.content = content
+        self.error = error
+        self.gets = 0
+
+    def get(self, url: str, **kwargs):
+        self.gets += 1
+        if self.gets == 1:
+            raise RuntimeError(f"{self.error} for {url}")
+        return FakeResponse(self.content)
+
+
+def test_cached_error_is_retried_only_when_asked(extractions: list[bytes]) -> None:
+    doc = {"pdf_url": URL}
+    server = FlakyServer(b"metin")
+    assert fetch_text_for(doc, server)["status"] == "error"
+
+    # A plain run trusts the cached failure.
+    assert fetch_text_for(doc, server)["status"] == "error"
+    assert server.gets == 1
+
+    assert fetch_text_for(doc, server, retry_errors=True)["text"] == "metin"
+    assert server.gets == 2
+    # The good text is now cached; retrying again downloads nothing.
+    assert fetch_text_for(doc, server, retry_errors=True)["text"] == "metin"
+    assert server.gets == 2
+
+
+def test_cached_404_is_not_retried(extractions: list[bytes]) -> None:
+    doc = {"pdf_url": URL}
+    server = FlakyServer(b"metin", error="HTTP 404")
+    fetch_text_for(doc, server)
+    assert fetch_text_for(doc, server, retry_errors=True)["status"] == "error"
+    assert server.gets == 1

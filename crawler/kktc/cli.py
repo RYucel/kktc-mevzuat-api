@@ -108,7 +108,13 @@ def cmd_fetch_text(args: argparse.Namespace) -> None:
             break
         checked += 1
         client = gov_client if "gov.ct.tr" in url else mah_client
-        payload = fetch_text_for(doc, client, force=args.force, revalidate=getattr(args, "revalidate", False))
+        payload = fetch_text_for(
+            doc,
+            client,
+            force=args.force,
+            revalidate=getattr(args, "revalidate", False),
+            retry_errors=getattr(args, "retry_errors", False),
+        )
         if payload.get("text"):
             done += 1
             log.info(
@@ -275,6 +281,11 @@ def main(argv: list[str] | None = None) -> None:
         "--revalidate",
         action="store_true",
         help="download cached files again and re-extract those whose bytes changed (same name, new content)",
+    )
+    text.add_argument(
+        "--retry-errors",
+        action="store_true",
+        help="try again files whose earlier download failed (cached error other than HTTP 404)",
     )
     text.set_defaults(func=cmd_fetch_text)
 
