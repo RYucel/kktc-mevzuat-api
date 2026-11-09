@@ -44,7 +44,7 @@ function filters(params: SearchParams): { sql: string[]; binds: unknown[] } {
 }
 
 /** FTS candidates read per channel: D1 bills every row the FTS index yields. */
-export const FTS_TOP_K = 400;
+export const FTS_TOP_K = 600;
 const LEGISLATION = ["yasa", "tuzuk", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"];
 
 /** Same groups as crawler/kktc/build.py scope_tokens(). */
@@ -90,10 +90,9 @@ function rankingSql(params: SearchParams, score: string): string {
  * so D1 read every matching chunk and document row: ~250K rows for one
  * natural-language question on 4 November 2026, against a 5M daily quota.
  *
- * Type and preference are applied inside the index through the "scope"
- * column (xqt<type>, xqg<mevzuat|ictihat|diger>), so a preferred group cannot
- * be crowded out of the top K. Year, source and court filters are not in the
- * index; those requests use buildSearchSqlFull.
+ * An explicit type filter is applied inside the index through the "scope"
+ * column (xqt<type>); preference only re-ranks the top K. Year, source and
+ * court filters are not in the index; those requests use buildSearchSqlFull.
  */
 export function buildSearchSql(match: string, params: SearchParams): { sql: string; binds: unknown[] } {
   if (params.year || params.source || params.court) return buildSearchSqlFull(match, params);
@@ -105,11 +104,12 @@ export function buildSearchSql(match: string, params: SearchParams): { sql: stri
     channels.push({ match: base, limit: k, restrict: params.doc_ids });
   } else if (params.type) {
     channels.push({ match: `${base} AND scope:xqt${params.type.replace(/[^a-z]/g, "")}`, limit: k });
-  } else if (params.prefer) {
-    const group = params.prefer === "mevzuat" ? "xqgmevzuat" : "xqgictihat";
-    channels.push({ match: `${base} AND scope:${group}`, limit: k });
-    channels.push({ match: `${base} NOT scope:${group}`, limit: Math.max(100, Math.floor(k / 4)) });
   } else {
+    // prefer is applied in the second phase (x1.6). Filtering by group in
+    // the index (AND/NOT scope:xqg...) made FTS5 intersect the doclist of a
+    // token present in half the rows, twice per question: with the D1 per-
+    // database CPU budget that overloaded D1 on 9 November 2026 ("Too many
+    // resources consumed within a 10 second window").
     channels.push({ match: base, limit: k });
   }
 
