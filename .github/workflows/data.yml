@@ -94,12 +94,12 @@ jobs:
       - name: Download mahkemeler law texts (PDF)
         if: ${{ inputs.full_text == true }}
         working-directory: crawler
-        run: python -m kktc fetch-text --source mahkemeler --type yasa --ext pdf
+        run: python -m kktc fetch-text --source mahkemeler --type yasa --ext pdf --retry-errors
 
       - name: Download mahkemeler regulation texts
         if: ${{ inputs.full_text == true }}
         working-directory: crawler
-        run: python -m kktc fetch-text --source mahkemeler --type tuzuk --min-year 2015
+        run: python -m kktc fetch-text --source mahkemeler --type tuzuk --min-year 2015 --retry-errors
 
       # Version history is the only state that must survive between runs. It
       # lives as an asset of the "history" release (not the cache, which can be

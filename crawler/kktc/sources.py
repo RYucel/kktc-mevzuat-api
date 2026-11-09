@@ -547,12 +547,23 @@ def _payload_from(url: str, data: bytes, max_bytes: int) -> dict[str, Any]:
     return payload
 
 
+def _retryable(cached: dict[str, Any]) -> bool:
+    """A cached download error worth trying again: anything but a 404.
+
+    Without this a single failed download (a timeout, a 5xx while the site was
+    busy) is cached and every later full-text run skips the file for good. A
+    404 means the file is gone from mahkemeler.net, so it is not retried.
+    """
+    return cached.get("status") == "error" and "HTTP 404" not in (cached.get("error") or "")
+
+
 def fetch_text_for(
     doc: dict[str, Any],
     client: HttpClient,
     *,
     force: bool = False,
     revalidate: bool = False,
+    retry_errors: bool = False,
     max_bytes: int = 80 * 1024 * 1024,
 ) -> dict[str, Any]:
     url = doc.get("pdf_url") or doc.get("source_url") or ""
@@ -560,6 +571,8 @@ def fetch_text_for(
         return {"status": "metadata", "method": None, "text": ""}
     if not force:
         cached = _read_text_cache(url)
+        if cached is not None and retry_errors and _retryable(cached):
+            cached = None  # an earlier failure (timeout, 5xx) is tried once more
         if cached is not None:
             if revalidate and cached.get("status") == "error":
                 cached = None  # a failed download is retried on revalidation runs
