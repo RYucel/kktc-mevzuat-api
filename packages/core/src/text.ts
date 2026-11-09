@@ -379,6 +379,14 @@ export function clefPassage(text: string, query: string, chars = 420, headChars 
     const found = stems.flatMap((stem, k) => (folded.startsWith(stem) ? [k] : []));
     if (found.length) hits.push({ start: match.index!, end: match.index! + match[0].length, stems: found });
   }
+  // "en az oran", "ne kadar", "yüzde" questions target a numeric cap such as
+  // "2/3'ünden fazla olamaz" (as makeSnippet): the fraction counts as a stem.
+  if (/\b(oran|en az|en cok|en fazla|ne kadar|yuzde)\b/.test(normalizeQuery(query))) {
+    for (const match of clean.matchAll(/(?<![\d/])\d{1,3}\s*\/\s*\d{1,3}(?![\d/])/g)) {
+      hits.push({ start: match.index!, end: match.index! + match[0].length, stems: [stems.length, stems.length + 1] });
+    }
+    hits.sort((a, b) => a.start - b.start);
+  }
   if (!hits.length) return clean.slice(0, chars);
   const score = (from: number, to: number) => {
     const found = new Set<number>();
