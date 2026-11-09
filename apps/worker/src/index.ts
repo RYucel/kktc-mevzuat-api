@@ -30,6 +30,8 @@ export interface Env {
   RERANK?: string;
   /** Clef calls allowed per UTC day (default 1000, inside the free Workers AI allocation). */
   CLEF_DAILY_LIMIT?: string;
+  /** Clef calls per UTC day for our own jobs (admin token: evals, smoke), counted apart (default 1500). */
+  CLEF_ADMIN_DAILY_LIMIT?: string;
   /** Per-client request limit (wrangler.toml [[ratelimits]]). */
   RATE_LIMITER?: RateLimit;
   /** Global per-minute circuit breaker (Durable Object, see gate.ts). */
@@ -45,6 +47,13 @@ export interface Env {
  * the search order, so Clef can never put a Workers AI charge on the bill.
  */
 const DEFAULT_CLEF_DAILY_LIMIT = 1000;
+/**
+ * Our own measurement jobs (admin token) count on a separate counter, so an
+ * eval run can never use up the users' daily Clef budget (it did on
+ * 2026-11-09). On eval days the two together may pass the free 10K neurons:
+ * 1500 calls are ~12K neurons, about $0.13 at $0.011 per 1K neurons.
+ */
+const DEFAULT_CLEF_ADMIN_DAILY_LIMIT = 1500;
 
 /** Daily counter in D1 (one small write per Clef call). */
 async function takeDaily(db: D1Database, key: string, limit: number): Promise<boolean> {
@@ -71,12 +80,12 @@ async function takeDaily(db: D1Database, key: string, limit: number): Promise<bo
   return Number(row?.n ?? Infinity) <= limit;
 }
 
-function limitedReranker(inner: Reranker, db: D1Database, limit: number): Reranker {
+function limitedReranker(inner: Reranker, db: D1Database, limit: number, key = "clef"): Reranker {
   return {
     async rerank(question, candidates) {
       let allowed: boolean;
       try {
-        allowed = await takeDaily(db, "clef", limit);
+        allowed = await takeDaily(db, key, limit);
       } catch (error) {
         // Without a working counter, do not spend: fail closed (reported as
         // "unavailable", not "daily_limit").
@@ -232,10 +241,13 @@ export default {
           env.AI!.run(`@cf/cloudflare/${model}` as Parameters<Ai["run"]>[0], input as never)
       : undefined;
     // Clef answer reranking (see packages/core/src/rerank.ts); RERANK=off disables it.
-    const clefLimit = Number(env.CLEF_DAILY_LIMIT ?? DEFAULT_CLEF_DAILY_LIMIT);
+    const admin = bearerIsAdmin(request, env);
+    const clefLimit = admin
+      ? Number(env.CLEF_ADMIN_DAILY_LIMIT ?? DEFAULT_CLEF_ADMIN_DAILY_LIMIT)
+      : Number(env.CLEF_DAILY_LIMIT ?? DEFAULT_CLEF_DAILY_LIMIT);
     const rerank =
       decide && env.RERANK !== "off" && clefLimit > 0
-        ? limitedReranker(clefReranker(decide), env.DB, clefLimit)
+        ? limitedReranker(clefReranker(decide), env.DB, clefLimit, admin ? "clef-admin" : "clef")
         : undefined;
     const store = new D1Store(env.DB, semantic, rerank);
     const app = createApp({
