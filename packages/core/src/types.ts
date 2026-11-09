@@ -65,6 +65,8 @@ export interface SearchParams {
   debug?: boolean;
   /** /v1/answer: after Clef picks a statute, ask again among this many of its articles (0 = off). */
   focus?: number;
+  /** /v1/answer: show Clef the part of each article that matches the question (default true). */
+  window?: boolean;
   /** Internal: receives the vector hits of this search (answer focus step). */
   semantic_sink?: { doc_id: string; ref: string | null }[];
   /** Internal: vector hits to use instead of querying the index (with doc_ids). */

@@ -361,3 +361,51 @@ export function stemCoverage(text: string, query: string): { found: number; tota
   const found = stems.filter((stem) => [...words].some((word) => word.startsWith(stem))).length;
   return { found, total: stems.length };
 }
+
+/**
+ * The part of an article Clef reads: its opening (heading and first words)
+ * plus the window that contains most of the question's stems. Long articles
+ * often answer in a later paragraph that the first ``chars`` never reach.
+ */
+export function clefPassage(text: string, query: string, chars = 420, headChars = 120): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= chars) return clean;
+  const stems = queryStems(query);
+  if (!stems.length) return clean.slice(0, chars);
+  // Words that carry a question stem, with the stems they carry.
+  const hits: { start: number; end: number; stems: number[] }[] = [];
+  for (const match of clean.matchAll(/[\p{L}\p{N}]+/gu)) {
+    const folded = foldTr(match[0]);
+    const found = stems.flatMap((stem, k) => (folded.startsWith(stem) ? [k] : []));
+    if (found.length) hits.push({ start: match.index!, end: match.index! + match[0].length, stems: found });
+  }
+  if (!hits.length) return clean.slice(0, chars);
+  const score = (from: number, to: number) => {
+    const found = new Set<number>();
+    let n = 0;
+    for (const hit of hits) {
+      if (hit.start < from) continue;
+      if (hit.end > to) break;
+      for (const k of hit.stems) found.add(k);
+      n++;
+    }
+    return found.size + n * 0.01;
+  };
+  const width = chars - headChars - 3;
+  const headScore = score(0, chars);
+  // Windows start at a hit (a little before it, at a word start).
+  let best = { start: 0, score: headScore };
+  for (const hit of hits) {
+    let start = Math.max(headChars, hit.start - 60);
+    while (start > headChars && /[\p{L}\p{N}]/u.test(clean[start - 1] ?? "")) start--;
+    if (start <= headChars) continue;
+    const s = score(start, start + width);
+    if (s > best.score + 0.5) best = { start, score: s };
+  }
+  if (best.start === 0) return clean.slice(0, chars);
+  let headEnd = headChars;
+  while (headEnd > 0 && /[\p{L}\p{N}]/u.test(clean[headEnd] ?? "")) headEnd--;
+  let end = Math.min(clean.length, best.start + width);
+  if (end < clean.length) while (end > best.start && /[\p{L}\p{N}]/u.test(clean[end] ?? "")) end--;
+  return `${clean.slice(0, headEnd).trim()} … ${clean.slice(best.start, end).trim()}`;
+}

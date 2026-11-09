@@ -9,7 +9,7 @@ on:
     inputs:
       variants:
         description: "Karşılaştırılacak varyantlar (virgülle)"
-        default: "focus=0,focus=12"
+        default: "window=0,passages=3"
       sets:
         description: "Soru setleri: questions, keywords"
         default: "questions"
