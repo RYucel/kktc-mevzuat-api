@@ -74,7 +74,7 @@ function limitedReranker(inner: Reranker, db: D1Database, limit: number): Rerank
         // Without a working counter, do not spend: fail closed (reported as
         // "unavailable", not "daily_limit").
         console.warn("clef counter unavailable:", error instanceof Error ? error.message : error);
-        throw new Error("Clef counter unavailable");
+        throw new Error(`Clef counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
       }
       if (!allowed) throw new RerankLimitError();
       return inner.rerank(question, candidates);
@@ -188,7 +188,10 @@ class VectorizeSemantic implements SemanticIndex, VectorWriter {
   }
 
   async remove(ids: string[]): Promise<number> {
-    await this.index.deleteByIds(ids);
+    // Small batches: a 500-id delete failed on 9 November 2026.
+    for (let i = 0; i < ids.length; i += 100) {
+      await this.index.deleteByIds(ids.slice(i, i + 100));
+    }
     return ids.length;
   }
 }

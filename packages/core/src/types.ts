@@ -151,6 +151,8 @@ export interface AnswerResponse {
     top_probability?: number;
     none_probability?: number;
     error?: string;
+    /** Only with debug=1. */
+    error_detail?: string;
   };
   concepts: { id: string; label: string }[];
   disclaimer: string;

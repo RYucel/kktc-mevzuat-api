@@ -680,6 +680,7 @@ export async function answerQuestion(
         model: "clef-flash",
         applied: false,
         error: error instanceof RerankLimitError ? "daily_limit" : "unavailable",
+        ...(params.debug ? { error_detail: (error instanceof Error ? error.message : String(error)).slice(0, 300) } : {}),
       };
       candidates = rounds[0];
     }
