@@ -430,6 +430,8 @@ CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(doc_id, ord);
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     text_norm,
     scope,
+    content = '',
+    contentless_delete = 1,
     tokenize = 'unicode61 remove_diacritics 2'
 );
 
@@ -486,11 +488,18 @@ class SqlFileWriter:
         return self.files
 
 
-D1_STATE_VERSION = 3  # bump when chunk ids or the D1 layout change: forces a full import
+D1_STATE_VERSION = 4  # bump when chunk ids or the D1 layout change: forces a full import
 # v3: chunks_fts gained the "scope" column.
+# v4: chunks_fts is contentless in D1 (content='', contentless_delete=1).
 D1_STATE_FILE = "d1-state.json"
+# In D1 the FTS table keeps only the index, not a second copy of every
+# chunk's text: that copy was ~37% of the database, and D1 refused writes
+# with "Exceeded maximum DB size" (500 MB free tier) on 9 November 2026. The
+# API only reads rowid and rank from it. contentless_delete keeps DELETE
+# working for incremental imports. The local build keeps the content (the
+# export reads it).
 _FTS_CREATE = """
-CREATE VIRTUAL TABLE chunks_fts USING fts5(text_norm, scope, tokenize = 'unicode61 remove_diacritics 2');
+CREATE VIRTUAL TABLE chunks_fts USING fts5(text_norm, scope, content = '', contentless_delete = 1, tokenize = 'unicode61 remove_diacritics 2');
 """
 _DELETE_BATCH = 100
 _VOLATILE_COLUMNS = {"fetched_at", "updated_at"}

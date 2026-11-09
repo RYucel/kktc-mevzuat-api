@@ -2,6 +2,7 @@ name: D1 maintenance
 
 # One-off maintenance on the live D1 database without a data refresh.
 #   optimize: merge FTS5 index segments (after a bulk import)
+#   info:     database size and table count (free tier limit: 500 MB)
 
 on:
   workflow_dispatch:
@@ -9,7 +10,7 @@ on:
       task:
         description: "Görev"
         type: choice
-        options: [optimize]
+        options: [optimize, info]
         default: optimize
 
 permissions:
@@ -48,3 +49,9 @@ jobs:
         if: ${{ inputs.task == 'optimize' }}
         working-directory: apps/worker
         run: npx wrangler d1 execute kktc-mevzuat --remote --yes --command "INSERT INTO chunks_fts(chunks_fts) VALUES('optimize')"
+      - name: Database info
+        if: ${{ inputs.task == 'info' }}
+        working-directory: apps/worker
+        run: |
+          npx wrangler d1 info kktc-mevzuat
+          npx wrangler d1 execute kktc-mevzuat --remote --command "SELECT (SELECT COUNT(*) FROM documents) AS documents, (SELECT COUNT(*) FROM chunks) AS chunks, (SELECT COUNT(*) FROM doc_versions) AS versions, (SELECT COUNT(*) FROM changes) AS changes"
