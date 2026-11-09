@@ -67,12 +67,14 @@ async function takeDaily(db: D1Database, key: string, limit: number): Promise<bo
 function limitedReranker(inner: Reranker, db: D1Database, limit: number): Reranker {
   return {
     async rerank(question, candidates) {
-      let allowed = false;
+      let allowed: boolean;
       try {
         allowed = await takeDaily(db, "clef", limit);
       } catch (error) {
-        // Without a working counter, do not spend: fail closed.
+        // Without a working counter, do not spend: fail closed (reported as
+        // "unavailable", not "daily_limit").
         console.warn("clef counter unavailable:", error instanceof Error ? error.message : error);
+        throw new Error("Clef counter unavailable");
       }
       if (!allowed) throw new RerankLimitError();
       return inner.rerank(question, candidates);
@@ -116,10 +118,16 @@ class D1Store implements Store {
   ) {}
 
   async all(sql: string, binds: unknown[] = []): Promise<StoreRow[]> {
-    const result = await this.db
-      .prepare(sql)
-      .bind(...binds)
-      .all();
+    let result: D1Result;
+    try {
+      result = await this.db.prepare(sql).bind(...binds).all();
+    } catch (error) {
+      // "D1 DB is overloaded. Too many resources consumed within a 10 second
+      // window": a short burst; one retry after a pause usually succeeds.
+      if (!/overloaded|Too many resources/i.test(String(error))) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      result = await this.db.prepare(sql).bind(...binds).all();
+    }
     this.queries += 1;
     this.rowsRead += Number((result.meta as { rows_read?: number } | undefined)?.rows_read ?? 0);
     return (result.results ?? []) as StoreRow[];

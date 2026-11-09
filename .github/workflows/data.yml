@@ -199,6 +199,13 @@ jobs:
           # D1 now matches this build: the next export diffs against it.
           gh release upload history dist/d1/d1-state.json --clobber
 
+      # Merge the FTS index segments left by the bulk insert. Unmerged, every
+      # MATCH walks many segments and D1 answered "overloaded" on 9 Nov 2026.
+      - name: Optimize FTS index
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        continue-on-error: true
+        run: npx wrangler d1 execute kktc-mevzuat --remote --yes --command "INSERT INTO chunks_fts(chunks_fts) VALUES('optimize')"
+
       # Informational only. It reads D1, so on a day the free-tier read quota is
       # already used up it fails; that must not stop the Worker deploy and the
       # vector index steps below (2026-11-03).
