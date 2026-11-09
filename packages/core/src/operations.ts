@@ -22,6 +22,7 @@ import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semanti
 import {
   baseArticleRef,
   buildMatch,
+  clefPassage,
   foldTr,
   makeHighlights,
   makeSnippet,
@@ -679,7 +680,7 @@ export async function answerQuestion(
         params.q,
         candidates.map((c) => ({
           label: `${c.result.citation ?? c.result.title}${c.ref ? `, ${c.ref}` : ""}`,
-          text: c.text,
+          text: params.window === false ? c.text : clefPassage(c.text, params.q),
         })),
       );
       const order = candidates
@@ -853,7 +854,10 @@ async function focusStatute(
   try {
     const answer = await reranker.rerank(
       params.q,
-      unique.map((c) => ({ label: `${chosen.citation ?? chosen.title}${c.ref ? `, ${c.ref}` : ""}`, text: c.text })),
+      unique.map((c) => ({
+        label: `${chosen.citation ?? chosen.title}${c.ref ? `, ${c.ref}` : ""}`,
+        text: params.window === false ? c.text : clefPassage(c.text, params.q),
+      })),
     );
     const order = unique
       .map((passage, i) => ({ passage, i, p: answer.probabilities[i] ?? 0 }))
