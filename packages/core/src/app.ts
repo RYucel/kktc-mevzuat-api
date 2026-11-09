@@ -517,11 +517,14 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       );
     }
     console.error(err);
+    // debug=1 (measurement scripts) also gets the underlying message.
+    const debug = ["1", "true", "yes"].includes((c.req.query("debug") ?? "").toLowerCase());
     return c.json(
       {
         error: {
           code: "internal_error",
           message: "Beklenmeyen bir hata oluştu.",
+          ...(debug ? { detail: message.slice(0, 500) } : {}),
         },
         _meta: apiMeta(requestOrigin(c)),
       },
