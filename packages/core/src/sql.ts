@@ -47,6 +47,11 @@ function filters(params: SearchParams): { sql: string[]; binds: unknown[] } {
 export const FTS_TOP_K = 600;
 const LEGISLATION = ["yasa", "tuzuk", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"];
 
+/** FTS token of one document: "xqd" + hex of the id (crawler/kktc/build.py doc_token). */
+export function docToken(docId: string): string {
+  return "xqd" + Array.from(new TextEncoder().encode(docId), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 /** Same groups as crawler/kktc/build.py scope_tokens(). */
 function scopeGroup(type: string): string {
   return LEGISLATION.includes(type) ? "mevzuat" : type === "karar" ? "ictihat" : "diger";
@@ -98,10 +103,15 @@ export function buildSearchSql(match: string, params: SearchParams): { sql: stri
   if (params.year || params.source || params.court) return buildSearchSqlFull(match, params);
   const fetchLimit = Math.min(1000, Math.max(params.limit + params.offset, 1) * 20);
   const k = Math.max(FTS_TOP_K, fetchLimit);
-  const channels: { match: string; limit: number; restrict?: string[] }[] = [];
+  const channels: { match: string; limit: number }[] = [];
   const base = `(${match})`;
   if (params.doc_ids?.length) {
-    channels.push({ match: base, limit: k, restrict: params.doc_ids });
+    // Restrict inside the index with each document's own token. The former
+    // "AND rowid IN (SELECT id FROM chunks WHERE doc_id IN ...)" made FTS5
+    // re-run the whole MATCH once per rowid: 3.7 s for one question on the
+    // local copy, and "D1 DB is overloaded" in production (9 Nov 2026).
+    const docs = params.doc_ids.map((id) => `scope:${docToken(id)}`).join(" OR ");
+    channels.push({ match: `${base} AND (${docs})`, limit: k });
   } else if (params.type) {
     channels.push({ match: `${base} AND scope:xqt${params.type.replace(/[^a-z]/g, "")}`, limit: k });
   } else {
@@ -116,14 +126,8 @@ export function buildSearchSql(match: string, params: SearchParams): { sql: stri
   const binds: unknown[] = [];
   const parts = channels.map((channel) => {
     binds.push(channel.match);
-    let restrict = "";
-    if (channel.restrict) {
-      // Only the chunks of these documents: the index is probed per rowid.
-      restrict = ` AND rowid IN (SELECT id FROM chunks WHERE doc_id IN (${channel.restrict.map(() => "?").join(", ")}))`;
-      binds.push(...channel.restrict);
-    }
     binds.push(channel.limit);
-    return `SELECT * FROM (SELECT rowid AS id, rank AS r FROM chunks_fts WHERE chunks_fts MATCH ?${restrict} ORDER BY rank LIMIT ?)`;
+    return `SELECT * FROM (SELECT rowid AS id, rank AS r FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY rank LIMIT ?)`;
   });
 
   const extra: string[] = [];

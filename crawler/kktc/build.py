@@ -255,7 +255,7 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
     doc_types = {row[0]: row[1] for row in document_rows}
     conn.executemany(
         "INSERT INTO chunks_fts (rowid, text_norm, scope) VALUES (?, ?, ?)",
-        [(cid, index_text(row[4]), scope_tokens(doc_types.get(row[0], "yasa"))) for cid, row in chunk_ids],
+        [(cid, index_text(row[4]), scope_tokens(doc_types.get(row[0], "yasa"), row[0])) for cid, row in chunk_ids],
     )
 
     # Precompute the /v1/stats payload. Reading it back is one meta row instead
@@ -307,6 +307,7 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
     }
     conn.executemany("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", [(k, json.dumps(v)) for k, v in meta.items()])
     conn.commit()
+    conn.execute(FTS_RANK_CONFIG)
     conn.execute("INSERT INTO chunks_fts (chunks_fts) VALUES ('optimize')")
     conn.commit()
     conn.execute("PRAGMA optimize")
@@ -331,9 +332,19 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
 LEGISLATION_TYPES = {"yasa", "tuzuk", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"}
 
 
-def scope_tokens(doc_type: str) -> str:
+def doc_token(doc_id: str) -> str:
+    """FTS token naming one document: "xqd" + hex of the id (same in sql.ts)."""
+    return "xqd" + doc_id.encode("utf-8").hex()
+
+
+def scope_tokens(doc_type: str, doc_id: str = "") -> str:
     group = "mevzuat" if doc_type in LEGISLATION_TYPES else "ictihat" if doc_type == "karar" else "diger"
-    return f"xqt{doc_type} xqg{group}"
+    tokens = f"xqt{doc_type} xqg{group}"
+    return f"{tokens} {doc_token(doc_id)}" if doc_id else tokens
+
+
+# The scope column only filters; it must not move bm25 (weights: text 1, scope 0).
+FTS_RANK_CONFIG = "INSERT INTO chunks_fts(chunks_fts, rank) VALUES('rank', 'bm25(1.0, 0.0)');"
 
 
 def _chunk_id(doc_id: str, ord_: int, used: set[int]) -> int:
@@ -488,9 +499,10 @@ class SqlFileWriter:
         return self.files
 
 
-D1_STATE_VERSION = 4  # bump when chunk ids or the D1 layout change: forces a full import
+D1_STATE_VERSION = 5  # bump when chunk ids or the D1 layout change: forces a full import
 # v3: chunks_fts gained the "scope" column.
 # v4: chunks_fts is contentless in D1 (content='', contentless_delete=1).
+# v5: scope carries a per-document token (xqd<hex id>) and bm25 ignores scope.
 D1_STATE_FILE = "d1-state.json"
 # In D1 the FTS table keeps only the index, not a second copy of every
 # chunk's text: that copy was ~37% of the database, and D1 refused writes
@@ -594,6 +606,8 @@ def export_d1(
         (out_dir / "002-reset.sql").write_text(
             "DROP TABLE IF EXISTS chunks_fts;\n"
             + _FTS_CREATE.strip()
+            + "\n"
+            + FTS_RANK_CONFIG
             + "\nDELETE FROM chunks;\nDELETE FROM documents;\nDELETE FROM meta;\n"
             "DELETE FROM changes;\nDELETE FROM doc_versions;\n",
             encoding="utf-8",
