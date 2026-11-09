@@ -14,6 +14,9 @@ import {
   type VectorUnit,
   type VectorWriter,
 } from "@kktc/core";
+import { DEFAULT_GATE_PER_MINUTE, gateExempt, passGate } from "./gate";
+
+export { TrafficGate } from "./gate";
 
 export interface Env {
   DB: D1Database;
@@ -29,6 +32,10 @@ export interface Env {
   CLEF_DAILY_LIMIT?: string;
   /** Per-client request limit (wrangler.toml [[ratelimits]]). */
   RATE_LIMITER?: RateLimit;
+  /** Global per-minute circuit breaker (Durable Object, see gate.ts). */
+  GATE?: DurableObjectNamespace;
+  /** Requests reaching D1 allowed per minute across the Worker (default 100). */
+  GATE_PER_MINUTE?: string;
 }
 
 /**
@@ -200,6 +207,25 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const limited = await rateLimited(request, env);
     if (limited) return limited;
+    const path = new URL(request.url).pathname;
+    if (!gateExempt(path) && !bearerIsAdmin(request, env)) {
+      const decision = await passGate(env.GATE, Number(env.GATE_PER_MINUTE ?? DEFAULT_GATE_PER_MINUTE));
+      if (!decision.allowed) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "busy",
+              message: "Hizmet şu an yoğun. Lütfen biraz sonra tekrar deneyin.",
+              retry_after: decision.retryAfter,
+            },
+          }),
+          {
+            status: 503,
+            headers: { "content-type": "application/json; charset=utf-8", "retry-after": String(decision.retryAfter) },
+          },
+        );
+      }
+    }
     const semantic = env.AI && env.VECTORS ? new VectorizeSemantic(env.AI, env.VECTORS) : undefined;
     const decide = env.AI
       ? (model: string, input: Record<string, unknown>) =>

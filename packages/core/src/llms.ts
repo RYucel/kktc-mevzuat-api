@@ -209,7 +209,8 @@ saymayın, \`/v1/search\` ile daha geniş arayın. Kısa anahtar kelime aramalar
 sınırı dolarsa \`rerank.error: "daily_limit"\` döner ve sıralama aramadan gelir.
 
 İstemci başına dakikada yaklaşık 30 istek sınırı vardır; aşılırsa \`429 rate_limited\` ve
-\`retry-after: 60\` döner. Aynı soruyu tekrarlamak yerine yanıtı saklayın.
+\`retry-after: 60\` döner. Aynı soruyu tekrarlamak yerine yanıtı saklayın. Ayrıca hizmetin toplam bir
+dakika sınırı vardır; aşılırsa \`503 busy\` ve \`retry-after\` saniyesi döner.
 
 ### 2) Belge — \`GET /v1/documents/{id}\`
 

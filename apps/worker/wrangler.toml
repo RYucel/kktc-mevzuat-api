@@ -31,3 +31,15 @@ namespace_id = "1001"
   [ratelimits.simple]
   limit = 30
   period = 60
+
+# Global circuit breaker: one Durable Object counts requests that reach D1,
+# per minute, across the whole Worker (GATE_PER_MINUTE, default 100); above
+# it the API answers 503 until the next minute. Bounds the bill against many
+# clients at once, which the per-client limit above cannot. See src/gate.ts.
+[[durable_objects.bindings]]
+name = "GATE"
+class_name = "TrafficGate"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TrafficGate"]
