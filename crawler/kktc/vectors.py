@@ -203,8 +203,8 @@ def sync(
     have: dict[str, Any] = manifest.setdefault("ids", {})
     stale = [i for i in have if i not in wanted] + list(manifest.pop("stale_model_ids", []))
     deleted = 0
-    for start in range(0, len(stale), 500):
-        batch = stale[start : start + 500]
+    for start in range(0, len(stale), 100):
+        batch = stale[start : start + 100]
         post("/admin/vectors/delete", {"ids": batch})
         for vector_id in batch:
             have.pop(vector_id, None)
