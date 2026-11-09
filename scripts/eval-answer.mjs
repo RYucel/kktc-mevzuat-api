@@ -12,6 +12,14 @@
 // and article. Reported per variant: doc@1, article@1, article@5 (among the
 // five quotes), and how often each confidence label was right, which is what
 // tells a reader whether to trust "high".
+//
+// Case fields: q, expect (document id), ref ("Madde 7") or refs (several
+// acceptable articles), or unanswerable: true for questions no KKTC statute
+// answers (right when the API says confidence "low").
+//
+// Diagnosis (debug=1): for every miss, was the right article among the
+// passages Clef saw? "not retrieved" points at search, "not chosen" at the
+// reranker.
 
 import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
 
@@ -34,13 +42,15 @@ if (sets.includes("keywords")) cases.push(...load("eval-keywords.json").map((c) 
 const seen = new Set();
 cases = cases.filter((c) => (seen.has(c.q) ? false : seen.add(c.q)));
 
-const isDoc = (quote, c) => quote?.document_id === c.expect;
+const isDoc = (quote, c) => !!c.expect && quote?.document_id === c.expect;
 // "Madde 3" must not match "Madde 30"; a part suffix ("Madde 3 (2/2)") is fine.
-const sameArticle = (ref, expected) => !expected || ref === expected || (ref ?? "").startsWith(`${expected} `);
-const isArticle = (quote, c) => isDoc(quote, c) && sameArticle(quote.ref, c.ref);
+const sameArticle = (ref, expected) => ref === expected || (ref ?? "").startsWith(`${expected} `);
+const acceptable = (c) => c.refs ?? (c.ref ? [c.ref] : []);
+const isArticle = (quote, c) =>
+  isDoc(quote, c) && (acceptable(c).length === 0 || acceptable(c).some((ref) => sameArticle(quote.ref, ref)));
 
 async function answer(q, variant) {
-  const url = `${base}/v1/answer?q=${encodeURIComponent(q)}&limit=5&${variant}`;
+  const url = `${base}/v1/answer?q=${encodeURIComponent(q)}&limit=5&debug=1&${variant}`;
   for (let attempt = 0; ; attempt++) {
     const started = Date.now();
     const response = await fetch(url);
@@ -55,13 +65,14 @@ async function answer(q, variant) {
 
 const rows = [];
 for (const [n, c] of cases.entries()) {
-  const row = { q: c.q, set: c.set, expect: c.expect, ref: c.ref ?? null, variants: {} };
+  const row = { q: c.q, set: c.set, expect: c.expect ?? null, refs: acceptable(c), unanswerable: !!c.unanswerable, variants: {} };
   const marks = [];
   for (const variant of variants) {
     try {
       const { body, ms, rowsRead } = await answer(c.q, variant);
       const quotes = body.quotes ?? [];
       const top = quotes[0];
+      const seenByClef = body.rerank?.debug_candidates ?? null;
       const result = {
         ms,
         rows_read: rowsRead,
@@ -71,9 +82,13 @@ for (const [n, c] of cases.entries()) {
         doc1: isDoc(top, c),
         article1: isArticle(top, c),
         article5: quotes.some((quote) => isArticle(quote, c)),
+        // Was the right article (or law) among what Clef chose from?
+        candidates_article: seenByClef ? seenByClef.some((x) => isArticle(x, c)) : null,
+        candidates_doc: seenByClef ? seenByClef.some((x) => isDoc(x, c)) : null,
+        abstained: body.confidence === "low",
       };
       row.variants[variant] = result;
-      marks.push(result.article1 ? "A" : result.doc1 ? "d" : "·");
+      marks.push(c.unanswerable ? (result.abstained ? "u" : "!") : result.article1 ? "A" : result.doc1 ? "d" : "·");
     } catch (error) {
       row.variants[variant] = { error: error.message };
       marks.push("x");
@@ -86,7 +101,10 @@ for (const [n, c] of cases.entries()) {
 const pct = (x, n) => (n ? `${((x / n) * 100).toFixed(1)}%` : "–");
 const summary = {};
 for (const variant of variants) {
-  const ok = rows.map((r) => r.variants[variant]).filter((v) => v && !v.error);
+  const all = rows.map((r) => ({ ...r.variants[variant], unanswerable: r.unanswerable })).filter((v) => v && !v.error);
+  const ok = all.filter((v) => !v.unanswerable);
+  const unanswerable = all.filter((v) => v.unanswerable);
+  const misses = ok.filter((v) => !v.article1 && v.candidates_article !== null);
   const byConfidence = {};
   for (const v of ok) {
     const b = (byConfidence[v.confidence] ??= { n: 0, right: 0 });
@@ -105,11 +123,23 @@ for (const variant of variants) {
       return counted.length ? Math.round(counted.reduce((s, v) => s + v.rows_read, 0) / counted.length) : null;
     })(),
     byConfidence,
+    candidates_article: ok.filter((v) => v.candidates_article).length,
+    candidates_known: ok.filter((v) => v.candidates_article !== null).length,
+    miss_not_retrieved: misses.filter((v) => !v.candidates_doc).length,
+    miss_wrong_article: misses.filter((v) => v.candidates_doc && !v.candidates_article).length,
+    miss_not_chosen: misses.filter((v) => v.candidates_article).length,
+    unanswerable: unanswerable.length,
+    unanswerable_abstained: unanswerable.filter((v) => v.abstained).length,
   };
 }
 writeFileSync(outPath, JSON.stringify({ base, generated_at: new Date().toISOString(), variants, summary, rows }, null, 1));
 
-const md = ["## /v1/answer ölçümü", "", `${rows.length} soru (${sets.join(", ")}). A = doğru madde, d = doğru yasa/yanlış madde, · = yanlış.`, ""];
+const md = [
+  "## /v1/answer ölçümü",
+  "",
+  `${rows.length} soru (${sets.join(", ")}). A = doğru madde, d = doğru yasa/yanlış madde, · = yanlış; cevapsız sorularda u = doğru şekilde "low", ! = emin bir cevap uydurdu.`,
+  "",
+];
 md.push("| Varyant | doğru yasa @1 | doğru madde @1 | doğru madde ilk 5'te | Clef uygulandı | ort. ms | D1 satır/soru | high: isabet | medium: isabet | low: isabet |", "|---|---|---|---|---|---|---|---|---|---|");
 for (const [variant, s] of Object.entries(summary)) {
   const conf = (label) => {
@@ -117,6 +147,10 @@ for (const [variant, s] of Object.entries(summary)) {
     return b ? `${b.right}/${b.n}` : "–";
   };
   md.push(`| ${variant} | ${pct(s.doc1, s.n)} | ${pct(s.article1, s.n)} | ${pct(s.article5, s.n)} | ${s.reranked}/${s.n} | ${s.ms ?? "–"} | ${s.rows_read ?? "–"} | ${conf("high")} | ${conf("medium")} | ${conf("low")} |`);
+}
+md.push("", "### Teşhis: kaçan sorular nerede kaçtı?", "", "| Varyant | doğru madde Clef'in adaylarında | kaçan: yasa adaylarda yok | kaçan: yasa var, madde yok | kaçan: madde vardı, seçilmedi | cevapsız sorularda \"low\" |", "|---|---|---|---|---|---|");
+for (const [variant, s] of Object.entries(summary)) {
+  md.push(`| ${variant} | ${s.candidates_known ? `${s.candidates_article}/${s.candidates_known}` : "–"} | ${s.miss_not_retrieved} | ${s.miss_wrong_article} | ${s.miss_not_chosen} | ${s.unanswerable ? `${s.unanswerable_abstained}/${s.unanswerable}` : "–"} |`);
 }
 const text = md.join("\n");
 console.log("\n" + text);

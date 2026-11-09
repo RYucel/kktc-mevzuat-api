@@ -224,6 +224,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       semantic: !["0", "false", "no"].includes((c.req.query("semantic") ?? "").toLowerCase()),
       rerank: !["0", "false", "no"].includes((c.req.query("rerank") ?? "").toLowerCase()),
       passages: c.req.query("passages") ? intParam(c.req.query("passages"), "passages", 1, 1, 3) : undefined,
+      debug: ["1", "true", "yes"].includes((c.req.query("debug") ?? "").toLowerCase()),
       limit: intParam(c.req.query("limit"), "limit", 3, 1, 5),
       offset: 0,
     };

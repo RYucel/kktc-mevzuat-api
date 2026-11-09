@@ -663,6 +663,15 @@ export async function answerQuestion(
         passages_per_document: passages,
         top_probability: round3(order[0]?.p ?? 0),
         none_probability: round3(result.none),
+        ...(params.debug
+          ? {
+              debug_candidates: order.map((o) => ({
+                document_id: o.c.result.id,
+                ref: o.c.ref,
+                probability: round3(o.p),
+              })),
+            }
+          : {}),
       };
     } catch (error) {
       // Quota, timeout or an unexpected answer: keep today's ranking.
