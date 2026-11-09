@@ -2,7 +2,11 @@ name: D1 maintenance
 
 # One-off maintenance on the live D1 database without a data refresh.
 #   optimize: merge FTS5 index segments (after a bulk import)
-#   info:     database size and table count (free tier limit: 500 MB)
+#   info:      database size and table count (free tier limit: 500 MB)
+#   inventory: every Worker, Pages project, D1, KV, R2 and Vectorize index
+#              in the account with 30-day usage (scripts/cf-inventory.py).
+#              The repository is public: the report lists resource names
+#              and usage counts only (no ids, no secrets).
 
 on:
   workflow_dispatch:
@@ -10,7 +14,7 @@ on:
       task:
         description: "Görev"
         type: choice
-        options: [optimize, info]
+        options: [optimize, info, inventory]
         default: optimize
 
 permissions:
@@ -55,3 +59,6 @@ jobs:
         run: |
           npx wrangler d1 info kktc-mevzuat
           npx wrangler d1 execute kktc-mevzuat --remote --command "SELECT (SELECT COUNT(*) FROM documents) AS documents, (SELECT COUNT(*) FROM chunks) AS chunks, (SELECT COUNT(*) FROM doc_versions) AS versions, (SELECT COUNT(*) FROM changes) AS changes"
+      - name: Account inventory
+        if: ${{ inputs.task == 'inventory' }}
+        run: python3 scripts/cf-inventory.py
