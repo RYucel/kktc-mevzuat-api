@@ -38,7 +38,7 @@ export interface Env {
   CLEF_ADMIN_DAILY_LIMIT?: string;
   /** "off" disables the LLM query rewrite. */
   REWRITE?: string;
-  /** Workers AI model for the query rewrite (default @cf/openai/gpt-oss-120b). */
+  /** Workers AI model for the query rewrite (default @cf/openai/gpt-oss-20b). */
   REWRITE_MODEL?: string;
   /** Rewrites per UTC day for users (default 400) and for our own jobs (default 600). */
   REWRITE_DAILY_LIMIT?: string;
@@ -115,7 +115,13 @@ function limitedReranker(inner: Reranker, db: D1Database, limit: number, key = "
  * ~30-40 neurons with gpt-oss-120b); counted per day like Clef, fail-closed,
  * and cut off after REWRITE_TIMEOUT_MS so a slow model never holds the answer.
  */
-const DEFAULT_REWRITE_MODEL = "@cf/openai/gpt-oss-120b";
+/**
+ * Measured 2026-11-09 (eval-answer, 62 questions, live Clef, rewrite in
+ * parallel with the main search): gpt-oss-20b put the right article first in
+ * 69.1% (120b: 67.3%, no rewrite: 52.7%), "high" right 36/42 (120b 35/40),
+ * 5.3 s average against 7.2 s, at about half the neurons.
+ */
+const DEFAULT_REWRITE_MODEL = "@cf/openai/gpt-oss-20b";
 /** Per-request choice (rewrite_model=20b|120b), for measuring speed against accuracy. */
 const REWRITE_MODELS = { "20b": "@cf/openai/gpt-oss-20b", "120b": "@cf/openai/gpt-oss-120b" } as const;
 const DEFAULT_REWRITE_DAILY_LIMIT = 400;

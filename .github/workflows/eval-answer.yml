@@ -9,7 +9,7 @@ on:
     inputs:
       variants:
         description: "Karşılaştırılacak varyantlar (virgülle)"
-        default: "rewrite=0,rewrite_wait=1,passages=3,rewrite_model=20b"
+        default: "rewrite=0,passages=3"
       sets:
         description: "Soru setleri: questions, keywords"
         default: "questions"
