@@ -87,6 +87,7 @@ def cmd_fetch_text(args: argparse.Namespace) -> None:
     mah_client = MahkemelerClient(MAHKEMELER_BASE)
     done = 0
     checked = 0
+    statuses: dict[str, int] = {}
     for doc in docs:
         if types and doc.get("type") not in types:
             continue
@@ -115,6 +116,10 @@ def cmd_fetch_text(args: argparse.Namespace) -> None:
             revalidate=getattr(args, "revalidate", False),
             retry_errors=getattr(args, "retry_errors", False),
         )
+        status = str(payload.get("status") or "unknown")
+        if not payload.get("text"):
+            status += " (no text)"
+        statuses[status] = statuses.get(status, 0) + 1
         if payload.get("text"):
             done += 1
             log.info(
@@ -126,6 +131,9 @@ def cmd_fetch_text(args: argparse.Namespace) -> None:
                 len(payload["text"]),
             )
     log.info("fetched text for %d documents", done)
+    # Files without text are otherwise silent (a cached scan, an old error):
+    # the breakdown shows why documents stay metadata-only.
+    log.info("text status: %s", json.dumps(dict(sorted(statuses.items())), ensure_ascii=False))
 
 
 def _content_for(doc: dict[str, Any]) -> str:
