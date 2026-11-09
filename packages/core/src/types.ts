@@ -61,6 +61,8 @@ export interface SearchParams {
   rerank?: boolean;
   /** Matching articles per document to return (1-3, default 1); extra ones go to other_passages. */
   passages?: number;
+  /** /v1/answer: list every candidate the reranker saw (for measurement). */
+  debug?: boolean;
   limit: number;
   offset: number;
 }
@@ -144,6 +146,8 @@ export interface AnswerResponse {
     applied: boolean;
     candidates?: number;
     passages_per_document?: number;
+    /** Only with debug=1: every candidate Clef saw, best first. */
+    debug_candidates?: { document_id: string; ref: string | null; probability: number }[];
     top_probability?: number;
     none_probability?: number;
     error?: string;

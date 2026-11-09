@@ -53,7 +53,8 @@ const RAW_KEEP = 3;
 
 const load = (name) => JSON.parse(readFileSync(new URL(`./${name}`, import.meta.url), "utf8")).cases;
 let cases = [];
-if (sets.includes("questions")) cases.push(...load("eval-questions.json").map((c) => ({ ...c, set: "questions" })));
+if (sets.includes("questions"))
+  cases.push(...load("eval-questions.json").filter((c) => !c.unanswerable).map((c) => ({ ...c, set: "questions" })));
 if (sets.includes("keywords")) cases.push(...load("eval-keywords.json").map((c) => ({ ...c, set: "keywords" })));
 const seen = new Set();
 cases = cases.filter((c) => (seen.has(c.q) ? false : seen.add(c.q)));

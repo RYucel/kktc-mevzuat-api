@@ -224,6 +224,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       semantic: !["0", "false", "no"].includes((c.req.query("semantic") ?? "").toLowerCase()),
       rerank: !["0", "false", "no"].includes((c.req.query("rerank") ?? "").toLowerCase()),
       passages: c.req.query("passages") ? intParam(c.req.query("passages"), "passages", 1, 1, 3) : undefined,
+      debug: ["1", "true", "yes"].includes((c.req.query("debug") ?? "").toLowerCase()),
       limit: intParam(c.req.query("limit"), "limit", 3, 1, 5),
       offset: 0,
     };
@@ -516,11 +517,14 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       );
     }
     console.error(err);
+    // debug=1 (measurement scripts) also gets the underlying message.
+    const debug = ["1", "true", "yes"].includes((c.req.query("debug") ?? "").toLowerCase());
     return c.json(
       {
         error: {
           code: "internal_error",
           message: "Beklenmeyen bir hata oluştu.",
+          ...(debug ? { detail: message.slice(0, 500) } : {}),
         },
         _meta: apiMeta(requestOrigin(c)),
       },

@@ -9,7 +9,7 @@ on:
     inputs:
       variants:
         description: "Karşılaştırılacak varyantlar (virgülle)"
-        default: "rerank=0,passages=1,passages=2,passages=3"
+        default: "rerank=0,passages=3"
       sets:
         description: "Soru setleri: questions, keywords"
         default: "questions"
