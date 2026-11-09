@@ -114,7 +114,12 @@ const CONCEPT_BOOST = 8;
 const SEMANTIC_TOP_K = 30;
 /** Articles per document at most (the public API allows 3; the answer focus step more). */
 const MAX_PASSAGES = 20;
-/** Articles of the chosen statute shown to Clef in the focus step (focus=1). */
+/**
+ * Articles of the chosen statute shown to Clef in the focus step (default).
+ * Measured 2026-11-09 (eval-answer, 55 answerable + 7 unanswerable questions,
+ * live Clef): right article first 40.0% -> 52.7% with focus=12 (16: same),
+ * "high" right 20/35 -> 25/36, unanswerable "low" 6/7 unchanged, +0.7-0.9 s.
+ */
 export const FOCUS_DEFAULT = 12;
 
 function capText(text: string, limit: number): { text: string; truncated: boolean } {
@@ -715,11 +720,12 @@ export async function answerQuestion(
   // Focus: Clef found the statute but often not the article (the right law
   // with the wrong article was the largest miss on 2026-11-09). Ask again
   // among up to `focus` articles of the chosen statute.
-  if ((params.focus ?? 0) > 1 && reranker && rerank?.applied && probabilities && candidates.length) {
+  const focusCount = params.focus ?? FOCUS_DEFAULT;
+  if (focusCount > 1 && reranker && rerank?.applied && probabilities && candidates.length) {
     const chosen = candidates[0].result;
     const none = rerank.none_probability ?? 0;
     if (LEGISLATION_TYPES.has(chosen.type) && candidates[0].ref && none < (probabilities[0] ?? 0)) {
-      const focus = await focusStatute(store, reranker, params, origin, chosen, candidates, semanticSink);
+      const focus = await focusStatute(store, reranker, params, origin, chosen, candidates, semanticSink, focusCount);
       rerank.focus = focus.info;
       if (focus.passages) {
         // The statute's articles in Clef's new order, then the other statutes.
@@ -803,6 +809,7 @@ async function focusStatute(
   chosen: SearchResult,
   seen: Passage[],
   semanticHits: { doc_id: string; ref: string | null }[],
+  focusCount: number,
 ): Promise<{ info: NonNullable<NonNullable<AnswerResponse["rerank"]>["focus"]>; passages?: { passage: Passage; p: number }[] }> {
   const info: NonNullable<NonNullable<AnswerResponse["rerank"]>["focus"]> = { document_id: chosen.id, candidates: 0, applied: false };
   // Articles Clef already saw for this statute lead the vector hits.
@@ -818,7 +825,7 @@ async function focusStatute(
       doc_ids: [chosen.id],
       exclude_title: true,
       semantic_hits: hints,
-      passages: params.focus,
+      passages: focusCount,
       limit: 1,
       offset: 0,
     },
@@ -840,7 +847,7 @@ async function focusStatute(
   for (const other of result.other_passages ?? []) {
     passages.push({ result: chosen, ref: other.ref, text: other.text, snippet: other.snippet, url: other.url });
   }
-  const unique = passages.filter((p, i) => passages.findIndex((q) => q.ref === p.ref) === i).slice(0, params.focus ?? FOCUS_DEFAULT);
+  const unique = passages.filter((p, i) => passages.findIndex((q) => q.ref === p.ref) === i).slice(0, focusCount);
   info.candidates = unique.length;
   if (unique.length < 2) return { info };
   try {
