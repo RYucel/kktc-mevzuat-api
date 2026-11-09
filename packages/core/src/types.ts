@@ -76,6 +76,10 @@ export interface SearchParams {
   semantic_sink?: { doc_id: string; ref: string | null }[];
   /** /v1/answer: rewrite the question into legal terms and statute names with an LLM (default true). */
   rewrite?: boolean;
+  /** /v1/answer: rewrite model ("120b" default, "20b" faster). */
+  rewrite_model?: "20b" | "120b";
+  /** /v1/answer: wait for the rewrite before the main search (slower; for measurement). */
+  rewrite_wait?: boolean;
   /** Internal: receives what the rewriter returned. */
   rewrite_sink?: QueryRewriteInfo[];
   /** Internal: vector hits to use instead of querying the index (with doc_ids). */

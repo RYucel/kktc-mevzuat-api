@@ -25,7 +25,7 @@ export class RewriteLimitError extends Error {
 }
 
 export interface QueryRewriter {
-  rewrite(question: string): Promise<QueryRewrite>;
+  rewrite(question: string, options?: { model?: "20b" | "120b" }): Promise<QueryRewrite>;
 }
 
 export const REWRITE_INSTRUCTIONS = [

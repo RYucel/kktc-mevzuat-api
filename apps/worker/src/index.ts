@@ -116,6 +116,8 @@ function limitedReranker(inner: Reranker, db: D1Database, limit: number, key = "
  * and cut off after REWRITE_TIMEOUT_MS so a slow model never holds the answer.
  */
 const DEFAULT_REWRITE_MODEL = "@cf/openai/gpt-oss-120b";
+/** Per-request choice (rewrite_model=20b|120b), for measuring speed against accuracy. */
+const REWRITE_MODELS = { "20b": "@cf/openai/gpt-oss-20b", "120b": "@cf/openai/gpt-oss-120b" } as const;
 const DEFAULT_REWRITE_DAILY_LIMIT = 400;
 const DEFAULT_REWRITE_ADMIN_DAILY_LIMIT = 600;
 const REWRITE_TIMEOUT_MS = 6000;
@@ -139,7 +141,7 @@ function modelText(output: unknown): string {
 
 function llmRewriter(ai: Ai, db: D1Database, model: string, limit: number, key: string): QueryRewriter {
   return {
-    async rewrite(question) {
+    async rewrite(question, options) {
       let allowed: boolean;
       try {
         allowed = await takeDaily(db, key, limit);
@@ -147,7 +149,8 @@ function llmRewriter(ai: Ai, db: D1Database, model: string, limit: number, key: 
         throw new Error(`rewrite counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
       }
       if (!allowed) throw new RewriteLimitError();
-      const run = ai.run(model as Parameters<Ai["run"]>[0], {
+      const chosen = options?.model ? REWRITE_MODELS[options.model] : model;
+      const run = ai.run(chosen as Parameters<Ai["run"]>[0], {
         instructions: REWRITE_INSTRUCTIONS,
         input: `Soru: ${question.slice(0, 500)}`,
         reasoning: { effort: "low" },
