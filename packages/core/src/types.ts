@@ -77,6 +77,13 @@ export interface SearchParams {
    * regulation (default true). Search also uses it to rank tüzük lower.
    */
   statute_first?: boolean;
+  /**
+   * /v1/answer: do not quote amendment instruments or first-published copies
+   * of statutes we also hold consolidated (default true).
+   */
+  dedupe?: boolean;
+  /** Internal: rank amendment instruments far down (answers). */
+  skip_amendments?: boolean;
   /** /v1/answer: "high" needs the answer to come from a statute the rewrite named, when it named any (default true). */
   agree?: boolean;
   /** Internal: receives the vector hits of this search (answer focus step). */

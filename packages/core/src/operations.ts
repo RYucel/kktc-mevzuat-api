@@ -18,7 +18,7 @@ import {
 import { buildCitation } from "./citation.js";
 import { conceptMatch, type LegalConcept, matchConcepts } from "./legal-concepts.js";
 import { ANSWER_PASSAGES, RERANK_CANDIDATES, RerankLimitError, wantsRerank } from "./rerank.js";
-import { legislationTitles } from "./titles.js";
+import { isAmendment, legislationTitles, supersededStatutes } from "./titles.js";
 import { resolveLaws, RewriteLimitError } from "./rewrite.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
 import {
@@ -685,6 +685,7 @@ export async function answerQuestion(
       rewrite: !!reranker && params.rewrite !== false,
       rewrite_sink: rewriteSink,
       statute_first: statuteFirst,
+      skip_amendments: params.dedupe !== false && !/degisiklik/.test(foldTr(params.q)),
       prefer: params.prefer ?? "mevzuat",
       limit: reranker ? Math.max(limit, Math.ceil(RERANK_CANDIDATES / passages)) : limit,
       passages,
@@ -695,8 +696,14 @@ export async function answerQuestion(
   // Only quote provisions: a law's title or a document without text is not
   // an answer to anything.
   const rounds: Passage[][] = [[]];
+  // Never quote an amendment instrument (its text only says what changes in
+  // another statute) or a first-published copy we also hold consolidated.
+  const dedupe = params.dedupe !== false;
+  const superseded = dedupe ? await supersededStatutes(store).catch(() => new Set<string>()) : new Set<string>();
+  const wantsAmendment = /degisiklik/.test(foldTr(params.q));
   for (const result of search.results) {
     if (result.text_status === "metadata") continue;
+    if (dedupe && (superseded.has(result.id) || (!wantsAmendment && isAmendment(result.title)))) continue;
     if (result.snippet && result.matched_kind !== "title") {
       rounds[0].push({
         result,
@@ -1250,7 +1257,12 @@ async function runRewrite(
     info.terms = rewrite.terms;
     info.laws = rewrite.laws;
     if (rewrite.cached) info.cached = true;
-    info.documents = rewrite.laws.length ? resolveLaws(await legislationTitles(store), rewrite.laws) : [];
+    if (rewrite.laws.length) {
+      // Resolve names to the consolidated copy, not a first-published duplicate.
+      const superseded = params.dedupe !== false ? await supersededStatutes(store) : new Set<string>();
+      const titles = (await legislationTitles(store)).filter((t) => !superseded.has(t.id));
+      info.documents = resolveLaws(titles, rewrite.laws);
+    }
     if (!info.terms.length && !info.documents.length) return { info, concept: null };
     return { info, concept: { id: "llm", label: "LLM", triggers: [], expand: info.terms, primary: info.documents, weight: 1 } };
   } catch (error) {
