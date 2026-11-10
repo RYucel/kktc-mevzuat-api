@@ -101,6 +101,18 @@ _FOOTNOTE_NUM_RE = re.compile(
 _BARE_NUM_RE = re.compile(
     r"(?m)^[ \t]*(?P<num>\d{1,4})(?P<suf>[A-Z])?\.[ \t]*(?:\n[ \t]*)+(?=[A-ZÇĞİÖŞÜ(])"
 )
+# Margin notes (the laws an article cites or was amended by) printed on the
+# article's own line, before its number; with or without a heading:
+#   "İndirim, İstisna ... Teşvikler 24/1982 11/1985 ... 21/1995 9.\n\n(1) ..."
+#   ".... 2. Bu Yasada metin başka türlü gerektirmedikçe; ..."
+# These articles were merged into the previous one (16/2019 m.9 under m.8,
+# 17/2016 m.2 under m.1), so their text was quoted with the wrong number.
+_MARGIN_NUM_RE = re.compile(
+    r"(?m)^[ \t]*(?P<title>[A-ZÇĞİÖŞÜ][^\n]{1,80}?[ \t]+)?"
+    r"(?P<margin>(?:(?:\d{1,3}\s*/\s*\d{4}|Fasıl[ \t]+\d{1,3}|\.{2,})[;,]?[ \t]+)+)"
+    r"(?P<num>\d{1,4})(?P<suf>[A-Z])?\."
+    r"(?:[ \t]+(?P<rest>[A-ZÇĞİÖŞÜ(“\"][^\n]*)|[ \t]*(?:\n[ \t]*)+(?=[A-ZÇĞİÖŞÜ(“\"]))"
+)
 _AMENDMENT_REF_RE = re.compile(r"^\s*\d{1,3}\s*/\s*\d{4}\b")
 _LAW_PREAMBLE_RE = re.compile(r"Kuzey Kıbrıs Türk Cumhuriyeti Cumhuriyet Meclisi", re.I)
 _TITLE_SUFFIX_RE = re.compile(
@@ -584,6 +596,12 @@ def _article_candidates(text: str) -> list[dict]:
             title = prev_line
             line_start = prev_start
         add(line_start, int(m.group("num")), m.group("suf") or "", title, 2)
+
+    for m in _MARGIN_NUM_RE.finditer(text):
+        title = (m.group("title") or "").strip()
+        if title and not _looks_like_title(title):
+            title = ""
+        add(m.start() if title else m.start("margin"), int(m.group("num")), m.group("suf") or "", title, 2)
 
     for m in _BARE_NUM_RE.finditer(text):
         line_start = m.start()
