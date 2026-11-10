@@ -145,3 +145,24 @@ def test_model_change_resets_manifest(tmp_path: Path) -> None:
 def test_admin_token_is_stable_and_not_the_api_token(token: str) -> None:
     assert vectors.admin_token(token) == vectors.admin_token(token)
     assert token not in vectors.admin_token(token)
+
+
+def test_unquotable_documents_take_no_vector_space(tmp_path: Path) -> None:
+    base = {"source_url": "https://x", "content": LAW, "extra": {}}
+    docs = [
+        {**base, "_id": "tuzuk-gov", "type": "tuzuk", "title": "MAL VE HİZMETLER TÜZÜĞÜ", "source": "gov"},
+        {**base, "_id": "tuzuk-869", "type": "tuzuk", "title": "Mal ve Hizmetler Tüzüğü", "source": "mahkemeler"},
+        {**base, "_id": "tuzuk-954", "type": "tuzuk", "title": "Mal ve Hizmetler (Değişiklik) Tüzüğü", "source": "mahkemeler"},
+        {**base, "_id": "tuzuk-other", "type": "tuzuk", "title": "Başka Tüzük", "source": "mahkemeler"},
+    ]
+    path = tmp_path / "kktc.db"
+    build_database(docs, path)
+    assert sorted({u["doc_id"] for u in vectors.build_units(path)}) == ["tuzuk-gov", "tuzuk-other"]
+
+
+def test_prioritise_prefers_newer_regulations() -> None:
+    units = [
+        {"id": str(i), "type": "tuzuk", "source": "mahkemeler", "year": y, "doc_id": f"d{i}", "ord": 1, "text": "x"}
+        for i, y in enumerate([1980, 2024, None, 2015])
+    ]
+    assert [u["year"] for u in vectors.prioritise(units, limit=2)] == [2024, 2015]
