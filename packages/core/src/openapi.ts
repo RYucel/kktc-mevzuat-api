@@ -276,6 +276,13 @@ export function openapiDocument(origin: string): Record<string, unknown> {
               schema: { type: "string", enum: ["1", "0"], default: "1" },
             },
             {
+              name: "agree",
+              in: "query",
+              description:
+                "LLM soruya uygun yasaları adlandırdıysa ve cevap bunların hiçbirinden gelmiyorsa güven 'high' yerine 'medium' olur (confidence_caps alanı). 0 ile kapatılır.",
+              schema: { type: "string", enum: ["1", "0"], default: "1" },
+            },
+            {
               name: "statute_first",
               in: "query",
               description:

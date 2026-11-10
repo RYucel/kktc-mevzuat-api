@@ -35,3 +35,20 @@ test("lawsBeforeRegulations keeps each group's order (9 Nov regression: shift re
   const out = lawsBeforeRegulations([c("t1", "tuzuk"), c("y1", "yasa"), c("t2", "tuzuk"), c("a1", "anayasa"), c("y2", "yasa")]);
   assert.deepEqual(out.map((x) => x.id), ["y1", "a1", "y2", "t1", "t2"]);
 });
+
+import { capConfidence, rewriteDisagrees } from "../.test-build/operations.js";
+
+test("any cap lowers high to medium only", () => {
+  assert.equal(capConfidence("high", ["rewrite_disagrees"]), "medium");
+  assert.equal(capConfidence("high", []), "high");
+  assert.equal(capConfidence("low", ["regulation"]), "low");
+});
+
+test("rewriteDisagrees: only when the rewrite resolved statutes and the answer is from none (10 Nov: KDV -> KDV İadesi)", () => {
+  const info = (documents, error) => ({ terms: [], laws: [], documents, ...(error ? { error } : {}) });
+  assert.equal(rewriteDisagrees(info(["yasa-47-1992"]), "yasa-31-1996"), true);
+  assert.equal(rewriteDisagrees(info(["yasa-47-1992", "yasa-31-1996"]), "yasa-31-1996"), false);
+  assert.equal(rewriteDisagrees(info([]), "yasa-31-1996"), false);
+  assert.equal(rewriteDisagrees(info(["yasa-47-1992"], "unavailable"), "yasa-31-1996"), false);
+  assert.equal(rewriteDisagrees(undefined, "yasa-31-1996"), false);
+});
