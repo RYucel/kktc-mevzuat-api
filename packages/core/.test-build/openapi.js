@@ -266,6 +266,12 @@ export function openapiDocument(origin) {
                             schema: { type: "string", enum: ["1", "0"], default: "1" },
                         },
                         {
+                            name: "agree",
+                            in: "query",
+                            description: "LLM soruya uygun yasaları adlandırdıysa ve cevap bunların hiçbirinden gelmiyorsa güven 'high' yerine 'medium' olur (confidence_caps alanı). 0 ile kapatılır.",
+                            schema: { type: "string", enum: ["1", "0"], default: "1" },
+                        },
+                        {
                             name: "statute_first",
                             in: "query",
                             description: "Soru tüzük veya yönetmelik demedikçe yasalar tüzüklerden önce gelir; bir tüzükten alıntılanan cevabın güveni en fazla 'medium' olur. 0 ile kapatılır.",

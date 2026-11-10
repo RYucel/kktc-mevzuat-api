@@ -745,6 +745,9 @@ export async function answerQuestion(store, params, origin) {
             url: passage.url,
             source_url: result.source_url,
             text_status: result.text_status,
+            source: result.source,
+            consolidated_through: result.consolidated_through,
+            excerpt: passage.snippet.startsWith("…") || passage.snippet.endsWith("…"),
             // Measured on the quoted window itself: that is what the reader gets.
             coverage: stemCoverage(passage.snippet, params.q),
             score: result.score,
@@ -776,6 +779,9 @@ export async function answerQuestion(store, params, origin) {
         // (Kira (Denetim) -> İskan Yasası, KDV -> KDV İadesi, Hayvan Refahı -> Ceza).
         if (params.agree !== false && rerank?.applied && rewriteDisagrees(rewriteSink[0], top.document_id))
             caps.push("rewrite_disagrees");
+        // Part of the statute is missing: another article (or a later paragraph) may change the answer.
+        if (top.text_status !== "full")
+            caps.push("partial_text");
     }
     const confidence = capConfidence(base, caps);
     return {
@@ -895,6 +901,11 @@ export function rerankConfidence(top, none) {
         return "medium";
     return "low";
 }
+const CAP_LABELS = {
+    regulation: "cevap bir tüzükten; ana yasayı da kontrol edin",
+    rewrite_disagrees: "beklenen yasalardan biri değil",
+    partial_text: "kaynak metin eksik",
+};
 export function answerMarkdown(response) {
     const lines = ["## Alıntı yanıt", ""];
     if (!response.quotes.length) {
@@ -903,12 +914,15 @@ export function answerMarkdown(response) {
     else {
         const quote = response.quotes[0];
         lines.push(`> ${quote.text.replace(/\n+/g, " ")}`, "");
+        if (quote.excerpt)
+            lines.push("_Alıntı maddenin bir bölümüdür; maddenin tamamı için API bağlantısına bakın._", "");
         lines.push(`- **Atıf:** ${quote.citation}`);
         if (quote.ref)
             lines.push(`- **Madde:** ${quote.ref}`);
+        lines.push(`- **Güncellik:** ${consolidationLabel(quote.consolidated_through) ?? "Metnin hangi değişikliklere kadar güncel olduğu kaynakta belirtilmiyor; Resmî Gazete'den kontrol edin."}`);
         lines.push(`- **Kaynak:** ${quote.source_url}`);
         lines.push(`- **API:** ${quote.url}`);
-        lines.push(`- **Güven:** ${response.confidence}`);
+        lines.push(`- **Güven:** ${response.confidence}${response.confidence_caps?.length ? ` (${response.confidence_caps.map((c) => CAP_LABELS[c]).join("; ")})` : ""}`);
         if (response.quotes.length > 1) {
             lines.push("", "### Diğer ilgili pasajlar", "");
             for (const other of response.quotes.slice(1)) {

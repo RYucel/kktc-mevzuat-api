@@ -154,6 +154,15 @@ export interface AnswerQuote {
   url: string;
   source_url: string;
   text_status: string;
+  /** Where the text comes from: "gov" (mevzuat.gov.ct.tr, consolidated) or "mahkemeler". */
+  source: string;
+  /**
+   * Last amendment the text is known to include ("25/2026", "2024-02-13");
+   * null when the source does not say, so the text may predate amendments.
+   */
+  consolidated_through: string | null;
+  /** True when `text` is a window cut out of a longer article (see `url` for all of it). */
+  excerpt: boolean;
   /** Query content words found in the quoted passage. */
   coverage: { found: number; total: number };
   score: number;
@@ -304,9 +313,10 @@ export interface StatsResponse {
 
 /**
  * regulation: a tüzük answered a question that did not ask for one;
- * rewrite_disagrees: the answer is from none of the statutes the LLM named.
+ * rewrite_disagrees: the answer is from none of the statutes the LLM named;
+ * partial_text: the statute's text is incomplete (partial download or scan).
  */
-export type ConfidenceCap = "regulation" | "rewrite_disagrees";
+export type ConfidenceCap = "regulation" | "rewrite_disagrees" | "partial_text";
 
 export interface QueryRewriteInfo {
   terms: string[];
