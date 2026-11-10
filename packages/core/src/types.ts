@@ -303,5 +303,7 @@ export interface QueryRewriteInfo {
   laws: string[];
   /** Statutes the names resolved to (they join the candidates). */
   documents: string[];
+  /** Served from the rewrite cache (no LLM call). */
+  cached?: boolean;
   error?: string;
 }
