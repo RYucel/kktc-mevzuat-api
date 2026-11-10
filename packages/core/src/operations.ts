@@ -675,7 +675,7 @@ export async function answerQuestion(
   const passages = reranker ? Math.min(3, Math.max(1, params.passages ?? ANSWER_PASSAGES)) : 1;
   const semanticSink: { doc_id: string; ref: string | null }[] = [];
   const rewriteSink: QueryRewriteInfo[] = [];
-  const statuteFirst = params.statute_first !== false && !ASKS_REGULATION.test(params.q.toLocaleLowerCase("tr"));
+  const statuteFirst = params.statute_first !== false && !asksRegulation(params.q);
   const search = await searchDocuments(
     store,
     {
@@ -711,13 +711,7 @@ export async function answerQuestion(
   }
   // Best article of every document first, then each document's second, ...
   // With statute_first, regulations only fill slots the laws left free.
-  let candidates: Passage[] = rounds.flat();
-  if (statuteFirst) {
-    candidates = [
-      ...candidates.filter((c) => c.result.type !== "tuzuk"),
-      ...candidates.filter((c) => c.result.type === "tuzuk"),
-    ];
-  }
+  let candidates: Passage[] = statuteFirst ? lawsBeforeRegulations(rounds.flat()) : rounds.flat();
   let probabilities: number[] | null = null;
   let rerank: AnswerResponse["rerank"];
   if (reranker && candidates.length > 1) {
@@ -962,13 +956,20 @@ function round3(value: number): number {
  * five; below ~0.35 the top passage was usually wrong.
  */
 /** The question itself asks for a regulation, so regulations are not ranked lower. */
-const ASKS_REGULATION = /t[uü]z[uü]k|y[oö]netmeli[kğ]|usul ve esas/;
+export function asksRegulation(question: string): boolean {
+  return /t[uü]z[uü][kğ]|y[oö]netmeli[kğ]|usul ve esas/.test(question.toLocaleLowerCase("tr"));
+}
 
-function capRegulation(confidence: AnswerResponse["confidence"], regulation: boolean): AnswerResponse["confidence"] {
+/** Stable: laws (and the constitution) first, regulations after, each in their order. */
+export function lawsBeforeRegulations<T extends { result: { type: string } }>(candidates: T[]): T[] {
+  return [...candidates.filter((c) => c.result.type !== "tuzuk"), ...candidates.filter((c) => c.result.type === "tuzuk")];
+}
+
+export function capRegulation(confidence: AnswerResponse["confidence"], regulation: boolean): AnswerResponse["confidence"] {
   return regulation && confidence === "high" ? "medium" : confidence;
 }
 
-function rerankConfidence(top: number, none: number): AnswerResponse["confidence"] {
+export function rerankConfidence(top: number, none: number): AnswerResponse["confidence"] {
   if (none >= top) return "low";
   if (top >= 0.7) return "high";
   if (top >= 0.35) return "medium";

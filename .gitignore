@@ -19,6 +19,7 @@ dist/
 node_modules/
 .wrangler/
 apps/node/dist/
+packages/core/.test-build/
 *.log
 npm-debug.log*
 
