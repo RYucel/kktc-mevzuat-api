@@ -1,0 +1,414 @@
+/** Turkish folding and snippet helpers.
+ *
+ * The crawl pipeline stores a folded copy of every chunk in FTS5. Folding is
+ * one character in, one character out, so offsets in the folded text map
+ * exactly onto the original Turkish text. The API uses that to render clean
+ * snippets without asking SQLite to cut the text.
+ */
+const FOLD = {
+    ı: "i",
+    İ: "i",
+    I: "i",
+    ş: "s",
+    Ş: "s",
+    ğ: "g",
+    Ğ: "g",
+    ü: "u",
+    Ü: "u",
+    ö: "o",
+    Ö: "o",
+    ç: "c",
+    Ç: "c",
+    â: "a",
+    Â: "a",
+    î: "i",
+    Î: "i",
+    û: "u",
+    Û: "u",
+    "’": "'",
+    "‘": "'",
+    "“": '"',
+    "”": '"',
+    "–": "-",
+    "—": "-",
+    "\u00a0": " ",
+    "\u2007": " ",
+    "\u202f": " ",
+};
+const FOLD_RE = new RegExp(`[${Object.keys(FOLD).join("")}]`, "g");
+/** Case/diacritic-insensitive folding that preserves string length. */
+export function foldTr(text) {
+    return text.replace(FOLD_RE, (ch) => FOLD[ch] ?? ch).toLowerCase();
+}
+// FTS5 splits "2/3" into "2" and "3", so a query for 2/3 used to match article
+// number 23. Fractions are indexed and queried as one token (f2of3). The
+// denominator whitelist keeps law numbers (24/1982) and dates (13/10/2026)
+// untouched.
+const FRACTION_RE = /(?<![\d/])(\d{1,2})\s*\/\s*(\d{1,2})(?![\d/])/g;
+const FRACTION_DENOMINATORS = new Set([2, 3, 4, 5, 6, 8, 10, 12, 16, 20]);
+function fractionToken(match, numerator, denominator) {
+    const n = Number(numerator);
+    const d = Number(denominator);
+    return n > 0 && n < d && FRACTION_DENOMINATORS.has(d) ? `f${n}of${d}` : match;
+}
+/** Fold the query and turn digit fractions ("2/3") into their index token. */
+export function normalizeQuery(query) {
+    return foldTr(query).replace(FRACTION_RE, (match, numerator, denominator) => fractionToken(match, numerator, denominator));
+}
+// Fractions written in words. Statutes use both forms ("2/3'ü" and "üçte iki
+// çoğunluğu"), and "yarı" is usually not a fraction at all ("yarı zamanlı",
+// "yarı açık cezaevi"). The match therefore accepts either form instead of
+// replacing the word with the fraction token (which matched nothing for
+// "yarı zamanlı çalışma"). Markers are word characters so they survive
+// tokenisation.
+const WORD_FRACTIONS = [
+    { re: /\bucte\s+iki\b/g, marker: "qwf2of3", expr: '(f2of3 OR "ucte iki")' },
+    { re: /\bucte\s+bir\b/g, marker: "qwf1of3", expr: '(f1of3 OR "ucte bir")' },
+    { re: /\byari\b/g, marker: "qwf1of2", expr: "(f1of2 OR yari)" },
+];
+function markWordFractions(normalized) {
+    let out = normalized;
+    for (const { re, marker } of WORD_FRACTIONS)
+        out = out.replace(re, ` ${marker} `);
+    return out;
+}
+function wordFractionExpr(token) {
+    return WORD_FRACTIONS.find((item) => item.marker === token)?.expr ?? null;
+}
+/** Split a user query into folded word tokens (quoted phrases preserved). */
+export function queryTokens(query) {
+    const normalized = normalizeQuery(query);
+    const tokens = [];
+    const phraseRe = /"([^"]+)"/g;
+    let match;
+    while ((match = phraseRe.exec(normalized)) !== null) {
+        const folded = match[1].replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+        if (folded)
+            tokens.push(folded);
+    }
+    const rest = normalized.replace(phraseRe, " ").split(/\s+/);
+    for (const raw of rest) {
+        const numeric = /^(\d{1,4})\s*[/-]\s*(\d{2,4})$/.exec(raw.trim());
+        if (numeric) {
+            tokens.push(`${numeric[1]} ${numeric[2]}`);
+            continue;
+        }
+        const folded = raw.replace(/[^\p{L}\p{N}]+/gu, "");
+        if (folded.length >= 2)
+            tokens.push(folded);
+    }
+    return tokens;
+}
+function escapeFtsTerm(term) {
+    return term.replace(/"/g, '""');
+}
+/** Searchable variants for snippets/highlights: f2of3 -> 2/3, "24 1982" -> 24/1982. */
+function termVariants(term) {
+    const fraction = /^f(\d+)of(\d+)$/.exec(term);
+    if (fraction)
+        return [`${fraction[1]}/${fraction[2]}`];
+    const pair = /^(\d{1,4}) (\d{2,4})$/.exec(term);
+    if (pair)
+        return [term, `${pair[1]}/${pair[2]}`, `${pair[1]}-${pair[2]}`];
+    return [term];
+}
+/**
+ * Needles for snippet/highlight matching. Turkish suffixes are not stemmed by
+ * FTS (it uses prefixes), so a query for "paylaşımında" should still find
+ * "paylaşımı"; try progressively shorter stems, longest first.
+ */
+function termNeedles(term) {
+    const variants = termVariants(term);
+    if (variants.some((variant) => variant.includes(" ")))
+        return variants;
+    const needles = new Set(variants);
+    for (const variant of variants) {
+        if (/^f\d+of\d+$/.test(term))
+            continue;
+        for (let cut = 1; cut <= 5; cut += 1) {
+            if (variant.length - cut >= 4)
+                needles.add(variant.slice(0, variant.length - cut));
+        }
+    }
+    return [...needles].sort((a, b) => b.length - a.length);
+}
+/** Build a safe FTS5 MATCH expression from a free-text query. */
+export function buildMatch(query, mode = "all") {
+    const normalized = normalizeQuery(query).trim();
+    if (!normalized)
+        return "";
+    if (mode === "phrase") {
+        const folded = normalized.replace(/[^\p{L}\p{N}\s]+/gu, " ").replace(/\s+/g, " ").trim();
+        return folded ? `"${escapeFtsTerm(folded)}"` : "";
+    }
+    const parts = [];
+    const phraseRe = /"([^"]+)"/g;
+    let match;
+    while ((match = phraseRe.exec(normalized)) !== null) {
+        const folded = match[1].replace(/[^\p{L}\p{N}\s]+/gu, " ").replace(/\s+/g, " ").trim();
+        if (folded)
+            parts.push(`"${escapeFtsTerm(folded)}"`);
+    }
+    const rest = markWordFractions(normalized.replace(phraseRe, " ")).split(/\s+/);
+    for (const raw of rest) {
+        const wordFraction = wordFractionExpr(raw);
+        if (wordFraction) {
+            parts.push(wordFraction);
+            continue;
+        }
+        // FTS5 splits "24/1982" and "1122-2024" into two tokens; keep the pair
+        // together as a phrase so law/case numbers do not become "241982".
+        const numeric = /^(\d{1,4})\s*[/-]\s*(\d{2,4})$/.exec(raw.trim());
+        if (numeric) {
+            parts.push(`"${numeric[1]} ${numeric[2]}"`);
+            continue;
+        }
+        const folded = raw.replace(/[^\p{L}\p{N}]+/gu, "");
+        if (folded.length < 2)
+            continue;
+        const isFraction = /^f\d+of\d+$/.test(folded);
+        parts.push(isFraction || folded.length < 3 ? escapeFtsTerm(folded) : `${escapeFtsTerm(folded)}*`);
+    }
+    if (!parts.length)
+        return "";
+    return parts.join(mode === "any" ? " OR " : " AND ");
+}
+function isWordChar(ch) {
+    return !!ch && /[\p{L}\p{N}]/u.test(ch);
+}
+function countOccurrences(text, needle) {
+    let count = 0;
+    let index = 0;
+    while ((index = text.indexOf(needle, index)) >= 0) {
+        count += 1;
+        index += needle.length;
+    }
+    return count;
+}
+function bestHit(folded, terms) {
+    let best = null;
+    for (const term of terms) {
+        for (const needle of termNeedles(term)) {
+            const index = folded.indexOf(needle);
+            if (index < 0)
+                continue;
+            const candidate = { index, length: needle.length, count: countOccurrences(folded, needle) };
+            // Rarest term first: "2/3" is more useful than the ubiquitous "mal".
+            if (!best ||
+                candidate.count < best.count ||
+                (candidate.count === best.count && candidate.length > best.length) ||
+                (candidate.count === best.count && candidate.length === best.length && candidate.index < best.index)) {
+                best = candidate;
+            }
+            break;
+        }
+    }
+    return best;
+}
+/** Cut a readable window around the most specific matching term, not the first. */
+export function makeSnippet(text, query, width = 320) {
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (!clean)
+        return "";
+    if (clean.length <= width)
+        return clean;
+    const folded = foldTr(clean);
+    const terms = queryTokens(query).filter((token) => token.length >= 2);
+    let hit = bestHit(folded, terms);
+    // "en az oran", "ne kadar", "yüzde" questions usually target a numeric cap
+    // such as "2/3'ünden fazla olamaz"; show that sentence instead of a common
+    // word like "mal".
+    if (/\b(oran|en az|en cok|en fazla|ne kadar|yuzde)\b/.test(normalizeQuery(query))) {
+        const fraction = /(?<![\d/])\d{1,3}\s*\/\s*\d{1,3}(?![\d/])/.exec(folded);
+        if (fraction?.index !== undefined) {
+            hit = { index: fraction.index, length: fraction[0].length, count: 1 };
+        }
+    }
+    let start;
+    if (!hit) {
+        start = 0;
+    }
+    else {
+        start = Math.max(0, hit.index - Math.floor(width * 0.28));
+        // Do not start in the middle of a word.
+        while (start > 0 && isWordChar(clean[start - 1]) && isWordChar(clean[start]))
+            start -= 1;
+    }
+    let end = Math.min(clean.length, start + width);
+    while (end < clean.length && isWordChar(clean[end]) && isWordChar(clean[end - 1]))
+        end += 1;
+    if (end - start < width && start > 0) {
+        start = Math.max(0, end - width);
+        while (start > 0 && isWordChar(clean[start - 1]) && isWordChar(clean[start]))
+            start -= 1;
+    }
+    const slice = clean.slice(start, end).trim();
+    return `${start > 0 ? "…" : ""}${slice}${end < clean.length ? "…" : ""}`;
+}
+/** Character offsets of query terms inside a snippet/title (for UI marking). */
+export function makeHighlights(text, query, max = 8) {
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (!clean)
+        return [];
+    const folded = foldTr(clean);
+    const spans = [];
+    for (const term of queryTokens(query)) {
+        if (term.length < 3 && !/^f\d+of\d+$/.test(term))
+            continue;
+        for (const needle of termNeedles(term)) {
+            const index = folded.indexOf(needle);
+            if (index < 0)
+                continue;
+            spans.push({ start: index, end: index + needle.length });
+            break;
+        }
+    }
+    spans.sort((a, b) => a.start - b.start || b.end - a.end);
+    const merged = [];
+    for (const span of spans) {
+        const previous = merged[merged.length - 1];
+        if (previous && span.start <= previous.end) {
+            previous.end = Math.max(previous.end, span.end);
+            continue;
+        }
+        merged.push({ ...span });
+        if (merged.length >= max)
+            break;
+    }
+    return merged;
+}
+/** Normalise a user-supplied article reference: "12", "Madde 12", "m. 30A". */
+export function normalizeArticleRef(ref) {
+    const match = /^\s*(?:madde|m\.?)?\s*(\d{1,4})\s*([A-Za-z])?\s*$/.exec(ref);
+    if (!match)
+        return null;
+    return `Madde ${Number(match[1])}${match[2] ? match[2].toUpperCase() : ""}`;
+}
+/** Base reference for a chunk that may be a split part: "Madde 12 (2/3)". */
+export function baseArticleRef(ref) {
+    if (!ref)
+        return null;
+    const match = /^Madde\s+\d+[A-Z]?/.exec(ref);
+    return match ? match[0] : null;
+}
+export function truncate(text, limit) {
+    if (text.length <= limit)
+        return text;
+    const cut = text.lastIndexOf(" ", limit);
+    return `${text.slice(0, cut > limit * 0.6 ? cut : limit).trimEnd()}…`;
+}
+// Question words and fillers that carry no legal content.
+const QUERY_STOPWORDS = new Set([
+    "nedir", "nelerdir", "nasil", "hangi", "hangisi", "kadar", "ne", "en", "az", "cok", "fazla",
+    "mi", "mu", "midir", "mudur", "var", "yok", "icin", "ile", "ve", "veya", "olan", "olarak",
+    "gibi", "kim", "kimdir", "nerede", "zaman", "ise", "bir", "bu", "su", "da", "de", "ki",
+]);
+/**
+ * Rough Turkish stem for matching inside a known document: FTS5 prefix
+ * queries do not survive suffixes ("oranı" must find "oranları"), so cut a
+ * suffix-sized tail. Too broad for corpus-wide search, fine within one law.
+ */
+function roughStem(token) {
+    const cut = token.length >= 8 ? 3 : token.length >= 6 ? 2 : token.length === 5 ? 1 : 0;
+    return token.slice(0, Math.max(4, token.length - cut));
+}
+/** Content-word stems of a query (no question words, no numbers). */
+export function queryStems(query) {
+    const stems = [];
+    for (const token of queryTokens(query)) {
+        if (token.includes(" ") || /^f\d+of\d+$/.test(token) || /^\d+$/.test(token))
+            continue;
+        if (token.length < 3 || QUERY_STOPWORDS.has(token))
+            continue;
+        const stem = roughStem(token);
+        if (!stems.includes(stem))
+            stems.push(stem);
+    }
+    return stems;
+}
+/** OR-of-stems FTS expression for ranking passages inside given documents. */
+export function stemMatch(query) {
+    const parts = queryStems(query).map((stem) => `${escapeFtsTerm(stem)}*`);
+    for (const token of queryTokens(query)) {
+        if (/^f\d+of\d+$/.test(token))
+            parts.push(token);
+    }
+    return parts.length ? parts.join(" OR ") : "";
+}
+/** How many of the query's content stems occur in ``text`` (folded). */
+export function stemCoverage(text, query) {
+    // Word starts only: "yari" must not be found inside "kayit/yariyil" noise.
+    const words = new Set(foldTr(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+    const stems = queryStems(query);
+    const found = stems.filter((stem) => [...words].some((word) => word.startsWith(stem))).length;
+    return { found, total: stems.length };
+}
+/**
+ * The part of an article Clef reads: its opening (heading and first words)
+ * plus the window that contains most of the question's stems. Long articles
+ * often answer in a later paragraph that the first ``chars`` never reach.
+ */
+export function clefPassage(text, query, chars = 420, headChars = 120) {
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (clean.length <= chars)
+        return clean;
+    const stems = queryStems(query);
+    if (!stems.length)
+        return clean.slice(0, chars);
+    // Words that carry a question stem, with the stems they carry.
+    const hits = [];
+    for (const match of clean.matchAll(/[\p{L}\p{N}]+/gu)) {
+        const folded = foldTr(match[0]);
+        const found = stems.flatMap((stem, k) => (folded.startsWith(stem) ? [k] : []));
+        if (found.length)
+            hits.push({ start: match.index, end: match.index + match[0].length, stems: found });
+    }
+    // "en az oran", "ne kadar", "yüzde" questions target a numeric cap such as
+    // "2/3'ünden fazla olamaz" (as makeSnippet): the fraction counts as a stem.
+    if (/\b(oran|en az|en cok|en fazla|ne kadar|yuzde)\b/.test(normalizeQuery(query))) {
+        for (const match of clean.matchAll(/(?<![\d/])\d{1,3}\s*\/\s*\d{1,3}(?![\d/])/g)) {
+            hits.push({ start: match.index, end: match.index + match[0].length, stems: [stems.length, stems.length + 1] });
+        }
+        hits.sort((a, b) => a.start - b.start);
+    }
+    if (!hits.length)
+        return clean.slice(0, chars);
+    const score = (from, to) => {
+        const found = new Set();
+        let n = 0;
+        for (const hit of hits) {
+            if (hit.start < from)
+                continue;
+            if (hit.end > to)
+                break;
+            for (const k of hit.stems)
+                found.add(k);
+            n++;
+        }
+        return found.size + n * 0.01;
+    };
+    const width = chars - headChars - 3;
+    const headScore = score(0, chars);
+    // Windows start at a hit (a little before it, at a word start).
+    let best = { start: 0, score: headScore };
+    for (const hit of hits) {
+        let start = Math.max(headChars, hit.start - 60);
+        while (start > headChars && /[\p{L}\p{N}]/u.test(clean[start - 1] ?? ""))
+            start--;
+        if (start <= headChars)
+            continue;
+        const s = score(start, start + width);
+        if (s > best.score + 0.5)
+            best = { start, score: s };
+    }
+    if (best.start === 0)
+        return clean.slice(0, chars);
+    let headEnd = headChars;
+    while (headEnd > 0 && /[\p{L}\p{N}]/u.test(clean[headEnd] ?? ""))
+        headEnd--;
+    let end = Math.min(clean.length, best.start + width);
+    if (end < clean.length)
+        while (end > best.start && /[\p{L}\p{N}]/u.test(clean[end] ?? ""))
+            end--;
+    return `${clean.slice(0, headEnd).trim()} … ${clean.slice(best.start, end).trim()}`;
+}
