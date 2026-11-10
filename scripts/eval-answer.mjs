@@ -43,12 +43,17 @@ if (sets.includes("keywords")) cases.push(...load("eval-keywords.json").map((c) 
 const seen = new Set();
 cases = cases.filter((c) => (seen.has(c.q) ? false : seen.add(c.q)));
 
-const isDoc = (quote, c) => !!c.expect && quote?.document_id === c.expect;
+// A case may accept other statutes' articles too (alt: [{expect, ref|refs}]),
+// each checked against the text by hand.
+const answers = (c) => (c.expect ? [c, ...(c.alt ?? [])] : []);
+const isDoc = (quote, c) => answers(c).some((a) => quote?.document_id === a.expect);
 // "Madde 3" must not match "Madde 30"; a part suffix ("Madde 3 (2/2)") is fine.
 const sameArticle = (ref, expected) => ref === expected || (ref ?? "").startsWith(`${expected} `);
 const acceptable = (c) => c.refs ?? (c.ref ? [c.ref] : []);
 const isArticle = (quote, c) =>
-  isDoc(quote, c) && (acceptable(c).length === 0 || acceptable(c).some((ref) => sameArticle(quote.ref, ref)));
+  answers(c).some(
+    (a) => quote?.document_id === a.expect && (acceptable(a).length === 0 || acceptable(a).some((ref) => sameArticle(quote.ref, ref))),
+  );
 
 async function answer(q, variant) {
   const url = `${base}/v1/answer?q=${encodeURIComponent(q)}&limit=5&debug=1&${variant}`;
@@ -66,7 +71,7 @@ async function answer(q, variant) {
 
 const rows = [];
 for (const [n, c] of cases.entries()) {
-  const row = { q: c.q, set: c.set, expect: c.expect ?? null, refs: acceptable(c), unanswerable: !!c.unanswerable, variants: {} };
+  const row = { q: c.q, set: c.set, expect: c.expect ?? null, refs: acceptable(c), alt: c.alt ?? [], unanswerable: !!c.unanswerable, variants: {} };
   const marks = [];
   for (const variant of variants) {
     try {
@@ -168,7 +173,10 @@ for (const [variant, s] of Object.entries(summary)) {
   md.push(`| ${variant} | ${s.candidates_known ? `${s.candidates_article}/${s.candidates_known}` : "–"} | ${s.miss_not_retrieved} | ${s.miss_wrong_article} | ${s.miss_not_chosen} | ${s.unanswerable ? `${s.unanswerable_abstained}/${s.unanswerable}` : "–"} |`);
 }
 const topLabel = (v) => (v.top ? `${v.top.doc} ${v.top.ref ?? ""} (${v.top.p ?? "–"})` : "–");
-const expected = (r) => (r.unanswerable ? "cevapsız" : `${r.expect} ${r.refs.join("/")}`);
+const expected = (r) =>
+  r.unanswerable
+    ? "cevapsız"
+    : [`${r.expect} ${r.refs.join("/")}`, ...r.alt.map((a) => `${a.expect} ${(a.refs ?? [a.ref]).join("/")}`)].join(" veya ");
 
 // Confident wrong answers, per variant: the list to work on first.
 for (const variant of variants) {
@@ -191,7 +199,7 @@ for (const variant of variants) {
     if (!v || v.error || r.unanswerable || v.article1) continue;
     const list = v.rerank?.debug_candidates ?? [];
     const where = list
-      .map((x, i) => (x.document_id === r.expect ? `#${i + 1} ${x.ref ?? ""} (${x.probability})` : null))
+      .map((x, i) => (x.document_id === r.expect || r.alt.some((a) => a.expect === x.document_id) ? `#${i + 1} ${x.document_id === r.expect ? "" : `${x.document_id} `}${x.ref ?? ""} (${x.probability})` : null))
       .filter(Boolean)
       .slice(0, 4)
       .join(", ");
