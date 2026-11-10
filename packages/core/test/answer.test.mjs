@@ -68,3 +68,24 @@ test("definition questions keep the definitions article", () => {
   assert.equal(asksDefinition("İşçi kime denir?"), true);
   assert.equal(asksDefinition("Kat malikleri yılda kaç kez toplanır?"), false);
 });
+
+import { foreignJurisdiction } from "../.test-build/operations.js";
+
+test("questions about another country's law", () => {
+  for (const q of [
+    "Türkiye'de bedelli askerlik ücreti ne kadar?",
+    "Almanya'da oturma izni nasıl alınır?",
+    "ABD'de yeşil kart nasıl alınır?",
+    "İngiltere'de boşanma davası kaç ay sürer?",
+    "Güney Kıbrıs'ta şirket nasıl kurulur?",
+    "Avrupa Birliği'nde veri koruma kuralları",
+  ]) assert.equal(foreignJurisdiction(q), true, q);
+  for (const q of [
+    "KKTC'de evlenmek için en az kaç yaşında olmak gerekir?",
+    "Türkiye'den gelen işçi çalışma izni alır mı?",
+    "Türkiye vatandaşı KKTC'de ev alabilir mi?",
+    "Bir haftada en fazla kaç saat çalıştırılabilirim?",
+    "Almanya'da yaşayan bir KKTC yurttaşı askerlik yapmak zorunda mı?",
+    "Kıbrıs'ta kira artışı nasıl yapılır?",
+  ]) assert.equal(foreignJurisdiction(q), false, q);
+});

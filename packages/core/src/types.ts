@@ -82,6 +82,8 @@ export interface SearchParams {
    * of statutes we also hold consolidated (default true).
    */
   dedupe?: boolean;
+  /** /v1/answer: "low" for questions about another country's law (default true). */
+  jurisdiction?: boolean;
   /** /v1/answer: allow the preamble, short title and definitions article as answers (default false). */
   boilerplate?: boolean;
   /** Internal: rank amendment instruments far down (answers). */
@@ -323,9 +325,10 @@ export interface StatsResponse {
 /**
  * regulation: a tüzük answered a question that did not ask for one;
  * rewrite_disagrees: the answer is from none of the statutes the LLM named;
- * partial_text: the statute's text is incomplete (partial download or scan).
+ * partial_text: the statute's text is incomplete (partial download or scan);
+ * foreign_jurisdiction: the question asks about another country (lowered to "low").
  */
-export type ConfidenceCap = "regulation" | "rewrite_disagrees" | "partial_text";
+export type ConfidenceCap = "regulation" | "rewrite_disagrees" | "partial_text" | "foreign_jurisdiction";
 
 export interface QueryRewriteInfo {
   terms: string[];
