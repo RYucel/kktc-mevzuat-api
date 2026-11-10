@@ -67,7 +67,9 @@ const TOOLS = [
     name: "sor",
     description:
       "Bir hukuk sorusuna metinden birebir alıntı ve hazır atıf döndürür. " +
-      "Yorum üretmez; alıntılanan hükmü ve kaynağını verir. Cevap için ilk adım olarak kullanılabilir.",
+      "Yorum üretmez; alıntılanan hükmü ve kaynağını verir. Cevap için ilk adım olarak kullanılabilir. " +
+      "confidence 'low' ise bu alıntıyı cevap olarak sunmayın. Alıntıyı değiştirmeden aktarın; atfı citations/citation alanından alın, " +
+      "numara uydurmayın. excerpt=true ise alıntı maddenin bir bölümüdür; consolidated_through null ise metnin güncelliği bilinmiyor.",
     inputSchema: {
       type: "object",
       properties: {
