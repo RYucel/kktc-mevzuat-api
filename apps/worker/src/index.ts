@@ -145,9 +145,65 @@ function modelText(output: unknown): string {
   return "";
 }
 
+/**
+ * Rewrites are cached in D1 per (model, normalized question). The LLM gives a
+ * slightly different answer on every call, and that alone moved article@1 by
+ * up to 10 points between two eval runs on 2026-11-10; with the cache the
+ * same question always searches with the same terms (and costs no LLM call).
+ */
+const REWRITE_CACHE_DAYS = 90;
+const REWRITE_CACHE_TABLE =
+  "CREATE TABLE IF NOT EXISTS rewrite_cache (model TEXT NOT NULL, q TEXT NOT NULL, terms TEXT NOT NULL, laws TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (model, q))";
+
+function rewriteCacheKey(question: string): string {
+  return question
+    .toLocaleLowerCase("tr")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[\s?.!,;:]+$/u, "")
+    .slice(0, 500);
+}
+
+async function readRewriteCache(db: D1Database, model: string, q: string) {
+  try {
+    const row = await db
+      .prepare("SELECT terms, laws, created_at FROM rewrite_cache WHERE model = ? AND q = ?")
+      .bind(model, q)
+      .first<{ terms: string; laws: string; created_at: string }>();
+    if (!row) return null;
+    const age = Date.now() - Date.parse(row.created_at);
+    if (!(age >= 0 && age < REWRITE_CACHE_DAYS * 86_400_000)) return null;
+    const terms = JSON.parse(row.terms) as unknown;
+    const laws = JSON.parse(row.laws) as unknown;
+    if (!Array.isArray(terms) || !Array.isArray(laws)) return null;
+    return { terms: terms.map(String), laws: laws.map(String), cached: true };
+  } catch {
+    return null; // no table yet, or a bad row: ask the model
+  }
+}
+
+async function writeRewriteCache(db: D1Database, model: string, q: string, terms: string[], laws: string[]) {
+  const write = () =>
+    db
+      .prepare("INSERT OR REPLACE INTO rewrite_cache (model, q, terms, laws, created_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(model, q, JSON.stringify(terms), JSON.stringify(laws), new Date().toISOString())
+      .run();
+  try {
+    await write();
+  } catch (error) {
+    if (!/no such table/i.test(String(error))) throw error;
+    await db.prepare(REWRITE_CACHE_TABLE).run();
+    await write();
+  }
+}
+
 function llmRewriter(ai: Ai, db: D1Database, model: string, limit: number, key: string): QueryRewriter {
   return {
     async rewrite(question, options) {
+      const chosen = options?.model ? REWRITE_MODELS[options.model] : model;
+      const cacheKey = rewriteCacheKey(question);
+      const hit = await readRewriteCache(db, chosen, cacheKey);
+      if (hit) return hit;
       let allowed: boolean;
       try {
         allowed = await takeDaily(db, key, limit);
@@ -155,7 +211,6 @@ function llmRewriter(ai: Ai, db: D1Database, model: string, limit: number, key: 
         throw new Error(`rewrite counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
       }
       if (!allowed) throw new RewriteLimitError();
-      const chosen = options?.model ? REWRITE_MODELS[options.model] : model;
       const run = ai.run(chosen as Parameters<Ai["run"]>[0], {
         instructions: REWRITE_INSTRUCTIONS,
         input: `Soru: ${question.slice(0, 500)}`,
@@ -165,6 +220,11 @@ function llmRewriter(ai: Ai, db: D1Database, model: string, limit: number, key: 
       const output = await Promise.race([run, timeout]);
       const parsed = parseRewrite(modelText(output));
       if (!parsed) throw new Error(`rewrite unparsable: ${modelText(output).slice(0, 200)}`);
+      try {
+        await writeRewriteCache(db, chosen, cacheKey, parsed.terms, parsed.laws);
+      } catch (error) {
+        console.warn("rewrite cache write failed:", error instanceof Error ? error.message : error);
+      }
       return parsed;
     },
   };

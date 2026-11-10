@@ -453,6 +453,16 @@ CREATE TABLE IF NOT EXISTS usage_counters (
     n INTEGER NOT NULL,
     PRIMARY KEY (day, key)
 );
+
+-- Worker-side LLM query-rewrite cache (apps/worker/src/index.ts); never reset by the data import.
+CREATE TABLE IF NOT EXISTS rewrite_cache (
+    model TEXT NOT NULL,
+    q TEXT NOT NULL,
+    terms TEXT NOT NULL,
+    laws TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (model, q)
+);
 """ + HISTORY_TABLES_SQL
 
 

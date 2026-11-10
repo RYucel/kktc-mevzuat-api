@@ -1217,6 +1217,7 @@ async function runRewrite(
     const rewrite = await store.rewriter!.rewrite(params.q, { model: params.rewrite_model });
     info.terms = rewrite.terms;
     info.laws = rewrite.laws;
+    if (rewrite.cached) info.cached = true;
     info.documents = rewrite.laws.length ? resolveLaws(await legislationTitles(store), rewrite.laws) : [];
     if (!info.terms.length && !info.documents.length) return { info, concept: null };
     return { info, concept: { id: "llm", label: "LLM", triggers: [], expand: info.terms, primary: info.documents, weight: 1 } };

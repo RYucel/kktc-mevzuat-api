@@ -14,6 +14,8 @@ export interface QueryRewrite {
   terms: string[];
   /** Statute names the LLM thinks answer the question (at most 3). */
   laws: string[];
+  /** Served from the rewrite cache (no LLM call). */
+  cached?: boolean;
 }
 
 /** The daily LLM budget is used up; the search runs without the rewrite. */
