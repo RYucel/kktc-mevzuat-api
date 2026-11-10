@@ -52,3 +52,19 @@ test("rewriteDisagrees: only when the rewrite resolved statutes and the answer i
   assert.equal(rewriteDisagrees(info(["yasa-47-1992"], "unavailable"), "yasa-31-1996"), false);
   assert.equal(rewriteDisagrees(undefined, "yasa-31-1996"), false);
 });
+
+import { asksDefinition, isBoilerplate } from "../.test-build/operations.js";
+
+test("preamble, short title and definitions are boilerplate", () => {
+  assert.equal(isBoilerplate("Başlangıç", "KAT MÜLKİYETİ VE KAT İRTİFAKI TÜZÜĞÜ ..."), true);
+  assert.equal(isBoilerplate("Madde 2", "Tefsir 2. Bu Yasada metin başka türlü gerektirmedikçe; “Bakan” ..."), true);
+  assert.equal(isBoilerplate("Madde 2", "Genel Kurallar Tefsir 2. Bu Tüzükte ..."), true);
+  assert.equal(isBoilerplate("Madde 1", "Kısa İsim 1. Bu Yasa, İş Yasası olarak isimlendirilir."), true);
+  assert.equal(isBoilerplate("Madde 11", "Deneme Süresi 11. Hizmet akitlerinde, deneme süresi en çok üç aydır."), false);
+});
+
+test("definition questions keep the definitions article", () => {
+  assert.equal(asksDefinition("Kat malikleri kurulu ne demek?"), true);
+  assert.equal(asksDefinition("İşçi kime denir?"), true);
+  assert.equal(asksDefinition("Kat malikleri yılda kaç kez toplanır?"), false);
+});

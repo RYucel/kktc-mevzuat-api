@@ -82,6 +82,8 @@ export interface SearchParams {
    * of statutes we also hold consolidated (default true).
    */
   dedupe?: boolean;
+  /** /v1/answer: allow the preamble, short title and definitions article as answers (default false). */
+  boilerplate?: boolean;
   /** Internal: rank amendment instruments far down (answers). */
   skip_amendments?: boolean;
   /** /v1/answer: "high" needs the answer to come from a statute the rewrite named, when it named any (default true). */

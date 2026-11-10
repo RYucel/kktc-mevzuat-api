@@ -630,7 +630,7 @@ export async function answerQuestion(store, params, origin) {
             continue;
         if (dedupe && (superseded.has(result.id) || (!wantsAmendment && isAmendment(result.title))))
             continue;
-        if (result.snippet && result.matched_kind !== "title") {
+        if (result.snippet && result.matched_kind !== "title" && !skipBoilerplate(result.matched_ref, result.matched_text || result.snippet, params)) {
             rounds[0].push({
                 result,
                 ref: result.matched_ref,
@@ -640,6 +640,8 @@ export async function answerQuestion(store, params, origin) {
             });
         }
         (result.other_passages ?? []).forEach((other, i) => {
+            if (skipBoilerplate(other.ref, other.text, params))
+                return;
             (rounds[i + 1] ??= []).push({ result, ref: other.ref, text: other.text, snippet: other.snippet, url: other.url });
         });
     }
@@ -846,7 +848,9 @@ async function focusStatutes(store, reranker, params, origin, targets, seen, sem
         for (const other of result?.other_passages ?? []) {
             passages.push({ result: law, ref: other.ref, text: other.text, snippet: other.snippet, url: other.url });
         }
-        return passages.filter((p, i) => passages.findIndex((q) => q.ref === p.ref) === i).slice(0, Math.max(count, 2));
+        return passages
+            .filter((p, i) => passages.findIndex((q) => q.ref === p.ref) === i && !skipBoilerplate(p.ref, p.text, params))
+            .slice(0, Math.max(count, 2));
     }));
     const unique = lists.flat();
     info.candidates = unique.length;
@@ -881,6 +885,27 @@ function round3(value) {
  * probability >= 0.7 was right about two times in three and >= 0.9 four in
  * five; below ~0.35 the top passage was usually wrong.
  */
+/**
+ * The preamble ("Başlangıç"), the short title and the definitions article
+ * ("Tefsir": "Bu Yasada metin başka türlü gerektirmedikçe ...") name every
+ * subject of a statute, so they match many questions and answer none of them
+ * (10 Nov: Kat Mülkiyeti Tüzüğü "Başlangıç" quoted for a meeting-frequency
+ * question). Kept when the question asks what a term means.
+ */
+export function isBoilerplate(ref, text) {
+    if (ref === "Başlangıç")
+        return true;
+    const head = foldTr(text.slice(0, 260));
+    return /\btefsir\b|metin baska turlu gerek|\bkisa isim\b/.test(head);
+}
+function skipBoilerplate(ref, text, params) {
+    if (params.boilerplate === true || asksDefinition(params.q))
+        return false;
+    return isBoilerplate(ref, text);
+}
+export function asksDefinition(question) {
+    return /ne demek|tanim|anlami|ne denir|kime denir|kapsamina ne girer/.test(foldTr(question));
+}
 /** The question itself asks for a regulation, so regulations are not ranked lower. */
 export function asksRegulation(question) {
     return /t[uü]z[uü][kğ]|y[oö]netmeli[kğ]|usul ve esas/.test(question.toLocaleLowerCase("tr"));
