@@ -177,6 +177,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
             window: !["0", "false", "no"].includes((c.req.query("window") ?? "").toLowerCase()),
             statute_first: !["0", "false", "no"].includes((c.req.query("statute_first") ?? "").toLowerCase()),
             agree: !["0", "false", "no"].includes((c.req.query("agree") ?? "").toLowerCase()),
+            dedupe: !["0", "false", "no"].includes((c.req.query("dedupe") ?? "").toLowerCase()),
             limit: intParam(c.req.query("limit"), "limit", 3, 1, 5),
             offset: 0,
         };

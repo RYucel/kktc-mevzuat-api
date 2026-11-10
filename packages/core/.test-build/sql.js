@@ -80,6 +80,8 @@ function rankingSql(params, score) {
     // is the answer. Without this, 800 new regulation texts (9 Nov 2026) took
     // the candidate slots and Clef picked them over the law.
     const statuteFirst = params.statute_first ? "CASE WHEN d.type = 'tuzuk' THEN 0.5 ELSE 1.0 END" : "1.0";
+    // Amendment instruments only say what changes elsewhere: keep them out of answer slots.
+    const amendments = params.skip_amendments ? "CASE WHEN d.title_norm LIKE '%degisiklik%' THEN 0.1 ELSE 1.0 END" : "1.0";
     return `
       ${score} * CASE
         -- Court titles duplicate their subject tags; do not let them bury statutes.
@@ -92,6 +94,7 @@ function rankingSql(params, score) {
       * CASE WHEN d.type IN ('yasa', 'tuzuk', 'anayasa') THEN 1.15 ELSE 1.0 END
       * ${prefer}
       * ${statuteFirst}
+      * ${amendments}
       * ${primaryBoost}
       * CASE d.source
         -- mevzuat.gov.ct.tr carries the consolidated, currently in-force text.
