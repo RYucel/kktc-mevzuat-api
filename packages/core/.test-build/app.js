@@ -445,7 +445,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
     });
     return app;
 }
-function timingSafeEqual(a, b) {
+export function timingSafeEqual(a, b) {
     if (a.length !== b.length)
         return false;
     let diff = 0;

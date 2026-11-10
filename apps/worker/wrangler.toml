@@ -33,7 +33,7 @@ namespace_id = "1001"
   period = 60
 
 # Global circuit breaker: one Durable Object counts requests that reach D1,
-# per minute, across the whole Worker (GATE_PER_MINUTE, default 100); above
+# per minute, across the whole Worker (GATE_PER_MINUTE, default 50); above
 # it the API answers 503 until the next minute. Bounds the bill against many
 # clients at once, which the per-client limit above cannot. See src/gate.ts.
 [[durable_objects.bindings]]

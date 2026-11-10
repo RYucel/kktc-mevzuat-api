@@ -89,3 +89,10 @@ test("questions about another country's law", () => {
     "Kıbrıs'ta kira artışı nasıl yapılır?",
   ]) assert.equal(foreignJurisdiction(q), false, q);
 });
+
+import { assertQueryLength, MAX_QUERY_CHARS } from "../.test-build/operations.js";
+
+test("questions over the length cap are rejected with 400", () => {
+  assert.doesNotThrow(() => assertQueryLength("x".repeat(MAX_QUERY_CHARS)));
+  assert.throws(() => assertQueryLength("x".repeat(MAX_QUERY_CHARS + 1)), (e) => e.status === 400 && e.code === "query_too_long");
+});
