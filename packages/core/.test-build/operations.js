@@ -793,7 +793,13 @@ export async function answerQuestion(store, params, origin) {
         if (top.text_status !== "full")
             caps.push("partial_text");
     }
-    const confidence = capConfidence(base, caps);
+    let confidence = capConfidence(base, caps);
+    // "Türkiye'de bedelli askerlik ücreti" is not answered by a KKTC statute,
+    // however well one matches (10 Nov: Askerlik Yasası m.17 with p=0.81).
+    if (params.jurisdiction !== false && confidence !== "low" && foreignJurisdiction(params.q)) {
+        caps.push("foreign_jurisdiction");
+        confidence = "low";
+    }
     return {
         query: params.q,
         answer: top?.text ?? null,
@@ -903,6 +909,20 @@ function skipBoilerplate(ref, text, params) {
         return false;
     return isBoilerplate(ref, text);
 }
+const FOREIGN = [
+    "turkiye", "almanya", "ingiltere", "birlesik krallik", "fransa", "amerika", "abd", "yunanistan", "japonya",
+    "hollanda", "kanada", "avustralya", "isvicre", "italya", "rusya", "kore", "cin", "ispanya", "avrupa birligi",
+    "guney kibris", "kibris cumhuriyeti", "rum yonetimi", "belcika", "avusturya", "isvec", "norvec", "danimarka",
+    "iran", "israil", "misir", "azerbaycan", "ukrayna", "polonya", "portekiz", "irlanda", "hindistan", "brezilya",
+];
+const FOREIGN_RE = new RegExp(`\\b(?:${FOREIGN.join("|")})(?:'|’)?(?:n)?(?:de|da|te|ta|deki|daki|teki|taki)\\b`);
+/** The question asks about another country's law ("Almanya'da ...") and not about KKTC. */
+export function foreignJurisdiction(question) {
+    const q = foldTr(question);
+    if (/\bkktc\b|kuzey kibris|(?<!guney )\bkibris(?:'|’)?ta\b/.test(q))
+        return false;
+    return FOREIGN_RE.test(q);
+}
 export function asksDefinition(question) {
     return /ne demek|tanim|anlami|ne denir|kime denir|kapsamina ne girer/.test(foldTr(question));
 }
@@ -938,6 +958,7 @@ const CAP_LABELS = {
     regulation: "cevap bir tüzükten; ana yasayı da kontrol edin",
     rewrite_disagrees: "beklenen yasalardan biri değil",
     partial_text: "kaynak metin eksik",
+    foreign_jurisdiction: "soru başka bir ülkenin hukukunu soruyor",
 };
 export function answerMarkdown(response) {
     const lines = ["## Alıntı yanıt", ""];
