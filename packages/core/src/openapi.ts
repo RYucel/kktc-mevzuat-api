@@ -275,6 +275,13 @@ export function openapiDocument(origin: string): Record<string, unknown> {
                 "Doğal dil sorularında bir LLM soruyu hukuki terimlere ve olası yasa adlarına çevirir; bunlar yalnızca aramayı besler, cevap yine birebir alıntıdır (query_rewrite alanı). 0 ile kapatılır.",
               schema: { type: "string", enum: ["1", "0"], default: "1" },
             },
+            {
+              name: "statute_first",
+              in: "query",
+              description:
+                "Soru tüzük veya yönetmelik demedikçe yasalar tüzüklerden önce gelir; bir tüzükten alıntılanan cevabın güveni en fazla 'medium' olur. 0 ile kapatılır.",
+              schema: { type: "string", enum: ["1", "0"], default: "1" },
+            },
             { name: "format", in: "query", schema: { type: "string", enum: ["json", "markdown"], default: "json" } },
           ],
           responses: {
