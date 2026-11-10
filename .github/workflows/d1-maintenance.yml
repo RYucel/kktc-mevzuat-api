@@ -7,6 +7,10 @@ name: D1 maintenance
 #              in the account with 30-day usage (scripts/cf-inventory.py).
 #              The repository is public: the report lists resource names
 #              and usage counts only (no ids, no secrets).
+#   texts:     text status of every statute (JSON lines in the log).
+#   rewrites:  the cached LLM rewrites of the eval questions only. The cache
+#              also holds real users' questions; the log is public, so those
+#              are never printed.
 
 on:
   workflow_dispatch:
@@ -14,7 +18,7 @@ on:
       task:
         description: "Görev"
         type: choice
-        options: [optimize, info, inventory]
+        options: [optimize, info, inventory, texts, rewrites]
         default: optimize
 
 permissions:
@@ -62,3 +66,37 @@ jobs:
       - name: Account inventory
         if: ${{ inputs.task == 'inventory' }}
         run: python3 scripts/cf-inventory.py
+      - name: Statute text report
+        if: ${{ inputs.task == 'texts' }}
+        working-directory: apps/worker
+        run: |
+          npx wrangler d1 execute kktc-mevzuat --remote --json --command "SELECT id, type, title, source, text_status, content_chars, chunk_count, pdf_url, sources_json FROM documents WHERE type != 'karar' ORDER BY id" > /tmp/texts.json
+          python3 - <<'PY'
+          import json
+          rows = json.load(open("/tmp/texts.json"))[0]["results"]
+          print("TEXTS-JSON-BEGIN")
+          for r in rows:
+              print(json.dumps(r, ensure_ascii=False))
+          print("TEXTS-JSON-END")
+          PY
+      - name: Rewrites of the eval questions
+        if: ${{ inputs.task == 'rewrites' }}
+        working-directory: apps/worker
+        run: |
+          npx wrangler d1 execute kktc-mevzuat --remote --json --command "SELECT model, q, terms, laws, created_at FROM rewrite_cache" > /tmp/rewrites.json
+          python3 - <<'PY'
+          import json, re
+          # Same key as rewriteCacheKey() in apps/worker/src/index.ts.
+          def key(q):
+              q = q.replace("I", "ı").replace("İ", "i").lower()
+              q = re.sub(r"\s+", " ", q).strip()
+              return re.sub(r"[\s?.!,;:]+$", "", q)[:500]
+          wanted = {key(c["q"]) for c in json.load(open("../../scripts/eval-questions.json"))["cases"]}
+          rows = json.load(open("/tmp/rewrites.json"))[0]["results"]
+          print("REWRITES-JSON-BEGIN")
+          for r in rows:
+              if r["q"] in wanted:
+                  print(json.dumps(r, ensure_ascii=False))
+          print("REWRITES-JSON-END")
+          print(f"{sum(r['q'] in wanted for r in rows)} eval rewrites printed; {len(rows)} cached in total")
+          PY
