@@ -38,7 +38,7 @@ const outPath = process.env.OUT ?? "eval-answer.json";
 
 const load = (name) => JSON.parse(readFileSync(new URL(`./${name}`, import.meta.url), "utf8")).cases;
 let cases = [];
-if (sets.includes("questions")) cases.push(...load("eval-questions.json").map((c) => ({ ...c, set: "questions" })));
+if (sets.includes("questions")) cases.push(...load("eval-questions.json").map((c) => ({ ...c, set: c.set ?? "questions" })));
 if (sets.includes("keywords")) cases.push(...load("eval-keywords.json").map((c) => ({ ...c, set: "keywords" })));
 const seen = new Set();
 cases = cases.filter((c) => (seen.has(c.q) ? false : seen.add(c.q)));
@@ -103,7 +103,7 @@ for (const [n, c] of cases.entries()) {
 const pct = (x, n) => (n ? `${((x / n) * 100).toFixed(1)}%` : "–");
 const summary = {};
 for (const variant of variants) {
-  const all = rows.map((r) => ({ ...r.variants[variant], unanswerable: r.unanswerable })).filter((v) => v && !v.error);
+  const all = rows.map((r) => ({ ...r.variants[variant], unanswerable: r.unanswerable, set: r.set })).filter((v) => v && !v.error);
   const ok = all.filter((v) => !v.unanswerable);
   const unanswerable = all.filter((v) => v.unanswerable);
   const misses = ok.filter((v) => !v.article1 && v.candidates_article !== null);
@@ -138,6 +138,9 @@ for (const variant of variants) {
     high: all.filter((v) => v.confidence === "high").length,
     rewrite_cached: all.filter((v) => v.rewrite_cached === true).length,
     rewrite_known: all.filter((v) => v.rewrite_cached !== null).length,
+    // Questions answered by a regulation (tüzük): the statute_first rule must not lose them.
+    tuzuk: ok.filter((v) => v.set === "tuzuk").length,
+    tuzuk_article1: ok.filter((v) => v.set === "tuzuk" && v.article1).length,
   };
 }
 writeFileSync(outPath, JSON.stringify({ base, generated_at: new Date().toISOString(), variants, summary, rows }, null, 1));
@@ -155,6 +158,10 @@ for (const [variant, s] of Object.entries(summary)) {
     return b ? `${b.right}/${b.n}` : "–";
   };
   md.push(`| ${variant} | **${s.high_wrong}/${s.high}** | ${pct(s.doc1, s.n)} | ${pct(s.article1, s.n)} | ${pct(s.article5, s.n)} | ${s.reranked}/${s.n} | ${s.rewrite_known ? `${s.rewrite_cached}/${s.rewrite_known}` : "–"} | ${s.ms ?? "–"} | ${s.rows_read ?? "–"} | ${conf("high")} | ${conf("medium")} | ${conf("low")} |`);
+}
+if (Object.values(summary).some((s) => s.tuzuk)) {
+  md.push("", "| Varyant | cevabı tüzükte olan sorular: doğru madde @1 |", "|---|---|");
+  for (const [variant, s] of Object.entries(summary)) md.push(`| ${variant} | ${s.tuzuk_article1}/${s.tuzuk} |`);
 }
 md.push("", "### Teşhis: kaçan sorular nerede kaçtı?", "", "| Varyant | doğru madde Clef'in adaylarında | kaçan: yasa adaylarda yok | kaçan: yasa var, madde yok | kaçan: madde vardı, seçilmedi | cevapsız sorularda \"low\" |", "|---|---|---|---|---|---|");
 for (const [variant, s] of Object.entries(summary)) {

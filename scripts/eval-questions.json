@@ -1,5 +1,5 @@
 {
-  "_comment": "Doğal dilde hukuk soruları ve cevabı içeren madde(ler). ref tek madde, refs kabul edilebilir birden fazla madde; unanswerable: hiçbir KKTC yasasının cevaplamadığı soru (doğru davranış: confidence low). Beklenen maddeler 03-09.11.2026 verisinde elle doğrulandı; sorular madde başlığındaki kelimelerden kaçınır.",
+  "_comment": "Doğal dilde hukuk soruları ve cevabı içeren madde(ler). ref tek madde, refs kabul edilebilir birden fazla madde; unanswerable: hiçbir KKTC yasasının cevaplamadığı soru (doğru davranış: confidence low). Beklenen maddeler 03-10.11.2026 verisinde elle doğrulandı; set alanı: tuzuk = cevabı bir tüzükte olan soru; sorular madde başlığındaki kelimelerden kaçınır.",
   "cases": [
     {"q": "İşçi işverene haber vermeden işten ayrılabilir mi?", "expect": "yasa-22-1992", "ref": "Madde 14"},
     {"q": "İşveren hangi durumlarda çalışanı önceden bildirmeden çıkarabilir?", "expect": "yasa-22-1992", "ref": "Madde 15"},
@@ -56,12 +56,35 @@
     {"q": "Emekli maaşı almak için kaç yaş ve kaç gün prim gerekir?", "expect": "yasa-16-1976", "ref": "Madde 61"},
     {"q": "Sigortalı kadına doğumda hangi yardımlar yapılır?", "expect": "yasa-16-1976", "ref": "Madde 44"},
     {"q": "İhale sonucuna itiraz etmek için ücret ödemek gerekir mi?", "expect": "yasa-20-2016", "ref": "Madde 80"},
+    {"q": "Yabancı uyruklu bir üniversite öğrencisi haftada en fazla kaç saat çalıştırılabilir?", "expect": "tuzuk-yabancilarin-calisma-izinleri-tuzugu", "ref": "Madde 23", "set": "tuzuk"},
+    {"q": "Yabancıların Çalışma İzinleri Tüzüğüne göre yurt dışından getirilen işçi için izin başvurusu ülkeye girişten sonra kaç gün içinde yapılmalı?", "expect": "tuzuk-yabancilarin-calisma-izinleri-tuzugu", "ref": "Madde 13", "set": "tuzuk"},
+    {"q": "Hapis cezası alan biri cezasının ne kadarını çektikten sonra erken salıverilmek için başvurabilir?", "expect": "tuzuk-sartli-tahliye-tuzugu", "ref": "Madde 4", "set": "tuzuk"},
+    {"q": "Şartlı Tahliye Tüzüğüne göre kurul cezaevinde ayda en az kaç kez toplanır?", "expect": "tuzuk-sartli-tahliye-tuzugu", "ref": "Madde 9", "set": "tuzuk"},
+    {"q": "Bir emlak bürosunun işyerinde hangi belge ve levhanın bulunması zorunludur?", "expect": "tuzuk-emlakcilarin-kayit-ve-islemleri-tuzugu", "refs": ["Madde 19", "Madde 20"], "set": "tuzuk"},
+    {"q": "Koruyucu aile, bakımını üstlendiği çocukla birlikte başka bir ülkeye tatile gidebilir mi?", "expect": "tuzuk-koruyucu-aile-tuzugu", "ref": "Madde 17", "set": "tuzuk"},
+    {"q": "Raftaki etiket fiyatı ile kasada okunan fiyat farklı çıkarsa hangisi uygulanır?", "expect": "tuzuk-mal-ve-hizmetlerin-etiket-tarife-ve-fiyat-listeleri-tuzugu", "ref": "Madde 10", "set": "tuzuk"},
+    {"q": "Mal ve Hizmetlerin Etiket, Tarife ve Fiyat Listeleri Tüzüğüne göre etikette gösterilen fiyata vergiler dahil mi?", "expect": "tuzuk-mal-ve-hizmetlerin-etiket-tarife-ve-fiyat-listeleri-tuzugu", "ref": "Madde 9", "set": "tuzuk"},
+    {"q": "Daimi İkamet İzni Tüzüğüne göre izni iptal edilecek kişiye itiraz için ne kadar süre tanınır?", "expect": "tuzuk-daimi-ikamet-izni-tuzugu", "ref": "Madde 12", "set": "tuzuk"},
     {"q": "Türkiye'de bedelli askerlik ücreti ne kadar?", "unanswerable": true},
     {"q": "Almanya'da oturma izni nasıl alınır?", "unanswerable": true},
     {"q": "Mars'ta arazi satın almak yasal mı?", "unanswerable": true},
     {"q": "İngiltere'de boşanma davası kaç ay sürer?", "unanswerable": true},
     {"q": "Futbolda ofsayt kuralı nedir?", "unanswerable": true},
     {"q": "Amerika'da yeşil kart çekilişine nasıl başvurulur?", "unanswerable": true},
-    {"q": "Fransa'da asgari ücret ne kadar?", "unanswerable": true}
+    {"q": "Fransa'da asgari ücret ne kadar?", "unanswerable": true},
+    {"q": "Yunanistan'da emlak vergisi oranı yüzde kaç?", "unanswerable": true},
+    {"q": "Japonya'ya vizesiz kaç gün kalınabilir?", "unanswerable": true},
+    {"q": "Hollanda'da ötanazi hangi koşullarda yapılabilir?", "unanswerable": true},
+    {"q": "Kanada vatandaşlık sınavında kaç soru sorulur?", "unanswerable": true},
+    {"q": "Avrupa Birliği yapay zekâ yasasında yüksek riskli sistemler nelerdir?", "unanswerable": true},
+    {"q": "Avustralya'da oy kullanmamanın cezası ne kadar?", "unanswerable": true},
+    {"q": "İsviçre'de banka sırrı hangi durumlarda kaldırılır?", "unanswerable": true},
+    {"q": "Almanya'da işsizlik parası kaç ay ödenir?", "unanswerable": true},
+    {"q": "Hellim peyniri nasıl yapılır?", "unanswerable": true},
+    {"q": "Kıbrıs'ın en yüksek dağı hangisidir?", "unanswerable": true},
+    {"q": "Satrançta rok hamlesi ne zaman yapılabilir?", "unanswerable": true},
+    {"q": "İtalya'da ehliyet sınavı kaç sorudan oluşur?", "unanswerable": true},
+    {"q": "Rusya'da şirket kurmak için asgari sermaye ne kadar?", "unanswerable": true},
+    {"q": "Güney Kore'de askerlik süresi kaç ay?", "unanswerable": true}
   ]
 }
