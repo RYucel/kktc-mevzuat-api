@@ -72,6 +72,11 @@ export interface SearchParams {
   focus_two?: boolean;
   /** /v1/answer: show Clef the part of each article that matches the question (default true). */
   window?: boolean;
+  /**
+   * /v1/answer: prefer laws over regulations unless the question asks for a
+   * regulation (default true). Search also uses it to rank tüzük lower.
+   */
+  statute_first?: boolean;
   /** Internal: receives the vector hits of this search (answer focus step). */
   semantic_sink?: { doc_id: string; ref: string | null }[];
   /** /v1/answer: rewrite the question into legal terms and statute names with an LLM (default true). */

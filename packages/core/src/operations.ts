@@ -675,6 +675,7 @@ export async function answerQuestion(
   const passages = reranker ? Math.min(3, Math.max(1, params.passages ?? ANSWER_PASSAGES)) : 1;
   const semanticSink: { doc_id: string; ref: string | null }[] = [];
   const rewriteSink: QueryRewriteInfo[] = [];
+  const statuteFirst = params.statute_first !== false && !ASKS_REGULATION.test(params.q.toLocaleLowerCase("tr"));
   const search = await searchDocuments(
     store,
     {
@@ -682,6 +683,7 @@ export async function answerQuestion(
       semantic_sink: semanticSink,
       rewrite: !!reranker && params.rewrite !== false,
       rewrite_sink: rewriteSink,
+      statute_first: statuteFirst,
       prefer: params.prefer ?? "mevzuat",
       limit: reranker ? Math.max(limit, Math.ceil(RERANK_CANDIDATES / passages)) : limit,
       passages,
@@ -708,7 +710,14 @@ export async function answerQuestion(
     });
   }
   // Best article of every document first, then each document's second, ...
+  // With statute_first, regulations only fill slots the laws left free.
   let candidates: Passage[] = rounds.flat();
+  if (statuteFirst) {
+    candidates = [
+      ...candidates.filter((c) => c.result.type !== "tuzuk"),
+      ...candidates.filter((c) => c.result.type === "tuzuk"),
+    ];
+  }
   let probabilities: number[] | null = null;
   let rerank: AnswerResponse["rerank"];
   if (reranker && candidates.length > 1) {
@@ -832,7 +841,12 @@ export async function answerQuestion(
     ? "low"
     : rerank?.applied
       ? // Clef's probability is the measured, better-calibrated signal here.
-        rerankConfidence(rerank.top_probability ?? 0, rerank.none_probability ?? 0)
+        // A regulation quoted for a general question is at most "medium":
+        // the parent law may say otherwise or more.
+        capRegulation(
+          rerankConfidence(rerank.top_probability ?? 0, rerank.none_probability ?? 0),
+          statuteFirst && candidates[0]?.result.type === "tuzuk",
+        )
       : top.text_status === "full" && covered && top.coverage.found >= Math.min(2, top.coverage.total)
       ? "high"
       : top.coverage.found > 0
@@ -947,6 +961,13 @@ function round3(value: number): number {
  * probability >= 0.7 was right about two times in three and >= 0.9 four in
  * five; below ~0.35 the top passage was usually wrong.
  */
+/** The question itself asks for a regulation, so regulations are not ranked lower. */
+const ASKS_REGULATION = /t[uü]z[uü]k|y[oö]netmeli[kğ]|usul ve esas/;
+
+function capRegulation(confidence: AnswerResponse["confidence"], regulation: boolean): AnswerResponse["confidence"] {
+  return regulation && confidence === "high" ? "medium" : confidence;
+}
+
 function rerankConfidence(top: number, none: number): AnswerResponse["confidence"] {
   if (none >= top) return "low";
   if (top >= 0.7) return "high";

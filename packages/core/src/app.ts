@@ -232,6 +232,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       rewrite_wait: ["1", "true", "yes"].includes((c.req.query("rewrite_wait") ?? "").toLowerCase()),
       focus_two: ["1", "true", "yes"].includes((c.req.query("focus2") ?? "").toLowerCase()),
       window: !["0", "false", "no"].includes((c.req.query("window") ?? "").toLowerCase()),
+      statute_first: !["0", "false", "no"].includes((c.req.query("statute_first") ?? "").toLowerCase()),
       limit: intParam(c.req.query("limit"), "limit", 3, 1, 5),
       offset: 0,
     };
