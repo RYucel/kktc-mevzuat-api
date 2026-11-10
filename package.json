@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "KKTC güncel yasa, tüzük ve mahkeme kararları için LLM-dostu arama API'si",
+  "description": "KKTC g\u00fcncel yasa, t\u00fcz\u00fck ve mahkeme kararlar\u0131 i\u00e7in LLM-dostu arama API'si",
   "license": "MIT",
   "workspaces": [
     "packages/*",
@@ -18,7 +18,8 @@
     "smoke": "node scripts/smoke.mjs",
     "eval:search": "node scripts/eval-search.mjs",
     "db:local": "npm --workspace apps/worker run db:local",
-    "typecheck": "npm --workspace packages/core run typecheck && npm --workspace apps/node run typecheck && npm --workspace apps/worker run typecheck"
+    "typecheck": "npm --workspace packages/core run typecheck && npm --workspace apps/node run typecheck && npm --workspace apps/worker run typecheck",
+    "test": "npm --workspace packages/core run test"
   },
   "engines": {
     "node": ">=22.5"

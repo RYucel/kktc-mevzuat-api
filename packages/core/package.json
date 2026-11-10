@@ -7,7 +7,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "rm -rf .test-build && tsc -p tsconfig.json --noEmit false --outDir .test-build && node --test 'test/*.test.mjs'"
   },
   "dependencies": {
     "hono": "^4.6.0"
