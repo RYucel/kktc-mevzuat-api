@@ -6,15 +6,16 @@
  * The per-client rate limit (RATE_LIMITER) stops one noisy client; it cannot
  * stop many clients at once (a botnet of 1,000 addresses at 30 requests a
  * minute each is 43 million requests a day). This gate bounds the total, and
- * with it the bill: at the default 100 requests a minute and ~5,000 D1 rows
- * per question, a month of saturated traffic is ~21 billion rows, inside the
- * 25 billion included in Workers Paid.
+ * with it the bill. An answer reads ~9,500 D1 rows (measured 10 Nov 2026,
+ * up from ~5,000 when this was set at 100 a minute): at 50 requests a minute
+ * a month of saturated traffic is ~20 billion rows, inside the 25 billion
+ * included in Workers Paid (100 a minute would be ~41 billion, ~$16 over).
  *
  * Classic fetch-style Durable Object (no runtime imports), so it also runs in
  * the plain Node tests.
  */
 
-export const DEFAULT_GATE_PER_MINUTE = 100;
+export const DEFAULT_GATE_PER_MINUTE = 50;
 
 export interface GateDecision {
   allowed: boolean;

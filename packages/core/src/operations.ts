@@ -194,6 +194,7 @@ export async function searchDocuments(
   params: SearchParams,
   origin: string,
 ): Promise<SearchResponse> {
+  assertQueryLength(params.q);
   const requestedMode = params.mode ?? "auto";
   const initialMode: "all" | "any" | "phrase" = requestedMode === "auto" ? "all" : requestedMode;
   const initialMatch = buildMatch(params.q, initialMode);
@@ -1278,6 +1279,20 @@ export function articleMarkdown(
     "---",
     `Resmî metin için kaynak bağlantısına başvurun. · ${origin}/llms.txt`,
   ].join("\n");
+}
+
+/**
+ * Longest question accepted. Every search embeds the question (Workers AI,
+ * billed per token) and turns its words into FTS terms; without a cap one
+ * 16 KB URL cost ~250 times a normal question, and the global gate counts
+ * requests, not their size.
+ */
+export const MAX_QUERY_CHARS = 500;
+
+export function assertQueryLength(query: string): void {
+  if (query.length > MAX_QUERY_CHARS) {
+    throw new ApiError(400, "query_too_long", `Soru en fazla ${MAX_QUERY_CHARS} karakter olabilir.`);
+  }
 }
 
 export class ApiError extends Error {

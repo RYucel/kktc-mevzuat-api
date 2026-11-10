@@ -9,6 +9,7 @@ import {
   RewriteLimitError,
   SEMANTIC_MODEL,
   type SemanticHit,
+  timingSafeEqual,
   type Reranker,
   RerankLimitError,
   type SemanticIndex,
@@ -232,7 +233,8 @@ function llmRewriter(ai: Ai, db: D1Database, model: string, limit: number, key: 
 
 function bearerIsAdmin(request: Request, env: Env): boolean {
   const token = env.VECTOR_ADMIN_TOKEN;
-  return !!token && request.headers.get("authorization") === `Bearer ${token}`;
+  const header = request.headers.get("authorization");
+  return !!token && !!header && timingSafeEqual(header, `Bearer ${token}`);
 }
 
 /** 429 for clients over the per-minute limit; health, admin and our own jobs are exempt. */
@@ -306,7 +308,8 @@ class VectorizeSemantic implements SemanticIndex, VectorWriter {
   ) {}
 
   async query(text: string, options: { topK: number; type?: string }): Promise<SemanticHit[]> {
-    const [vector] = await embed(this.ai, [queryText(text)]);
+    // The API rejects longer questions; this keeps any other caller bounded too.
+    const [vector] = await embed(this.ai, [queryText(text.slice(0, 1000))]);
     const result = await this.index.query(vector, {
       topK: Math.min(options.topK, 50),
       returnMetadata: "all",
