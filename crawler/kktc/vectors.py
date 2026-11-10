@@ -28,6 +28,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from .textproc import fold_tr
+
 log = logging.getLogger(__name__)
 
 MODEL = "@cf/qwen/qwen3-embedding-0.6b"
@@ -48,6 +50,18 @@ def estimate_tokens(text: str) -> int:
     return max(1, len(text) // 3)
 
 
+def title_key(title: str) -> str:
+    """Same as titleKey() in packages/core/src/titles.ts."""
+    folded = fold_tr(title or "")
+    folded = re.sub(r"\([^)]*\)", " ", folded)
+    folded = re.sub(r"[^\w\s]|\d|_", " ", folded)
+    return " ".join(folded.split())
+
+
+def is_amendment(title: str) -> bool:
+    return "degisiklik" in fold_tr(title or "")
+
+
 def build_units(db_path: Path) -> list[dict[str, Any]]:
     """One unit per article (parts joined), preamble, or loose paragraph.
 
@@ -56,13 +70,22 @@ def build_units(db_path: Path) -> list[dict[str, Any]]:
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    docs = {
-        row["id"]: row
-        for row in conn.execute(
-            f"SELECT id, type, title, source FROM documents WHERE type IN ({','.join('?' * len(LEGISLATION))}) "
+    rows_ = list(
+        conn.execute(
+            f"SELECT id, type, title, source, year FROM documents WHERE type IN ({','.join('?' * len(LEGISLATION))}) "
             "AND text_status IN ('full', 'partial')",
             LEGISLATION,
         )
+    )
+    # Documents the answers never quote (packages/core/src/titles.ts) take no
+    # vector space: amendment instruments and mahkemeler copies of statutes
+    # we also hold consolidated from mevzuat.gov.ct.tr.
+    official = {(r["type"], title_key(r["title"])) for r in rows_ if r["source"] == "gov"}
+    docs = {
+        row["id"]: row
+        for row in rows_
+        if not is_amendment(row["title"])
+        and not (row["source"] != "gov" and (row["type"], title_key(row["title"])) in official)
     }
     units: list[dict[str, Any]] = []
     current: Optional[dict[str, Any]] = None
@@ -81,6 +104,7 @@ def build_units(db_path: Path) -> list[dict[str, Any]]:
                     "ref": current["ref"],
                     "type": doc["type"],
                     "source": doc["source"],
+                    "year": doc["year"],
                     "text": text,
                 }
             )
@@ -114,7 +138,12 @@ def prioritise(units: list[dict[str, Any]], limit: int = MAX_VECTORS) -> list[di
     if len(units) <= limit:
         return units
     rank = {"anayasa": 0, "yasa": 1, "tuzuk": 2}
-    ordered = sorted(units, key=lambda u: (rank.get(u["type"], 9), u["source"] != "gov", u["doc_id"], u["ord"]))
+    # Within a type: consolidated texts first, then the newest statutes (old
+    # regulations are the most often replaced), then document order.
+    ordered = sorted(
+        units,
+        key=lambda u: (rank.get(u["type"], 9), u["source"] != "gov", -(u.get("year") or 0), u["doc_id"], u["ord"]),
+    )
     log.warning("vectors: %d units exceed the %d-vector budget; %d left out", len(units), limit, len(units) - limit)
     return ordered[:limit]
 
