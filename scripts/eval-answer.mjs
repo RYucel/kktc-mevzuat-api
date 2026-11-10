@@ -4,7 +4,8 @@
 //
 // Env:
 //   VARIANTS  comma list of query-string variants, each compared on the same
-//             questions (default "rerank=0,passages=1,passages=2,passages=3")
+//             questions (default "passages=3", the live settings). Compare a
+//             change in one run: "statute_first=0,passages=3".
 //   SETS      questions, keywords (default "questions")
 //   OUT       JSON report path (default eval-answer.json)
 //
@@ -31,7 +32,7 @@ if (process.env.ADMIN_TOKEN) {
   globalThis.fetch = (url, init = {}) =>
     plainFetch(url, { ...init, headers: { ...(init.headers ?? {}), authorization: `Bearer ${process.env.ADMIN_TOKEN}` } });
 }
-const variants = (process.env.VARIANTS ?? "rerank=0,passages=1,passages=2,passages=3").split(",").map((v) => v.trim()).filter(Boolean);
+const variants = (process.env.VARIANTS || "passages=3").split(",").map((v) => v.trim()).filter(Boolean);
 const sets = (process.env.SETS ?? "questions").split(",").map((s) => s.trim());
 const outPath = process.env.OUT ?? "eval-answer.json";
 
@@ -86,6 +87,7 @@ for (const [n, c] of cases.entries()) {
         candidates_article: seenByClef ? seenByClef.some((x) => isArticle(x, c)) : null,
         candidates_doc: seenByClef ? seenByClef.some((x) => isDoc(x, c)) : null,
         abstained: body.confidence === "low",
+        rewrite_cached: body.query_rewrite ? !!body.query_rewrite.cached : null,
       };
       row.variants[variant] = result;
       marks.push(c.unanswerable ? (result.abstained ? "u" : "!") : result.article1 ? "A" : result.doc1 ? "d" : "·");
@@ -130,6 +132,12 @@ for (const variant of variants) {
     miss_not_chosen: misses.filter((v) => v.candidates_article).length,
     unanswerable: unanswerable.length,
     unanswerable_abstained: unanswerable.filter((v) => v.abstained).length,
+    // The number that matters most: a confident wrong answer (wrong article,
+    // or any "high" for a question no statute answers).
+    high_wrong: all.filter((v) => v.confidence === "high" && (v.unanswerable || !v.article1)).length,
+    high: all.filter((v) => v.confidence === "high").length,
+    rewrite_cached: all.filter((v) => v.rewrite_cached === true).length,
+    rewrite_known: all.filter((v) => v.rewrite_cached !== null).length,
   };
 }
 writeFileSync(outPath, JSON.stringify({ base, generated_at: new Date().toISOString(), variants, summary, rows }, null, 1));
@@ -140,33 +148,63 @@ const md = [
   `${rows.length} soru (${sets.join(", ")}). A = doğru madde, d = doğru yasa/yanlış madde, · = yanlış; cevapsız sorularda u = doğru şekilde "low", ! = emin bir cevap uydurdu.`,
   "",
 ];
-md.push("| Varyant | doğru yasa @1 | doğru madde @1 | doğru madde ilk 5'te | Clef uygulandı | ort. ms | D1 satır/soru | high: isabet | medium: isabet | low: isabet |", "|---|---|---|---|---|---|---|---|---|---|");
+md.push("| Varyant | **high ama yanlış** | doğru yasa @1 | doğru madde @1 | doğru madde ilk 5'te | Clef uygulandı | LLM önbellekten | ort. ms | D1 satır/soru | high: isabet | medium: isabet | low: isabet |", "|---|---|---|---|---|---|---|---|---|---|---|---|");
 for (const [variant, s] of Object.entries(summary)) {
   const conf = (label) => {
     const b = s.byConfidence[label];
     return b ? `${b.right}/${b.n}` : "–";
   };
-  md.push(`| ${variant} | ${pct(s.doc1, s.n)} | ${pct(s.article1, s.n)} | ${pct(s.article5, s.n)} | ${s.reranked}/${s.n} | ${s.ms ?? "–"} | ${s.rows_read ?? "–"} | ${conf("high")} | ${conf("medium")} | ${conf("low")} |`);
+  md.push(`| ${variant} | **${s.high_wrong}/${s.high}** | ${pct(s.doc1, s.n)} | ${pct(s.article1, s.n)} | ${pct(s.article5, s.n)} | ${s.reranked}/${s.n} | ${s.rewrite_known ? `${s.rewrite_cached}/${s.rewrite_known}` : "–"} | ${s.ms ?? "–"} | ${s.rows_read ?? "–"} | ${conf("high")} | ${conf("medium")} | ${conf("low")} |`);
 }
 md.push("", "### Teşhis: kaçan sorular nerede kaçtı?", "", "| Varyant | doğru madde Clef'in adaylarında | kaçan: yasa adaylarda yok | kaçan: yasa var, madde yok | kaçan: madde vardı, seçilmedi | cevapsız sorularda \"low\" |", "|---|---|---|---|---|---|");
 for (const [variant, s] of Object.entries(summary)) {
   md.push(`| ${variant} | ${s.candidates_known ? `${s.candidates_article}/${s.candidates_known}` : "–"} | ${s.miss_not_retrieved} | ${s.miss_wrong_article} | ${s.miss_not_chosen} | ${s.unanswerable ? `${s.unanswerable_abstained}/${s.unanswerable}` : "–"} |`);
 }
-// Every miss of the first variant, with where the right law stood among
-// what Clef saw (focus candidates first, then the first-step candidates).
-const first = variants[0];
-md.push("", `### Kaçan sorular (${first})`, "", "| Soru | Beklenen | Seçilen (olasılık) | Güven | Beklenen yasa Clef listesinde |", "|---|---|---|---|---|");
-for (const r of rows) {
-  const v = r.variants[first];
-  if (!v || v.error || r.unanswerable || v.article1) continue;
-  const list = v.rerank?.debug_candidates ?? [];
-  const where = list
-    .map((x, i) => (x.document_id === r.expect ? `#${i + 1} ${x.ref ?? ""} (${x.probability})` : null))
-    .filter(Boolean)
-    .slice(0, 4)
-    .join(", ");
-  const top = v.top ? `${v.top.doc} ${v.top.ref ?? ""} (${v.top.p ?? "–"})` : "–";
-  md.push(`| ${r.q} | ${r.expect} ${r.refs.join("/")} | ${top} | ${v.confidence} | ${where || "yok"} |`);
+const topLabel = (v) => (v.top ? `${v.top.doc} ${v.top.ref ?? ""} (${v.top.p ?? "–"})` : "–");
+const expected = (r) => (r.unanswerable ? "cevapsız" : `${r.expect} ${r.refs.join("/")}`);
+
+// Confident wrong answers, per variant: the list to work on first.
+for (const variant of variants) {
+  const wrong = rows.filter((r) => {
+    const v = r.variants[variant];
+    return v && !v.error && v.confidence === "high" && (r.unanswerable || !v.article1);
+  });
+  md.push("", `### "high" ama yanlış (${variant}): ${wrong.length}`, "");
+  if (!wrong.length) continue;
+  md.push("| Soru | Beklenen | Seçilen (olasılık) |", "|---|---|---|");
+  for (const r of wrong) md.push(`| ${r.q} | ${expected(r)} | ${topLabel(r.variants[variant])} |`);
+}
+
+// Every miss of every variant, with where the right law stood among what
+// Clef saw (focus candidates first, then the first-step candidates).
+for (const variant of variants) {
+  md.push("", `### Kaçan sorular (${variant})`, "", "| Soru | Beklenen | Seçilen (olasılık) | Güven | Beklenen yasa Clef listesinde |", "|---|---|---|---|---|");
+  for (const r of rows) {
+    const v = r.variants[variant];
+    if (!v || v.error || r.unanswerable || v.article1) continue;
+    const list = v.rerank?.debug_candidates ?? [];
+    const where = list
+      .map((x, i) => (x.document_id === r.expect ? `#${i + 1} ${x.ref ?? ""} (${x.probability})` : null))
+      .filter(Boolean)
+      .slice(0, 4)
+      .join(", ");
+    md.push(`| ${r.q} | ${expected(r)} | ${topLabel(v)} | ${v.confidence} | ${where || "yok"} |`);
+  }
+}
+
+// What changed against the first variant: fixed, broken, and confidence moves.
+const ok = (r, v) => (r.unanswerable ? v.abstained : v.article1);
+for (const variant of variants.slice(1)) {
+  const changes = [];
+  for (const r of rows) {
+    const a = r.variants[variants[0]];
+    const b = r.variants[variant];
+    if (!a || !b || a.error || b.error) continue;
+    if (ok(r, a) !== ok(r, b)) changes.push(`| ${ok(r, b) ? "düzeldi" : "bozuldu"} | ${r.q} | ${a.confidence} ${topLabel(a)} | ${b.confidence} ${topLabel(b)} |`);
+    else if (a.confidence !== b.confidence) changes.push(`| güven ${a.confidence} → ${b.confidence} (${ok(r, b) ? "doğru" : "yanlış"}) | ${r.q} | ${topLabel(a)} | ${topLabel(b)} |`);
+  }
+  md.push("", `### ${variants[0]} → ${variant}: değişen sorular (${changes.length})`, "");
+  if (changes.length) md.push("| Değişim | Soru | Önce | Sonra |", "|---|---|---|---|", ...changes);
 }
 const text = md.join("\n");
 console.log("\n" + text);
