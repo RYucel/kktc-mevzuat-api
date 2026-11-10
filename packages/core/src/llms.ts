@@ -205,7 +205,12 @@ her zaman \`extractive\`dır: metin birebir alıntılanır, yeniden yazılmaz.
 Doğal dil sorularında (ör. "İşveren maaşımdan kesinti yapabilir mi?") ilk 10 aday Cloudflare
 Clef ile yeniden sıralanır; \`quotes[].probability\` ve \`rerank.top_probability\` pasajın soruyu
 cevaplama olasılığıdır ve \`confidence\` buradan gelir. \`confidence: low\` ise alıntıyı cevap
-saymayın, \`/v1/search\` ile daha geniş arayın. Kısa anahtar kelime aramaları yeniden sıralanmaz. Günlük Clef
+saymayın, \`/v1/search\` ile daha geniş arayın. \`confidence_caps\` "high"ın neden "medium"a (ya da başka
+ülke hukuku soruluyorsa "low"a) düşürüldüğünü söyler. Her alıntıda \`source\` (\`gov\` = birleştirilmiş
+güncel metin), \`consolidated_through\` (\`null\` ise metnin güncelliği bilinmiyor; Resmî Gazete'den
+kontrol edin) ve \`excerpt\` (alıntı maddenin bir bölümüyse \`true\`; tamamı \`url\`'de) bulunur. Alıntıyı
+değiştirmeden aktarın; atfı \`citation\`/\`citations\` alanından alın, numara uydurmayın.
+Kısa anahtar kelime aramaları yeniden sıralanmaz. Günlük Clef
 sınırı dolarsa \`rerank.error: "daily_limit"\` döner ve sıralama aramadan gelir.
 
 İstemci başına dakikada yaklaşık 30 istek sınırı vardır; aşılırsa \`429 rate_limited\` ve

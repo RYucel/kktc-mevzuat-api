@@ -72,9 +72,20 @@ GET /v1/answer?q=mal%20paylaşımında%20eşlere%20düşen%20en%20az%20oran&form
 ```
 
 - En iyi 1–5 pasajı **birebir** alıntılar; `answer_type=extractive`.
-- Her alıntıda `citation`, `source_url`, `url`, `text_status` ve `score` bulunur.
-- `confidence`: `high`, `medium`, `low`; kaynakların tam metin olup olmamasına ve kavram
-  eşleşmesine göre hesaplanır.
+- Her alıntıda `citation`, `source_url`, `url`, `text_status`, `source`, `consolidated_through`,
+  `excerpt`, `probability` ve `score` bulunur.
+  - `source`: `gov` (mevzuat.gov.ct.tr, birleştirilmiş güncel metin) veya `mahkemeler`.
+  - `consolidated_through`: metnin içerdiği son değişiklik; `null` ise kaynak belirtmiyor, metin
+    sonraki değişikliklerden önceki hâl olabilir. Resmî Gazete'den kontrol edin.
+  - `excerpt: true`: alıntı uzun bir maddenin bir bölümüdür; maddenin tamamı `url`'dedir.
+- `confidence`: `high`, `medium`, `low`. Doğal dil sorularında Clef olasılığından gelir. `high` ayrıca
+  şunları ister: cevap genel bir soruya tüzükten gelmemeli, LLM'in adlandırdığı yasalardan biri olmalı
+  (adlandırdıysa) ve kaynak metin eksik olmamalı. Soru başka bir ülkenin hukukunu soruyorsa `low`.
+  Düşürme nedenleri `confidence_caps` alanındadır.
+- **`low` ise alıntıyı cevap olarak sunmayın.** Alıntıyı değiştirmeden aktarın; atfı `citation`
+  alanından alın, yasa veya madde numarası uydurmayın.
+- Değişiklik yasa/tüzükleri, başlangıç hükümleri ve tefsir maddeleri cevap olarak alıntılanmaz
+  (soru bunları sormadıkça).
 - **Üretken değildir**; hukuki yorum yapmaz, metni yeniden yazmaz.
 - MCP’de `sor` aracı aynı davranışı verir.
 
