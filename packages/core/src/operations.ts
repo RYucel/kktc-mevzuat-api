@@ -39,6 +39,7 @@ import {
   type ApiMeta,
   type ArticleResponse,
   type Chunk,
+  type ConfidenceCap,
   type DocumentDetail,
   type DocumentResponse,
   type DocumentSummary,
@@ -831,21 +832,27 @@ export async function answerQuestion(
   // laws carry a fixed editorial score that says nothing about the passage).
   const top = quotes[0];
   const covered = top ? top.coverage.total === 0 || top.coverage.found / top.coverage.total >= 0.5 : false;
-  const confidence: AnswerResponse["confidence"] = !top
+  const base: AnswerResponse["confidence"] = !top
     ? "low"
     : rerank?.applied
       ? // Clef's probability is the measured, better-calibrated signal here.
-        // A regulation quoted for a general question is at most "medium":
-        // the parent law may say otherwise or more.
-        capRegulation(
-          rerankConfidence(rerank.top_probability ?? 0, rerank.none_probability ?? 0),
-          statuteFirst && candidates[0]?.result.type === "tuzuk",
-        )
+        rerankConfidence(rerank.top_probability ?? 0, rerank.none_probability ?? 0)
       : top.text_status === "full" && covered && top.coverage.found >= Math.min(2, top.coverage.total)
       ? "high"
       : top.coverage.found > 0
         ? "medium"
         : "low";
+  // "high" also needs independent support; each reason below caps it at "medium".
+  const caps: ConfidenceCap[] = [];
+  if (base === "high" && top) {
+    // A regulation quoted for a general question: the parent law may say otherwise or more.
+    if (statuteFirst && top && candidates[0]?.result.type === "tuzuk") caps.push("regulation");
+    // The LLM named the statutes it expects to answer, and Clef chose another one:
+    // on 2026-11-10 four of the six confident wrong answers were exactly this
+    // (Kira (Denetim) -> İskan Yasası, KDV -> KDV İadesi, Hayvan Refahı -> Ceza).
+    if (params.agree !== false && rerank?.applied && rewriteDisagrees(rewriteSink[0], top.document_id)) caps.push("rewrite_disagrees");
+  }
+  const confidence = capConfidence(base, caps);
 
   return {
     query: params.q,
@@ -854,6 +861,7 @@ export async function answerQuestion(
     quotes,
     citations: [...new Set(quotes.map((quote) => quote.citation))],
     confidence,
+    ...(caps.length ? { confidence_caps: caps } : {}),
     ...(rewriteSink[0] ? { query_rewrite: rewriteSink[0] } : {}),
     ...(rerank ? { rerank } : {}),
     concepts: search.concepts,
@@ -966,7 +974,17 @@ export function lawsBeforeRegulations<T extends { result: { type: string } }>(ca
 }
 
 export function capRegulation(confidence: AnswerResponse["confidence"], regulation: boolean): AnswerResponse["confidence"] {
-  return regulation && confidence === "high" ? "medium" : confidence;
+  return capConfidence(confidence, regulation ? ["regulation"] : []);
+}
+
+/** Any cap turns "high" into "medium"; "medium" and "low" stay. */
+export function capConfidence(confidence: AnswerResponse["confidence"], caps: readonly ConfidenceCap[]): AnswerResponse["confidence"] {
+  return caps.length && confidence === "high" ? "medium" : confidence;
+}
+
+/** The rewrite named statutes (that resolved to documents) and the answer is from none of them. */
+export function rewriteDisagrees(info: QueryRewriteInfo | undefined, documentId: string): boolean {
+  return !!info && !info.error && info.documents.length > 0 && !info.documents.includes(documentId);
 }
 
 export function rerankConfidence(top: number, none: number): AnswerResponse["confidence"] {

@@ -77,6 +77,8 @@ export interface SearchParams {
    * regulation (default true). Search also uses it to rank tüzük lower.
    */
   statute_first?: boolean;
+  /** /v1/answer: "high" needs the answer to come from a statute the rewrite named, when it named any (default true). */
+  agree?: boolean;
   /** Internal: receives the vector hits of this search (answer focus step). */
   semantic_sink?: { doc_id: string; ref: string | null }[];
   /** /v1/answer: rewrite the question into legal terms and statute names with an LLM (default true). */
@@ -166,6 +168,8 @@ export interface AnswerResponse {
   quotes: AnswerQuote[];
   citations: string[];
   confidence: "high" | "medium" | "low";
+  /** Why a "high" was lowered to "medium" (absent when nothing was capped). */
+  confidence_caps?: ConfidenceCap[];
   /** Present when an LLM rewrote the question for the search (never the answer). */
   query_rewrite?: QueryRewriteInfo;
   /** Present when the question went to the reranker. */
@@ -297,6 +301,12 @@ export interface StatsResponse {
   stats: Record<string, unknown>;
   _meta: ApiMeta;
 }
+
+/**
+ * regulation: a tüzük answered a question that did not ask for one;
+ * rewrite_disagrees: the answer is from none of the statutes the LLM named.
+ */
+export type ConfidenceCap = "regulation" | "rewrite_disagrees";
 
 export interface QueryRewriteInfo {
   terms: string[];
