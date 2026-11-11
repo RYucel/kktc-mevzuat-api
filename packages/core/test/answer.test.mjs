@@ -105,3 +105,14 @@ test("conceptDisagrees: KDV question answered from another statute", () => {
   assert.equal(conceptDisagrees("Mars'ta arazi satın almak yasal mı?", "yasa-x"), true);
   assert.equal(conceptDisagrees("Bugün hava nasıl?", "yasa-x"), false);
 });
+
+import { rerankInput, LAW_PICK_OPTIONS } from "../.test-build/rerank.js";
+
+test("law-pick input asks which statute regulates the question and shows longer cards", () => {
+  const input = rerankInput("Gece çalışması için sınır var mı?", [{ label: "İş Yasası (22/1992)", text: "x".repeat(900) }], LAW_PICK_OPTIONS);
+  assert.match(input.questions.pick.instructions, /hangi yasa ya da tüzük düzenler/);
+  assert.equal(input.state.adaylar[0].metin.length, 600);
+  assert.equal(input.questions.pick.criteria.none, "Hiçbiri bu konuyu düzenlemiyor");
+  const plain = rerankInput("q", [{ label: "a", text: "x".repeat(900) }]);
+  assert.equal(plain.state.adaylar[0].metin.length, 420);
+});

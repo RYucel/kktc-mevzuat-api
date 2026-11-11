@@ -99,7 +99,7 @@ async function takeDaily(db: D1Database, key: string, limit: number): Promise<bo
 
 function limitedReranker(inner: Reranker, db: D1Database, limit: number, key = "clef"): Reranker {
   return {
-    async rerank(question, candidates) {
+    async rerank(question, candidates, options) {
       let allowed: boolean;
       try {
         allowed = await takeDaily(db, key, limit);
@@ -110,7 +110,7 @@ function limitedReranker(inner: Reranker, db: D1Database, limit: number, key = "
         throw new Error(`Clef counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
       }
       if (!allowed) throw new RerankLimitError();
-      return inner.rerank(question, candidates);
+      return inner.rerank(question, candidates, options);
     },
   };
 }

@@ -17,7 +17,7 @@ import {
 } from "./sql.js";
 import { buildCitation } from "./citation.js";
 import { conceptMatch, type LegalConcept, matchConcepts } from "./legal-concepts.js";
-import { ANSWER_PASSAGES, RERANK_CANDIDATES, RerankLimitError, wantsRerank } from "./rerank.js";
+import { ANSWER_PASSAGES, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, wantsRerank } from "./rerank.js";
 import { isAmendment, legislationTitles, supersededStatutes } from "./titles.js";
 import { resolveLawsDetailed, RewriteLimitError } from "./rewrite.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
@@ -126,6 +126,28 @@ const MAX_PASSAGES = 20;
  * "high" right 20/35 -> 25/36, unanswerable "low" 6/7 unchanged, +0.7-0.9 s.
  */
 export const FOCUS_DEFAULT = 12;
+/** Statutes shown to Clef in the statute-choice step (lawpick). */
+export const LAW_PICK_DEFAULT = 20;
+
+/** display_title and card of statutes (built by crawler/kktc/cards.py). */
+async function statuteCards(store: Store, ids: string[]): Promise<Map<string, { title?: string; card?: string }>> {
+  const out = new Map<string, { title?: string; card?: string }>();
+  if (!ids.length) return out;
+  try {
+    const rows = await store.all(`SELECT id, extra_json FROM documents WHERE id IN (${ids.map(() => "?").join(",")})`, ids);
+    for (const row of rows) {
+      try {
+        const extra = JSON.parse(String(row.extra_json ?? "{}")) as { display_title?: string; card?: string };
+        out.set(String(row.id), { title: extra.display_title, card: extra.card });
+      } catch {
+        // A bad row: the statute is shown by its passage.
+      }
+    }
+  } catch (error) {
+    console.warn("statute cards unavailable:", error instanceof Error ? error.message : error);
+  }
+  return out;
+}
 /**
  * focus2=1 only: below this first-step probability ("high"), the focus step
  * covers the two leading statutes. Measured 2026-11-09 against the single
@@ -682,7 +704,12 @@ export async function answerQuestion(
   // One statute named by the caller (document_id): its articles only, as many
   // as the focus step would show; no statute choice and no second step.
   const singleDoc = params.doc_ids?.length === 1;
-  const passages = singleDoc
+  // lawpick: choose the statute first from statute cards (OPUS-GOREVLER-3).
+  const lawPick = !!reranker && !singleDoc && params.lawpick === true;
+  const lawPickCount = Math.min(30, Math.max(5, params.lawpick_n ?? LAW_PICK_DEFAULT));
+  const passages = lawPick
+    ? 1
+    : singleDoc
     ? Math.min(RERANK_CANDIDATES, params.focus ?? FOCUS_DEFAULT)
     : reranker
       ? Math.min(3, Math.max(1, params.passages ?? ANSWER_PASSAGES))
@@ -700,7 +727,7 @@ export async function answerQuestion(
       statute_first: statuteFirst,
       skip_amendments: params.dedupe !== false && !/degisiklik/.test(foldTr(params.q)),
       prefer: params.prefer ?? "mevzuat",
-      limit: singleDoc ? 1 : reranker ? Math.max(limit, Math.ceil(RERANK_CANDIDATES / passages)) : limit,
+      limit: singleDoc ? 1 : lawPick ? lawPickCount + 10 : reranker ? Math.max(limit, Math.ceil(RERANK_CANDIDATES / passages)) : limit,
       passages,
       ...(singleDoc ? { exclude_title: true } : {}),
     },
@@ -737,7 +764,57 @@ export async function answerQuestion(
   let candidates: Passage[] = statuteFirst ? lawsBeforeRegulations(rounds.flat()) : rounds.flat();
   let probabilities: number[] | null = null;
   let rerank: AnswerResponse["rerank"];
-  if (reranker && candidates.length > 1) {
+  let lawTwo = false;
+  if (lawPick && reranker && candidates.length > 1) {
+    // One passage per statute, regulations last (at most 8 unless asked for).
+    const asks = asksRegulation(params.q);
+    let regulations = 0;
+    candidates = candidates
+      .filter((c) => LEGISLATION_TYPES.has(c.result.type))
+      .filter((c) => asks || !statuteFirst || c.result.type !== "tuzuk" || ++regulations <= 8)
+      .slice(0, lawPickCount);
+    const cards = await statuteCards(store, candidates.map((c) => c.result.id));
+    try {
+      const result = await reranker.rerank(
+        params.q,
+        candidates.map((c) => {
+          const card = cards.get(c.result.id);
+          return {
+            label: card?.title || c.result.citation || c.result.title,
+            // Statutes without a usable card are shown by their best passage.
+            text: card?.card && card.card.length >= 80 ? card.card : clefPassage(c.text, params.q),
+          };
+        }),
+        LAW_PICK_OPTIONS,
+      );
+      const order = candidates
+        .map((c, i) => ({ c, i, p: result.probabilities[i] ?? 0 }))
+        .sort((a, b) => b.p - a.p || a.i - b.i);
+      candidates = order.map((o) => o.c);
+      probabilities = order.map((o) => o.p);
+      // Two statutes nearly tied: look for the article in both.
+      lawTwo = (probabilities[1] ?? 0) >= 0.5 * (probabilities[0] ?? 0) && (probabilities[1] ?? 0) >= FOCUS_TWO_MIN_MASS;
+      rerank = {
+        model: result.model,
+        applied: true,
+        law_pick: true,
+        candidates: order.length,
+        passages_per_document: 1,
+        top_probability: round3(order[0]?.p ?? 0),
+        none_probability: round3(result.none),
+        ...(params.debug
+          ? { debug_laws: order.slice(0, 10).map((o) => ({ document_id: o.c.result.id, probability: round3(o.p) })) }
+          : {}),
+      };
+    } catch (error) {
+      console.warn("law pick failed:", error instanceof Error ? error.message : error);
+      rerank = {
+        model: "clef-flash",
+        applied: false,
+        error: error instanceof RerankLimitError ? "daily_limit" : "unavailable",
+      };
+    }
+  } else if (reranker && candidates.length > 1) {
     candidates = candidates.slice(0, RERANK_CANDIDATES);
     try {
       const result = await reranker.rerank(
@@ -800,7 +877,9 @@ export async function answerQuestion(
     const first = candidates[0].result;
     if (laws[0]?.id === first.id && none < (probs[0] ?? 0)) {
       const second = laws[1];
-      const both = params.focus_two === true && (probs[0] ?? 0) < FOCUS_TWO_BELOW && second && massOf(second.id) >= FOCUS_TWO_MIN_MASS;
+      const both =
+        !!second &&
+        (lawTwo || (params.focus_two === true && (probs[0] ?? 0) < FOCUS_TWO_BELOW && massOf(second.id) >= FOCUS_TWO_MIN_MASS));
       const targets = both
         ? [
             { law: first, count: Math.ceil(focusCount * 0.6) },

@@ -50,9 +50,25 @@ export interface RerankResult {
   none: number;
 }
 
-export interface Reranker {
-  rerank(question: string, candidates: RerankCandidate[]): Promise<RerankResult>;
+export interface RerankOptions {
+  /** The choice question (default: which passage answers). */
+  instructions?: string;
+  /** Characters of each candidate's text shown (default PASSAGE_CHARS). */
+  chars?: number;
+  /** The "none" option's wording. */
+  none?: string;
 }
+
+export interface Reranker {
+  rerank(question: string, candidates: RerankCandidate[], options?: RerankOptions): Promise<RerankResult>;
+}
+
+/** Statute choice over statute cards (OPUS-GOREVLER-3 item 3). */
+export const LAW_PICK_OPTIONS: RerankOptions = {
+  instructions: "Bu soruyu hangi yasa ya da tüzük düzenler? Adına ve konu özetine göre en uygun olanı seç.",
+  chars: 600,
+  none: "Hiçbiri bu konuyu düzenlemiyor",
+};
 
 /** Runs one decision-model request (Workers AI binding in the Worker). */
 export type DecideFn = (model: string, input: Record<string, unknown>) => Promise<unknown>;
@@ -72,19 +88,20 @@ export function wantsRerank(query: string, mode?: string): boolean {
   return words >= 4 || text.endsWith("?") || QUESTION_WORD.test(text.toLocaleLowerCase("tr"));
 }
 
-export function rerankInput(question: string, candidates: RerankCandidate[]): Record<string, unknown> {
+export function rerankInput(question: string, candidates: RerankCandidate[], options: RerankOptions = {}): Record<string, unknown> {
   const ids = candidates.map((_, i) => `c${i + 1}`);
   const criteria: Record<string, string> = Object.fromEntries(candidates.map((c, i) => [ids[i], c.label]));
-  criteria.none = "Hiçbiri soruyu cevaplamıyor";
+  criteria.none = options.none ?? "Hiçbiri soruyu cevaplamıyor";
+  const chars = options.chars ?? PASSAGE_CHARS;
   return {
     state: {
       soru: question.trim(),
-      adaylar: candidates.map((c, i) => ({ id: ids[i], madde: c.label, metin: c.text.replace(/\s+/g, " ").trim().slice(0, PASSAGE_CHARS) })),
+      adaylar: candidates.map((c, i) => ({ id: ids[i], madde: c.label, metin: c.text.replace(/\s+/g, " ").trim().slice(0, chars) })),
     },
     questions: {
       pick: {
         type: "choice",
-        instructions: "Bu adaylardan hangisi soruyu doğrudan cevaplayan yasa maddesidir?",
+        instructions: options.instructions ?? "Bu adaylardan hangisi soruyu doğrudan cevaplayan yasa maddesidir?",
         criteria,
       },
     },
@@ -108,8 +125,8 @@ export function parseRerank(output: unknown, count: number, model = RERANK_MODEL
 
 export function clefReranker(decide: DecideFn, model = RERANK_MODEL): Reranker {
   return {
-    async rerank(question, candidates) {
-      const output = await decide(model, { model, ...rerankInput(question, candidates) });
+    async rerank(question, candidates, options) {
+      const output = await decide(model, { model, ...rerankInput(question, candidates, options) });
       const result = parseRerank(output, candidates.length, model);
       if (!result) throw new Error("Clef yanıtı çözümlenemedi.");
       return result;
