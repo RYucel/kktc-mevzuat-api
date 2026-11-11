@@ -96,3 +96,12 @@ test("questions over the length cap are rejected with 400", () => {
   assert.doesNotThrow(() => assertQueryLength("x".repeat(MAX_QUERY_CHARS)));
   assert.throws(() => assertQueryLength("x".repeat(MAX_QUERY_CHARS + 1)), (e) => e.status === 400 && e.code === "query_too_long");
 });
+
+import { conceptDisagrees } from "../.test-build/operations.js";
+
+test("conceptDisagrees: KDV question answered from another statute", () => {
+  assert.equal(conceptDisagrees("Katma değer vergisi yüzde kaç?", "yasa-31-1996"), true);
+  assert.equal(conceptDisagrees("Katma değer vergisi yüzde kaç?", "yasa-47-1992"), false);
+  assert.equal(conceptDisagrees("Mars'ta arazi satın almak yasal mı?", "yasa-x"), true);
+  assert.equal(conceptDisagrees("Bugün hava nasıl?", "yasa-x"), false);
+});

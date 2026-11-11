@@ -96,6 +96,8 @@ export interface SearchParams {
   rewrite?: boolean;
   /** /v1/answer: rewrite prompt version ("v1" default, "v2"). */
   rewrite_prompt?: "v1" | "v2";
+  /** /v1/answer: "high" needs the answer from a concept's canonical statute when the question matches one (default false; measuring). */
+  concept_agree?: boolean;
   /** /v1/answer: use the statute names of the rewrite at all (default true; laws=0 keeps only its terms). */
   rewrite_laws?: boolean;
   /** /v1/answer: only statute names that match a title in full boost the search and gate "high". */
@@ -334,7 +336,7 @@ export interface StatsResponse {
  * partial_text: the statute's text is incomplete (partial download or scan);
  * foreign_jurisdiction: the question asks about another country (lowered to "low").
  */
-export type ConfidenceCap = "regulation" | "rewrite_disagrees" | "partial_text" | "foreign_jurisdiction";
+export type ConfidenceCap = "regulation" | "rewrite_disagrees" | "concept_disagrees" | "partial_text" | "foreign_jurisdiction";
 
 export interface QueryRewriteInfo {
   terms: string[];

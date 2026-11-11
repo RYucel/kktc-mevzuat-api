@@ -74,7 +74,11 @@ export const LEGAL_CONCEPTS = [
     {
         id: "is-hukuku",
         label: "İş hukuku / kıdem, ihbar, işe iade",
-        triggers: ["kidem", "ihbar", "ise iade", "fazla mesai", "is kazasi", "isci", "isveren", "yillik izin"],
+        triggers: [
+            "kidem", "ihbar", "ise iade", "fazla mesai", "is kazasi", "isci", "isveren", "yillik izin",
+            // 11 Nov 2026: working-time and leave questions triggered no concept.
+            "deneme suresi", "calisma suresi", "gece vardiya", "ucretli izin", "bordro", "isten ayril", "isten cikar",
+        ],
         expand: [
             "kıdem tazminatı",
             "ihbar tazminatı",
@@ -152,7 +156,7 @@ export const LEGAL_CONCEPTS = [
     {
         id: "sosyal-sigorta",
         label: "Sosyal sigorta ve emeklilik",
-        triggers: ["sosyal sigorta", "emekli", "malulluk", "yaslilik", "prim", "is goremezlik"],
+        triggers: ["sosyal sigorta", "emekli", "malulluk", "yaslilik", "prim", "is goremezlik", "sigortali"],
         expand: [
             "sosyal sigorta",
             "emeklilik",
@@ -190,7 +194,7 @@ export const LEGAL_CONCEPTS = [
     {
         id: "ceza",
         label: "Ceza ve ceza muhakemesi",
-        triggers: ["ceza", "tutuklama", "gozalti", "arama", "el koyma", "istinaf", "temyiz"],
+        triggers: ["ceza", "tutuklama", "gozalti", "arama", "el koyma", "istinaf", "temyiz", "suc", "dolandir", "kufur", "hakaret", "oldur"],
         expand: ["ceza", "tutuklama", "gözaltı", "arama", "el koyma", "istinaf", "temyiz", "delil"],
         primary: ["yasa-fasil-154", "yasa-fasil-155"],
     },
@@ -259,6 +263,73 @@ export const LEGAL_CONCEPTS = [
         label: "Tapu, tescil ve kamulaştırma",
         triggers: ["tapu", "tescil", "kadastro", "kamulastir", "ipotek"],
         expand: ["tapu", "tescil", "kadastro", "kamulaştırma", "ipotek", "kira şerhi"],
+    },
+    // Added 11 Nov 2026: topics of the eval set with no concept. Triggers are
+    // general wording of the subject, not the eval questions; each primary
+    // statute was checked against its text.
+    {
+        id: "asgari-ucret",
+        label: "Asgari ücret",
+        triggers: ["asgari ucret"],
+        expand: ["asgari ücret", "asgari ücret saptama komisyonu"],
+        primary: ["yasa-22-1975"],
+        weight: 3,
+    },
+    {
+        id: "yabanci-calisma",
+        label: "Yabancıların çalışma izni",
+        triggers: ["yabanci uyruklu", "calisma izin", "yabanci isci", "yabanci ogrenci"],
+        expand: ["çalışma izni", "yabancı uyruklu", "süreli çalışma izni", "öğrenci çalışma izni"],
+        primary: ["yasa-63-2006", "tuzuk-yabancilarin-calisma-izinleri-tuzugu"],
+        weight: 3,
+    },
+    {
+        id: "tuketici",
+        label: "Tüketicinin korunması",
+        triggers: ["tuketici", "ayipli", "arizali", "cayma", "mesafeli", "taksitle", "kapima gelen", "tek tarafli", "garanti belgesi"],
+        expand: ["tüketici", "ayıplı mal", "cayma hakkı", "mesafeli sözleşme", "kapıdan satış", "taksitli satış", "haksız şart"],
+        primary: ["yasa-40-2003"],
+        weight: 2,
+    },
+    {
+        id: "kisisel-veri",
+        label: "Kişisel verilerin korunması",
+        triggers: ["kisisel veri", "kisisel bilgi", "hassas bilgi", "bilgilerim", "verilerim", "hakkimda", "reklam mesaj", "ticari ileti"],
+        expand: ["kişisel veri", "veri sorumlusu", "ilgili kişi", "özel nitelikli kişisel veri", "yurt dışına aktarılması"],
+        primary: ["yasa-89-2007"],
+        weight: 2,
+    },
+    {
+        id: "hayvan",
+        label: "Hayvan refahı",
+        triggers: ["hayvan", "kopeg", "kopek", "kedi"],
+        expand: ["hayvan", "hayvan refahı", "eziyet", "işkence", "sahipli hayvan"],
+        primary: ["yasa-8-2013"],
+        weight: 2,
+    },
+    {
+        id: "aile",
+        label: "Evlenme, boşanma ve aile",
+        triggers: ["evlen", "nisanl", "bosan", "soyad", "evlilik", "esim", "eslere"],
+        expand: ["evlenme", "nişanlanma", "boşanma", "soyadı", "evlilik birliği", "eşler"],
+        primary: ["yasa-1-1998"],
+        weight: 2,
+    },
+    {
+        id: "askerlik",
+        label: "Askerlik",
+        triggers: ["askerlik", "bedelli", "askere"],
+        expand: ["askerlik", "mükellefiyet hizmeti", "yedek subay", "bedel"],
+        primary: ["yasa-59-2000"],
+        weight: 2,
+    },
+    {
+        id: "trafik-suclari",
+        label: "Trafik suçları ve ceza puanı",
+        triggers: ["ceza puan", "trafik ceza", "davasiz hall"],
+        expand: ["ceza puanı", "davasız halli", "trafik suçu", "ceza ihbarnamesi"],
+        primary: ["yasa-43-1991"],
+        weight: 3,
     },
     {
         id: "zamanaşımı-faiz",
