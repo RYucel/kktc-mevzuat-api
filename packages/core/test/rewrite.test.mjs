@@ -50,3 +50,32 @@ test("resolveLaws: a two-word name needs both words (no 'Karasuları' for 'Karay
   assert.deepEqual(resolveLaws(titles, ["Karayolları Trafik Yasası"]), ["yasa-43-1991"]);
   assert.deepEqual(resolveLaws(titles, ["Karayolları Deniz Yasası"]), []);
 });
+
+import { resolveLawsDetailed, REWRITE_PROMPTS } from "../.test-build/rewrite.js";
+
+const more = [
+  ...titles,
+  { id: "yasa-17-1981", title: "Kira (Denetim) Yasası" },
+  { id: "yasa-47-1992", title: "Katma Değer Vergisi Yasası" },
+  { id: "yasa-31-1996", title: "Katma Değer Vergisi İadesi Yasası" },
+];
+
+test("strong: every word of the name in a title that adds at most two words", () => {
+  assert.deepEqual(resolveLawsDetailed(more, ["Kira Yasası"]), [{ id: "yasa-17-1981", strong: true }]);
+  assert.deepEqual(resolveLawsDetailed(more, ["İş Kanunu"]), [{ id: "yasa-22-1992", strong: true }]);
+});
+
+test("KDV expands to katma değer vergisi and picks the main law", () => {
+  assert.deepEqual(resolveLawsDetailed(more, ["KDV Yasası"]), [{ id: "yasa-47-1992", strong: true }]);
+});
+
+test("three-word names with one missing word resolve weakly", () => {
+  const r = resolveLawsDetailed(more, ["Tüketicileri Koruma Hakları Yasası"]);
+  assert.deepEqual(r, [{ id: "yasa-40-2003", strong: false }]);
+});
+
+test("v2 prompt tells the model how KKTC names statutes", () => {
+  assert.match(REWRITE_PROMPTS.v2, /'Kanun'/);
+  assert.match(REWRITE_PROMPTS.v2, /boş liste/);
+  assert.equal(REWRITE_PROMPTS.v1.includes("Kanun'"), false);
+});

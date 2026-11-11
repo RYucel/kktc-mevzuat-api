@@ -27,10 +27,10 @@ export class RewriteLimitError extends Error {
 }
 
 export interface QueryRewriter {
-  rewrite(question: string, options?: { model?: "20b" | "120b" }): Promise<QueryRewrite>;
+  rewrite(question: string, options?: { model?: "20b" | "120b"; prompt?: RewritePrompt }): Promise<QueryRewrite>;
 }
 
-export const REWRITE_INSTRUCTIONS = [
+const PROMPT_V1 = [
   "Sen Kuzey Kıbrıs Türk Cumhuriyeti (KKTC) mevzuatında arama yapan bir hukuk asistanısın.",
   "Kullanıcının sorusunu cevaplamayacaksın; yalnızca aramayı iyileştireceksin.",
   "1) terms: Sorunun konusunu yasalarda geçen hukuki terimlerle anlatan 3-8 kısa Türkçe terim veya ifade",
@@ -39,6 +39,32 @@ export const REWRITE_INSTRUCTIONS = [
   "   Emin değilsen genel yasa adını yaz (ör. 'Ceza Yasası', 'İş Yasası'). Uydurma numara yazma.",
   'Yalnızca şu biçimde JSON döndür: {"terms": ["..."], "laws": ["..."]}',
 ].join("\n");
+
+/**
+ * v2 (11 Nov 2026): gpt-oss-20b answered v1 with Turkish-Republic names
+ * ("KDV Kanunu", "Devlet Memurları Kanunu"), invented ones and even
+ * Azerbaijani; most resolved to unrelated statutes. v2 states how KKTC names
+ * statutes, forbids other countries' codes and prefers no name to a guess.
+ * Example names are deliberately not from the eval set.
+ */
+const PROMPT_V2 = [
+  "Sen Kuzey Kıbrıs Türk Cumhuriyeti (KKTC) mevzuatında arama yapan bir hukuk asistanısın.",
+  "Kullanıcının sorusunu cevaplamayacaksın; yalnızca aramayı iyileştireceksin. Yalnızca Türkçe yaz.",
+  "1) terms: Sorunun konusunu yasa metinlerinde geçebilecek hukuki terimlerle anlatan 3-8 kısa Türkçe terim veya ifade",
+  "   (ör. günlük dildeki 'işten atılmak' için 'hizmet akdinin feshi', 'bildirimsiz fesih').",
+  "2) laws: Bu soruyu düzenleyen KKTC yasalarının kısa adları, en çok 2, en olasısı önce.",
+  "   KKTC'de yasaların adı '... Yasası', tüzüklerin adı '... Tüzüğü' biçimindedir; 'Kanun', 'Kanunu', 'Yönetmelik', 'Kodeks' kullanılmaz.",
+  "   Türkiye Cumhuriyeti'nin veya başka bir ülkenin kanunlarını yazma. Yasa numarası yazma.",
+  "   Adı konuyu söyleyen 2-4 kelimeyle yaz (ör. 'Orman Yasası', 'Ticari Sicil Yasası', 'Hayvan Sağlığı Yasası').",
+  "   Emin değilsen laws boş liste olsun: yanlış bir ad, boş listeden daha kötüdür.",
+  'Yalnızca şu biçimde JSON döndür: {"terms": ["..."], "laws": ["..."]}',
+].join("\n");
+
+export type RewritePrompt = "v1" | "v2";
+export const REWRITE_PROMPTS: Record<RewritePrompt, string> = { v1: PROMPT_V1, v2: PROMPT_V2 };
+export const DEFAULT_REWRITE_PROMPT: RewritePrompt = "v1";
+/** The default prompt (kept for callers that predate versions). */
+export const REWRITE_INSTRUCTIONS = REWRITE_PROMPTS[DEFAULT_REWRITE_PROMPT];
 
 /** Pulls {terms, laws} out of the model's text; null if it is not usable. */
 export function parseRewrite(text: string): QueryRewrite | null {
@@ -66,8 +92,19 @@ const GENERIC = new Set([
   "kktc", "kuzey", "kibris", "turk", "cumhuriyeti", "hakkinda", "iliskin", "kanun", "kanunu",
 ]);
 
+/** Common abbreviations in questions and LLM names (general, not eval-specific). */
+const ABBREVIATIONS: [RegExp, string][] = [
+  [/\bkdv\b/g, "katma deger vergisi"],
+  [/\bcmuy\b/g, "ceza muhakemeleri usulu"],
+  [/\bhmuy\b/g, "hukuk muhakemeleri usulu"],
+];
+
+function expand(folded: string): string {
+  return ABBREVIATIONS.reduce((text, [re, full]) => text.replace(re, full), folded);
+}
+
 function words(text: string): string[] {
-  return foldTr(text)
+  return expand(foldTr(text))
     .split(/[^\p{L}\p{N}]+/u)
     .filter((w) => w.length >= 2 && !GENERIC.has(w) && !/^\d+$/.test(w));
 }
@@ -81,8 +118,12 @@ const isRegulation = (folded: string) => /\btuzu/.test(folded);
  * A law outranks a regulation (tüzük) unless the name says tüzük; amendment
  * laws only when the name asks for one; shorter titles win ties.
  */
-export function resolveLaws(titles: { id: string; title: string }[], names: string[], perName = 1): string[] {
-  const ids: string[] = [];
+export function resolveLawsDetailed(
+  titles: { id: string; title: string }[],
+  names: string[],
+  perName = 1,
+): { id: string; strong: boolean }[] {
+  const out: { id: string; strong: boolean }[] = [];
   for (const name of names) {
     const nameWords = words(name);
     const stems = nameWords.map((w) => w.slice(0, Math.min(4, w.length)));
@@ -90,7 +131,7 @@ export function resolveLaws(titles: { id: string; title: string }[], names: stri
     const foldedName = foldTr(name);
     const wantsAmendment = /degisiklik/.test(foldedName);
     const wantsRegulation = isRegulation(foldedName);
-    const best: { id: string; score: number; len: number }[] = [];
+    const best: { id: string; score: number; len: number; strong: boolean }[] = [];
     for (const { id, title } of titles) {
       const folded = foldTr(title);
       if (!wantsAmendment && /degisiklik/.test(folded)) continue;
@@ -104,10 +145,18 @@ export function resolveLaws(titles: { id: string; title: string }[], names: stri
       if (found < needed || titleWords.length > stems.length + 4) continue;
       const exact = nameWords.filter((w) => titleWords.includes(w)).length;
       const kind = isRegulation(folded) === wantsRegulation ? 0.5 : 0;
-      best.push({ id, score: found + 0.3 * exact + kind - 0.1 * Math.max(0, titleWords.length - found), len: folded.length });
+      // Strong: every word of the name is in the title and the title adds at
+      // most two words ("Kira (Denetim) Yasası" for "Kira Yasası"). One-word
+      // overlaps ("Hayvan Koruma Kanunu" -> "Abone ve Tüketici Hakları") are weak.
+      const strong = found === stems.length && titleWords.length <= stems.length + 2;
+      best.push({ id, score: found + 0.3 * exact + kind - 0.1 * Math.max(0, titleWords.length - found), len: folded.length, strong });
     }
     best.sort((a, b) => b.score - a.score || a.len - b.len);
-    for (const hit of best.slice(0, perName)) if (!ids.includes(hit.id)) ids.push(hit.id);
+    for (const hit of best.slice(0, perName)) if (!out.some((o) => o.id === hit.id)) out.push({ id: hit.id, strong: hit.strong });
   }
-  return ids;
+  return out;
+}
+
+export function resolveLaws(titles: { id: string; title: string }[], names: string[], perName = 1): string[] {
+  return resolveLawsDetailed(titles, names, perName).map((hit) => hit.id);
 }

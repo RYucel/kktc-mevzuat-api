@@ -94,6 +94,10 @@ export interface SearchParams {
   semantic_sink?: { doc_id: string; ref: string | null }[];
   /** /v1/answer: rewrite the question into legal terms and statute names with an LLM (default true). */
   rewrite?: boolean;
+  /** /v1/answer: rewrite prompt version ("v1" default, "v2"). */
+  rewrite_prompt?: "v1" | "v2";
+  /** /v1/answer: only statute names that match a title in full boost the search and gate "high". */
+  strong_laws?: boolean;
   /** /v1/answer: rewrite model ("20b" default, "120b" larger). */
   rewrite_model?: "20b" | "120b";
   /** /v1/answer: wait for the rewrite before the main search (slower; for measurement). */
@@ -335,6 +339,8 @@ export interface QueryRewriteInfo {
   laws: string[];
   /** Statutes the names resolved to (they join the candidates). */
   documents: string[];
+  /** The documents whose title matches a name in full (the reliable ones). */
+  strong_documents?: string[];
   /** Served from the rewrite cache (no LLM call). */
   cached?: boolean;
   error?: string;

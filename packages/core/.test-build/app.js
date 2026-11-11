@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { ApiError, answerMarkdown, answerQuestion, apiMeta, articleMarkdown, documentMarkdown, getArticle, getDocument, getStats, listArticleRefs, listRecent, searchDocuments, FOCUS_DEFAULT, } from "./operations.js";
+import { ApiError, answerMarkdown, answerQuestion, rewriteQuestion, apiMeta, articleMarkdown, documentMarkdown, getArticle, getDocument, getStats, listArticleRefs, listRecent, searchDocuments, FOCUS_DEFAULT, } from "./operations.js";
 import { DOC_TYPES, TYPE_LABELS } from "./types.js";
 import { llmsText } from "./llms.js";
 import { changesHtml, changesMarkdown, feedHtml, getDocumentChanges, listChanges } from "./changes.js";
@@ -173,6 +173,8 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
             rewrite: !["0", "false", "no"].includes((c.req.query("rewrite") ?? "").toLowerCase()),
             rewrite_model: ["20b", "120b"].find((m) => m === (c.req.query("rewrite_model") ?? "").toLowerCase()),
             rewrite_wait: ["1", "true", "yes"].includes((c.req.query("rewrite_wait") ?? "").toLowerCase()),
+            rewrite_prompt: ["v1", "v2"].find((v) => v === (c.req.query("rewrite_prompt") ?? "").toLowerCase()),
+            strong_laws: ["1", "true", "yes"].includes((c.req.query("strong") ?? "").toLowerCase()),
             focus_two: ["1", "true", "yes"].includes((c.req.query("focus2") ?? "").toLowerCase()),
             window: !["0", "false", "no"].includes((c.req.query("window") ?? "").toLowerCase()),
             statute_first: !["0", "false", "no"].includes((c.req.query("statute_first") ?? "").toLowerCase()),
@@ -351,6 +353,25 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
             const message = error instanceof Error ? error.message : String(error);
             return c.json({ error: "model_error", message, ms: Date.now() - started }, /quota|neuron|limit|429/i.test(message) ? 429 : 502);
         }
+    });
+    // The LLM rewrite of one question and the statutes its names resolve to,
+    // for scripts/eval-rewrite.mjs: measures prompt versions without spending
+    // Clef. Counted on the admin LLM budget like any admin rewrite.
+    app.get("/admin/rewrite", async (c) => {
+        const header = c.req.header("authorization");
+        if (!adminToken || !header || !timingSafeEqual(header, `Bearer ${adminToken}`)) {
+            throw new ApiError(401, "unauthorized", "Yetkisiz.");
+        }
+        const q = c.req.query("q") ?? "";
+        if (!q.trim())
+            throw new ApiError(400, "missing_query", "q zorunludur.");
+        const info = await rewriteQuestion(store, {
+            q,
+            rewrite_prompt: ["v1", "v2"].find((v) => v === (c.req.query("prompt") ?? "").toLowerCase()),
+            limit: 1,
+            offset: 0,
+        });
+        return c.json(info);
     });
     app.post("/mcp", async (c) => {
         const origin = requestOrigin(c);
