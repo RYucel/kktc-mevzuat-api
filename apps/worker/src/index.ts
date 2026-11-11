@@ -45,6 +45,8 @@ export interface Env {
   /** Rewrites per UTC day for users (default 400) and for our own jobs (default 600). */
   REWRITE_DAILY_LIMIT?: string;
   REWRITE_ADMIN_DAILY_LIMIT?: string;
+  /** /admin/decide calls per UTC day (default 300). */
+  DECIDE_ADMIN_DAILY_LIMIT?: string;
   /** Per-client request limit (wrangler.toml [[ratelimits]]). */
   RATE_LIMITER?: RateLimit;
   /** Global per-minute circuit breaker (Durable Object, see gate.ts). */
@@ -67,6 +69,8 @@ const DEFAULT_CLEF_DAILY_LIMIT = 1000;
  * 1500 calls are ~12K neurons, about $0.13 at $0.011 per 1K neurons.
  */
 const DEFAULT_CLEF_ADMIN_DAILY_LIMIT = 1500;
+/** /admin/decide calls per UTC day (eval-clef measurements; ~2.3K tokens each). */
+const DEFAULT_DECIDE_ADMIN_DAILY_LIMIT = 300;
 
 /** Daily counter in D1 (one small write per Clef call). */
 async function takeDaily(db: D1Database, key: string, limit: number): Promise<boolean> {
@@ -403,7 +407,19 @@ export default {
       vectors: semantic,
       adminToken: env.VECTOR_ADMIN_TOKEN,
       decide: env.AI
-        ? (model, input) => env.AI!.run(DECISION_MODELS[model] as Parameters<Ai["run"]>[0], input as never)
+        ? async (model, input) => {
+            // Admin-only, but a leaked token must not mean unbounded Workers
+            // AI spend: counted per UTC day like Clef, fail-closed.
+            const limit = Number(env.DECIDE_ADMIN_DAILY_LIMIT ?? DEFAULT_DECIDE_ADMIN_DAILY_LIMIT);
+            let allowed: boolean;
+            try {
+              allowed = limit > 0 && (await takeDaily(env.DB, "decide-admin", limit));
+            } catch (error) {
+              throw new Error(`decide counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            if (!allowed) throw new Error("decide daily limit reached");
+            return env.AI!.run(DECISION_MODELS[model] as Parameters<Ai["run"]>[0], input as never);
+          }
         : undefined,
     });
     // D1's free tier is 5M rows read a day; this header shows what each
