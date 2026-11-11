@@ -3,7 +3,7 @@ import { buildCitation } from "./citation.js";
 import { conceptMatch, matchConcepts } from "./legal-concepts.js";
 import { ANSWER_PASSAGES, RERANK_CANDIDATES, RerankLimitError, wantsRerank } from "./rerank.js";
 import { isAmendment, legislationTitles, supersededStatutes } from "./titles.js";
-import { resolveLaws, RewriteLimitError } from "./rewrite.js";
+import { resolveLawsDetailed, RewriteLimitError } from "./rewrite.js";
 import { reciprocalRankFusion, wantsSemantic } from "./semantic.js";
 import { baseArticleRef, buildMatch, clefPassage, foldTr, makeHighlights, makeSnippet, normalizeArticleRef, stemCoverage, stemMatch, truncate, } from "./text.js";
 import { TYPE_LABELS, } from "./types.js";
@@ -167,7 +167,7 @@ export async function searchDocuments(store, params, origin) {
                 semanticText = `${params.q} ${info.terms.join(" ")}`;
             }
             detected.push(concept);
-            if (info.documents.length)
+            if (concept.primary?.length)
                 primaryConcepts.push(concept);
         }
         params.rewrite_sink?.push(info);
@@ -788,7 +788,7 @@ export async function answerQuestion(store, params, origin) {
         // The LLM named the statutes it expects to answer, and Clef chose another one:
         // on 2026-11-10 four of the six confident wrong answers were exactly this
         // (Kira (Denetim) -> İskan Yasası, KDV -> KDV İadesi, Hayvan Refahı -> Ceza).
-        if (params.agree !== false && rerank?.applied && rewriteDisagrees(rewriteSink[0], top.document_id))
+        if (params.agree !== false && rerank?.applied && rewriteDisagrees(rewriteSink[0], top.document_id, params.strong_laws === true))
             caps.push("rewrite_disagrees");
         // Part of the statute is missing: another article (or a later paragraph) may change the answer.
         if (top.text_status !== "full")
@@ -943,8 +943,11 @@ export function capConfidence(confidence, caps) {
     return caps.length && confidence === "high" ? "medium" : confidence;
 }
 /** The rewrite named statutes (that resolved to documents) and the answer is from none of them. */
-export function rewriteDisagrees(info, documentId) {
-    return !!info && !info.error && info.documents.length > 0 && !info.documents.includes(documentId);
+export function rewriteDisagrees(info, documentId, strongOnly = false) {
+    if (!info || info.error)
+        return false;
+    const named = strongOnly ? (info.strong_documents ?? []) : info.documents;
+    return named.length > 0 && !named.includes(documentId);
 }
 export function rerankConfidence(top, none) {
     if (none >= top)
@@ -1171,10 +1174,17 @@ export class ApiError extends Error {
 export function short(text, limit = 600) {
     return truncate(text, limit);
 }
+/** The rewrite of one question with resolved statutes (admin measurement; no search, no Clef). */
+export async function rewriteQuestion(store, params) {
+    assertQueryLength(params.q);
+    if (!store.rewriter)
+        throw new ApiError(501, "rewrite_unavailable", "LLM çevirisi bu çalışma ortamında yok.");
+    return (await runRewrite(store, params)).info;
+}
 async function runRewrite(store, params) {
     const info = { terms: [], laws: [], documents: [] };
     try {
-        const rewrite = await store.rewriter.rewrite(params.q, { model: params.rewrite_model });
+        const rewrite = await store.rewriter.rewrite(params.q, { model: params.rewrite_model, prompt: params.rewrite_prompt });
         info.terms = rewrite.terms;
         info.laws = rewrite.laws;
         if (rewrite.cached)
@@ -1183,11 +1193,16 @@ async function runRewrite(store, params) {
             // Resolve names to the consolidated copy, not a first-published duplicate.
             const superseded = params.dedupe !== false ? await supersededStatutes(store) : new Set();
             const titles = (await legislationTitles(store)).filter((t) => !superseded.has(t.id));
-            info.documents = resolveLaws(titles, rewrite.laws);
+            const hits = resolveLawsDetailed(titles, rewrite.laws);
+            info.documents = hits.map((hit) => hit.id);
+            info.strong_documents = hits.filter((hit) => hit.strong).map((hit) => hit.id);
         }
-        if (!info.terms.length && !info.documents.length)
+        // With strong_laws, only names that match a title in full boost the search;
+        // weak matches pushed unrelated statutes into the candidates (11 Nov 2026).
+        const primary = params.strong_laws ? (info.strong_documents ?? []) : info.documents;
+        if (!info.terms.length && !primary.length)
             return { info, concept: null };
-        return { info, concept: { id: "llm", label: "LLM", triggers: [], expand: info.terms, primary: info.documents, weight: 1 } };
+        return { info, concept: { id: "llm", label: "LLM", triggers: [], expand: info.terms, primary, weight: 1 } };
     }
     catch (error) {
         info.error = error instanceof RewriteLimitError ? "daily_limit" : "unavailable";

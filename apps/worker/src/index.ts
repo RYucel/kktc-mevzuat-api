@@ -5,7 +5,8 @@ import {
   parseRewrite,
   type QueryRewriter,
   queryText,
-  REWRITE_INSTRUCTIONS,
+  DEFAULT_REWRITE_PROMPT,
+  REWRITE_PROMPTS,
   RewriteLimitError,
   SEMANTIC_MODEL,
   type SemanticHit,
@@ -202,8 +203,11 @@ function llmRewriter(ai: Ai, db: D1Database, model: string, limit: number, key: 
   return {
     async rewrite(question, options) {
       const chosen = options?.model ? REWRITE_MODELS[options.model] : model;
+      const prompt = options?.prompt ?? DEFAULT_REWRITE_PROMPT;
+      // The prompt version is part of the cache key ("v1" keeps the old keys).
+      const cacheModel = prompt === "v1" ? chosen : `${chosen}#${prompt}`;
       const cacheKey = rewriteCacheKey(question);
-      const hit = await readRewriteCache(db, chosen, cacheKey);
+      const hit = await readRewriteCache(db, cacheModel, cacheKey);
       if (hit) return hit;
       let allowed: boolean;
       try {
@@ -213,7 +217,7 @@ function llmRewriter(ai: Ai, db: D1Database, model: string, limit: number, key: 
       }
       if (!allowed) throw new RewriteLimitError();
       const run = ai.run(chosen as Parameters<Ai["run"]>[0], {
-        instructions: REWRITE_INSTRUCTIONS,
+        instructions: REWRITE_PROMPTS[prompt],
         input: `Soru: ${question.slice(0, 500)}`,
         reasoning: { effort: "low" },
       } as never);
@@ -222,7 +226,7 @@ function llmRewriter(ai: Ai, db: D1Database, model: string, limit: number, key: 
       const parsed = parseRewrite(modelText(output));
       if (!parsed) throw new Error(`rewrite unparsable: ${modelText(output).slice(0, 200)}`);
       try {
-        await writeRewriteCache(db, chosen, cacheKey, parsed.terms, parsed.laws);
+        await writeRewriteCache(db, cacheModel, cacheKey, parsed.terms, parsed.laws);
       } catch (error) {
         console.warn("rewrite cache write failed:", error instanceof Error ? error.message : error);
       }

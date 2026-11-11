@@ -1,0 +1,37 @@
+name: Measure rewrites
+
+# The LLM query rewrite alone (scripts/eval-rewrite.mjs): do the statute names
+# it gives resolve to the expected statute? No search and no Clef; one LLM call
+# per question for a prompt version not cached yet (admin LLM budget).
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompts:
+        description: "İstem sürümleri (virgülle)"
+        default: "v1,v2"
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASE: ${{ vars.WORKER_URL || 'https://kktc-mevzuat-api.stevevaius.workers.dev' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive admin token
+        run: |
+          ADMIN=$(python3 -c "import hashlib,os;print(hashlib.sha256((os.environ['CLOUDFLARE_API_TOKEN']+':kktc-vectors').encode()).hexdigest())")
+          echo "::add-mask::$ADMIN"
+          echo "ADMIN_TOKEN=$ADMIN" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Measure
+        env:
+          PROMPTS: ${{ inputs.prompts }}
+        run: node scripts/eval-rewrite.mjs
