@@ -53,6 +53,13 @@ def main(db_path: str) -> None:
             note("out_of_order", doc, ref)
         last[doc] = max(last.get(doc, 0), num)
 
+    import json
+
+    cards = conn.execute(
+        "SELECT id, extra_json FROM documents WHERE type IN ('yasa', 'tuzuk', 'anayasa') AND text_status != 'metadata'"
+    ).fetchall()
+    short = [doc for doc, extra in cards if len((json.loads(extra or "{}") or {}).get("card", "")) < 80]
+    print(f"Konu kartı: {len(cards) - len(short)}/{len(cards)} belgede 80 karakterden uzun; kısa/boş örnek: {', '.join(short[:5]) or '-'}")
     print("Madde yapısı raporu (yasa/tüzük/anayasa)")
     for kind in ("form_field", "number_missing", "out_of_order", "annex"):
         print(f"  {kind}: {len(issues[kind])} belge  örnek: {', '.join(examples[kind]) or '-'}")
