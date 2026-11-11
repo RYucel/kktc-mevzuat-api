@@ -104,6 +104,9 @@ for (const [n, c] of cases.entries()) {
         abstained: body.confidence === "low",
         rewrite_cached: body.query_rewrite ? !!body.query_rewrite.cached : null,
         caps: body.confidence_caps ?? [],
+        // lawpick: was the expected statute among the statutes shown, and chosen first?
+        law_listed: body.rerank?.debug_laws ? body.rerank.debug_laws.some((x) => isDoc(x, c)) : null,
+        law_pick1: body.rerank?.debug_laws ? isDoc(body.rerank.debug_laws[0], c) : null,
       };
       row.variants[variant] = result;
       marks.push(c.unanswerable ? (result.abstained ? "u" : "!") : result.article1 ? "A" : result.doc1 ? "d" : "·");
@@ -154,6 +157,9 @@ for (const variant of variants) {
     high: all.filter((v) => v.confidence === "high").length,
     rewrite_cached: all.filter((v) => v.rewrite_cached === true).length,
     rewrite_known: all.filter((v) => v.rewrite_cached !== null).length,
+    law_known: ok.filter((v) => v.law_listed !== null).length,
+    law_listed: ok.filter((v) => v.law_listed).length,
+    law_pick1: ok.filter((v) => v.law_pick1).length,
     // Questions answered by a regulation (tüzük): the statute_first rule must not lose them.
     tuzuk: ok.filter((v) => /tuzuk$/.test(v.set ?? "")).length,
     tuzuk_article1: ok.filter((v) => /tuzuk$/.test(v.set ?? "") && v.article1).length,
@@ -183,6 +189,10 @@ for (const [variant, s] of Object.entries(summary)) {
     return b ? `${b.right}/${b.n}` : "–";
   };
   md.push(`| ${variant} | **${s.high_wrong}/${s.high}** | ${pct(s.doc1, s.n)} | ${pct(s.article1, s.n)} | ${pct(s.article5, s.n)} | ${s.reranked}/${s.n} | ${s.rewrite_known ? `${s.rewrite_cached}/${s.rewrite_known}` : "–"} | ${s.ms ?? "–"} | ${s.rows_read ?? "–"} | ${conf("high")} | ${conf("medium")} | ${conf("low")} |`);
+}
+if (Object.values(summary).some((s) => s.law_known)) {
+  md.push("", "| Varyant | beklenen yasa kısa listede | yasa seçimi @1 |", "|---|---|---|");
+  for (const [variant, s] of Object.entries(summary)) md.push(`| ${variant} | ${s.law_known ? `${s.law_listed}/${s.law_known}` : "–"} | ${s.law_known ? `${s.law_pick1}/${s.law_known}` : "–"} |`);
 }
 if (Object.values(summary).some((s) => s.tuzuk)) {
   md.push("", "| Varyant | cevabı tüzükte olan sorular: doğru madde @1 |", "|---|---|");

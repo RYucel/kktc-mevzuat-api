@@ -96,6 +96,10 @@ export interface SearchParams {
   rewrite?: boolean;
   /** /v1/answer: rewrite prompt version ("v1" default, "v2"). */
   rewrite_prompt?: "v1" | "v2";
+  /** /v1/answer: choose the statute first from statute cards, then the article (default false; measuring). */
+  lawpick?: boolean;
+  /** /v1/answer: statutes shown in the statute-choice step (default 20, 5-30). */
+  lawpick_n?: number;
   /** /v1/answer: "high" needs the answer from a concept's canonical statute when the question matches one (default false; measuring). */
   concept_agree?: boolean;
   /** /v1/answer: use the statute names of the rewrite at all (default true; laws=0 keeps only its terms). */
@@ -210,6 +214,10 @@ export interface AnswerResponse {
     focus?: { document_id: string; document_ids?: string[]; candidates: number; applied: boolean; top_probability?: number; none_probability?: number; error?: string };
     /** Only with debug=1: every candidate Clef saw, best first. */
     debug_candidates?: { document_id: string; ref: string | null; probability: number }[];
+    /** The first step chose among statutes (lawpick), not passages. */
+    law_pick?: boolean;
+    /** debug=1 with lawpick: the statutes and their probabilities. */
+    debug_laws?: { document_id: string; probability: number }[];
     top_probability?: number;
     none_probability?: number;
     error?: string;

@@ -33,6 +33,12 @@ export class RerankLimitError extends Error {
         this.name = "RerankLimitError";
     }
 }
+/** Statute choice over statute cards (OPUS-GOREVLER-3 item 3). */
+export const LAW_PICK_OPTIONS = {
+    instructions: "Bu soruyu hangi yasa ya da tüzük düzenler? Adına ve konu özetine göre en uygun olanı seç.",
+    chars: 600,
+    none: "Hiçbiri bu konuyu düzenlemiyor",
+};
 const QUESTION_WORD = /(?:^|\s)(?:m[ıiuü](?:d[ıiuü]r|y[ıiuü]m|y[ıiuü]z|s[ıiuü]n(?:[ıiuü]z)?)?|nas[ıi]l|neden|ni[çc]in|hangi\w*|kim\w*|ka[çc]\w*|ne|nedir|nelerdir|nereye|nerede)(?=\s|$|[?.,])/i;
 /**
  * Natural-language questions only. Keyword lookups ("nafaka", "kıdem
@@ -46,19 +52,20 @@ export function wantsRerank(query, mode) {
     const words = text.split(/\s+/).filter(Boolean).length;
     return words >= 4 || text.endsWith("?") || QUESTION_WORD.test(text.toLocaleLowerCase("tr"));
 }
-export function rerankInput(question, candidates) {
+export function rerankInput(question, candidates, options = {}) {
     const ids = candidates.map((_, i) => `c${i + 1}`);
     const criteria = Object.fromEntries(candidates.map((c, i) => [ids[i], c.label]));
-    criteria.none = "Hiçbiri soruyu cevaplamıyor";
+    criteria.none = options.none ?? "Hiçbiri soruyu cevaplamıyor";
+    const chars = options.chars ?? PASSAGE_CHARS;
     return {
         state: {
             soru: question.trim(),
-            adaylar: candidates.map((c, i) => ({ id: ids[i], madde: c.label, metin: c.text.replace(/\s+/g, " ").trim().slice(0, PASSAGE_CHARS) })),
+            adaylar: candidates.map((c, i) => ({ id: ids[i], madde: c.label, metin: c.text.replace(/\s+/g, " ").trim().slice(0, chars) })),
         },
         questions: {
             pick: {
                 type: "choice",
-                instructions: "Bu adaylardan hangisi soruyu doğrudan cevaplayan yasa maddesidir?",
+                instructions: options.instructions ?? "Bu adaylardan hangisi soruyu doğrudan cevaplayan yasa maddesidir?",
                 criteria,
             },
         },
@@ -82,8 +89,8 @@ export function parseRerank(output, count, model = RERANK_MODEL) {
 }
 export function clefReranker(decide, model = RERANK_MODEL) {
     return {
-        async rerank(question, candidates) {
-            const output = await decide(model, { model, ...rerankInput(question, candidates) });
+        async rerank(question, candidates, options) {
+            const output = await decide(model, { model, ...rerankInput(question, candidates, options) });
             const result = parseRerank(output, candidates.length, model);
             if (!result)
                 throw new Error("Clef yanıtı çözümlenemedi.");
