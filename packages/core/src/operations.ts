@@ -862,7 +862,7 @@ export async function answerQuestion(
     // The LLM named the statutes it expects to answer, and Clef chose another one:
     // on 2026-11-10 four of the six confident wrong answers were exactly this
     // (Kira (Denetim) -> İskan Yasası, KDV -> KDV İadesi, Hayvan Refahı -> Ceza).
-    if (params.agree !== false && rerank?.applied && rewriteDisagrees(rewriteSink[0], top.document_id, params.strong_laws === true)) caps.push("rewrite_disagrees");
+    if (params.agree !== false && params.rewrite_laws !== false && rerank?.applied && rewriteDisagrees(rewriteSink[0], top.document_id, params.strong_laws === true)) caps.push("rewrite_disagrees");
     // Part of the statute is missing: another article (or a later paragraph) may change the answer.
     if (top.text_status !== "full") caps.push("partial_text");
   }
@@ -1338,7 +1338,7 @@ async function runRewrite(
     }
     // With strong_laws, only names that match a title in full boost the search;
     // weak matches pushed unrelated statutes into the candidates (11 Nov 2026).
-    const primary = params.strong_laws ? (info.strong_documents ?? []) : info.documents;
+    const primary = params.rewrite_laws === false ? [] : params.strong_laws ? (info.strong_documents ?? []) : info.documents;
     if (!info.terms.length && !primary.length) return { info, concept: null };
     return { info, concept: { id: "llm", label: "LLM", triggers: [], expand: info.terms, primary, weight: 1 } };
   } catch (error) {

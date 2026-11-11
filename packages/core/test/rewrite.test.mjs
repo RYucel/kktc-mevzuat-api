@@ -79,3 +79,11 @@ test("v2 prompt tells the model how KKTC names statutes", () => {
   assert.match(REWRITE_PROMPTS.v2, /boş liste/);
   assert.equal(REWRITE_PROMPTS.v1.includes("Kanun'"), false);
 });
+
+test("a law beats a regulation that carries the law's title (tuzuk-201-2020)", () => {
+  const t = [
+    { id: "tuzuk-201-2020", title: "Katma Değer Vergisi Yasası" },
+    { id: "yasa-47-1992", title: "Katma Değer Vergisi Yasası" },
+  ];
+  assert.deepEqual(resolveLawsDetailed(t, ["Katma Değer Vergisi Yasası"]), [{ id: "yasa-47-1992", strong: true }]);
+});
