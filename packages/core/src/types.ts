@@ -96,6 +96,8 @@ export interface SearchParams {
   rewrite?: boolean;
   /** /v1/answer: rewrite prompt version ("v1" default, "v2"). */
   rewrite_prompt?: "v1" | "v2";
+  /** /v1/answer: use the statute names of the rewrite at all (default true; laws=0 keeps only its terms). */
+  rewrite_laws?: boolean;
   /** /v1/answer: only statute names that match a title in full boost the search and gate "high". */
   strong_laws?: boolean;
   /** /v1/answer: rewrite model ("20b" default, "120b" larger). */

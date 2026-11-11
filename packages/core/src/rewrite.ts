@@ -144,7 +144,11 @@ export function resolveLawsDetailed(
       const needed = stems.length >= 3 ? stems.length - 1 : stems.length;
       if (found < needed || titleWords.length > stems.length + 4) continue;
       const exact = nameWords.filter((w) => titleWords.includes(w)).length;
-      const kind = isRegulation(folded) === wantsRegulation ? 0.5 : 0;
+      // The document type decides, not only the title: a mahkemeler regulation
+      // is titled "Katma Değer Vergisi Yasası" (tuzuk-201-2020) and tied with
+      // the law itself (11 Nov 2026).
+      const regulation = isRegulation(folded) || id.startsWith("tuzuk-");
+      const kind = regulation === wantsRegulation ? 0.5 : 0;
       // Strong: every word of the name is in the title and the title adds at
       // most two words ("Kira (Denetim) Yasası" for "Kira Yasası"). One-word
       // overlaps ("Hayvan Koruma Kanunu" -> "Abone ve Tüketici Hakları") are weak.
