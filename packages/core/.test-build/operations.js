@@ -790,6 +790,11 @@ export async function answerQuestion(store, params, origin) {
         // (Kira (Denetim) -> İskan Yasası, KDV -> KDV İadesi, Hayvan Refahı -> Ceza).
         if (params.agree !== false && params.rewrite_laws !== false && rerank?.applied && rewriteDisagrees(rewriteSink[0], top.document_id, params.strong_laws === true))
             caps.push("rewrite_disagrees");
+        // The question names a subject whose canonical statute we know (concept
+        // dictionary), and the answer is from another statute: KDV oranı -> KDV
+        // İadesi, gece çalışması -> Basın İş (11 Nov 2026). Measured before default.
+        if (params.concept_agree === true && conceptDisagrees(params.q, top.document_id))
+            caps.push("concept_disagrees");
         // Part of the statute is missing: another article (or a later paragraph) may change the answer.
         if (top.text_status !== "full")
             caps.push("partial_text");
@@ -942,6 +947,11 @@ export function capRegulation(confidence, regulation) {
 export function capConfidence(confidence, caps) {
     return caps.length && confidence === "high" ? "medium" : confidence;
 }
+/** Dictionary concepts with canonical statutes match the question, and the answer is from none of them. */
+export function conceptDisagrees(question, documentId) {
+    const primary = new Set(matchConcepts(question).flatMap((m) => m.concept.primary ?? []));
+    return primary.size > 0 && !primary.has(documentId);
+}
 /** The rewrite named statutes (that resolved to documents) and the answer is from none of them. */
 export function rewriteDisagrees(info, documentId, strongOnly = false) {
     if (!info || info.error)
@@ -961,6 +971,7 @@ export function rerankConfidence(top, none) {
 const CAP_LABELS = {
     regulation: "cevap bir tüzükten; ana yasayı da kontrol edin",
     rewrite_disagrees: "beklenen yasalardan biri değil",
+    concept_disagrees: "konunun temel yasasından değil",
     partial_text: "kaynak metin eksik",
     foreign_jurisdiction: "soru başka bir ülkenin hukukunu soruyor",
 };
