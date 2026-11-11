@@ -309,6 +309,13 @@ export async function searchDocuments(store, params, origin) {
         return ((primaryOrder.get(String(a.row.id)) ?? 999) -
             (primaryOrder.get(String(b.row.id)) ?? 999));
     };
+    // doc_ids restricts the result to those statutes (concept rows may add others).
+    if (params.doc_ids?.length) {
+        const allowed = new Set(params.doc_ids);
+        for (const id of [...byId.keys()])
+            if (!allowed.has(id))
+                byId.delete(id);
+    }
     let deduped = [...byId.values()].sort(byScore);
     // Hybrid ranking: fuse the lexical order with the vector index (articles of
     // legislation only). Canonical statutes keep their editorial top place.
@@ -603,7 +610,14 @@ export async function answerQuestion(store, params, origin) {
     // With reranking, Clef sees RERANK_CANDIDATES passages: either the best
     // article of that many documents, or several articles of fewer documents
     // (the right law with the wrong article was the main miss on 2026-11-04).
-    const passages = reranker ? Math.min(3, Math.max(1, params.passages ?? ANSWER_PASSAGES)) : 1;
+    // One statute named by the caller (document_id): its articles only, as many
+    // as the focus step would show; no statute choice and no second step.
+    const singleDoc = params.doc_ids?.length === 1;
+    const passages = singleDoc
+        ? Math.min(RERANK_CANDIDATES, params.focus ?? FOCUS_DEFAULT)
+        : reranker
+            ? Math.min(3, Math.max(1, params.passages ?? ANSWER_PASSAGES))
+            : 1;
     const semanticSink = [];
     const rewriteSink = [];
     const statuteFirst = params.statute_first !== false && !asksRegulation(params.q);
@@ -615,8 +629,9 @@ export async function answerQuestion(store, params, origin) {
         statute_first: statuteFirst,
         skip_amendments: params.dedupe !== false && !/degisiklik/.test(foldTr(params.q)),
         prefer: params.prefer ?? "mevzuat",
-        limit: reranker ? Math.max(limit, Math.ceil(RERANK_CANDIDATES / passages)) : limit,
+        limit: singleDoc ? 1 : reranker ? Math.max(limit, Math.ceil(RERANK_CANDIDATES / passages)) : limit,
         passages,
+        ...(singleDoc ? { exclude_title: true } : {}),
     }, origin);
     // Only quote provisions: a law's title or a document without text is not
     // an answer to anything.
@@ -697,7 +712,7 @@ export async function answerQuestion(store, params, origin) {
     // with the wrong article was the largest miss on 2026-11-09). Ask again
     // among up to `focus` articles of the chosen statute; when Clef was not
     // sure of it (below "high"), of the two leading statutes together.
-    const focusCount = params.focus ?? FOCUS_DEFAULT;
+    const focusCount = singleDoc ? 0 : (params.focus ?? FOCUS_DEFAULT);
     if (focusCount > 1 && reranker && rerank?.applied && probabilities && candidates.length) {
         const probs = probabilities;
         const none = rerank.none_probability ?? 0;
