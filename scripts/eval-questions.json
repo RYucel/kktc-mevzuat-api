@@ -63,7 +63,7 @@
     {"q": "Bir emlak bürosunun işyerinde hangi belge ve levhanın bulunması zorunludur?", "expect": "tuzuk-emlakcilarin-kayit-ve-islemleri-tuzugu", "refs": ["Madde 19", "Madde 20"], "set": "tuzuk"},
     {"q": "Koruyucu aile, bakımını üstlendiği çocukla birlikte başka bir ülkeye tatile gidebilir mi?", "expect": "tuzuk-koruyucu-aile-tuzugu", "ref": "Madde 17", "set": "tuzuk"},
     {"q": "Raftaki etiket fiyatı ile kasada okunan fiyat farklı çıkarsa hangisi uygulanır?", "expect": "tuzuk-mal-ve-hizmetlerin-etiket-tarife-ve-fiyat-listeleri-tuzugu", "ref": "Madde 10", "set": "tuzuk", "alt": [{"expect": "yasa-40-2003", "ref": "Madde 19"}]},
-    {"q": "Mal ve Hizmetlerin Etiket, Tarife ve Fiyat Listeleri Tüzüğüne göre etikette gösterilen fiyata vergiler dahil mi?", "expect": "tuzuk-mal-ve-hizmetlerin-etiket-tarife-ve-fiyat-listeleri-tuzugu", "ref": "Madde 9", "set": "tuzuk"},
+    {"q": "Mal ve Hizmetlerin Etiket, Tarife ve Fiyat Listeleri Tüzüğüne göre etikette gösterilen fiyata vergiler dahil mi?", "expect": "tuzuk-mal-ve-hizmetlerin-etiket-tarife-ve-fiyat-listeleri-tuzugu", "refs": ["Madde 9", "Madde 5"], "set": "tuzuk"},
     {"q": "Daimi İkamet İzni Tüzüğüne göre izni iptal edilecek kişiye itiraz için ne kadar süre tanınır?", "expect": "tuzuk-daimi-ikamet-izni-tuzugu", "ref": "Madde 12", "set": "tuzuk"},
     {"q": "Türkiye'de bedelli askerlik ücreti ne kadar?", "unanswerable": true},
     {"q": "Almanya'da oturma izni nasıl alınır?", "unanswerable": true},
