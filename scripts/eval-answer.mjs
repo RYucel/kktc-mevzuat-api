@@ -40,6 +40,8 @@ const load = (name) => JSON.parse(readFileSync(new URL(`./${name}`, import.meta.
 let cases = [];
 if (sets.includes("questions")) cases.push(...load("eval-questions.json").map((c) => ({ ...c, set: c.set ?? "questions" })));
 if (sets.includes("keywords")) cases.push(...load("eval-keywords.json").map((c) => ({ ...c, set: "keywords" })));
+// The holdout set is run only after a change is decided, never to tune it.
+if (sets.includes("holdout")) cases.push(...load("eval-holdout.json").map((c) => ({ ...c, set: c.set ? `holdout-${c.set}` : "holdout" })));
 const seen = new Set();
 cases = cases.filter((c) => (seen.has(c.q) ? false : seen.add(c.q)));
 
@@ -93,6 +95,7 @@ for (const [n, c] of cases.entries()) {
         candidates_doc: seenByClef ? seenByClef.some((x) => isDoc(x, c)) : null,
         abstained: body.confidence === "low",
         rewrite_cached: body.query_rewrite ? !!body.query_rewrite.cached : null,
+        caps: body.confidence_caps ?? [],
       };
       row.variants[variant] = result;
       marks.push(c.unanswerable ? (result.abstained ? "u" : "!") : result.article1 ? "A" : result.doc1 ? "d" : "·");
@@ -144,8 +147,17 @@ for (const variant of variants) {
     rewrite_cached: all.filter((v) => v.rewrite_cached === true).length,
     rewrite_known: all.filter((v) => v.rewrite_cached !== null).length,
     // Questions answered by a regulation (tüzük): the statute_first rule must not lose them.
-    tuzuk: ok.filter((v) => v.set === "tuzuk").length,
-    tuzuk_article1: ok.filter((v) => v.set === "tuzuk" && v.article1).length,
+    tuzuk: ok.filter((v) => /tuzuk$/.test(v.set ?? "")).length,
+    tuzuk_article1: ok.filter((v) => /tuzuk$/.test(v.set ?? "") && v.article1).length,
+    // Which confidence caps fired, and on right or wrong answers.
+    caps: all.reduce((acc, v) => {
+      for (const cap of v.caps ?? []) {
+        const b = (acc[cap] ??= { right: 0, wrong: 0 });
+        if (v.unanswerable ? v.abstained : v.article1) b.right += 1;
+        else b.wrong += 1;
+      }
+      return acc;
+    }, {}),
   };
 }
 writeFileSync(outPath, JSON.stringify({ base, generated_at: new Date().toISOString(), variants, summary, rows }, null, 1));
@@ -167,6 +179,11 @@ for (const [variant, s] of Object.entries(summary)) {
 if (Object.values(summary).some((s) => s.tuzuk)) {
   md.push("", "| Varyant | cevabı tüzükte olan sorular: doğru madde @1 |", "|---|---|");
   for (const [variant, s] of Object.entries(summary)) md.push(`| ${variant} | ${s.tuzuk_article1}/${s.tuzuk} |`);
+}
+md.push("", "### Güven düşürme nedenleri (doğru / yanlış cevapta)", "", "| Varyant | nedenler |", "|---|---|");
+for (const [variant, s] of Object.entries(summary)) {
+  const caps = Object.entries(s.caps ?? {}).map(([cap, b]) => `${cap}: ${b.right} doğru / ${b.wrong} yanlış`).join("; ");
+  md.push(`| ${variant} | ${caps || "–"} |`);
 }
 md.push("", "### Teşhis: kaçan sorular nerede kaçtı?", "", "| Varyant | doğru madde Clef'in adaylarında | kaçan: yasa adaylarda yok | kaçan: yasa var, madde yok | kaçan: madde vardı, seçilmedi | cevapsız sorularda \"low\" |", "|---|---|---|---|---|---|");
 for (const [variant, s] of Object.entries(summary)) {

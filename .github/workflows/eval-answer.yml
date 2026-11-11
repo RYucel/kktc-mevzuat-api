@@ -11,7 +11,7 @@ on:
         description: "Karşılaştırılacak varyantlar (virgülle)"
         default: "passages=3"
       sets:
-        description: "Soru setleri: questions, keywords"
+        description: "Soru setleri: questions, keywords, holdout (holdout yalnızca karar verildikten sonra)"
         default: "questions"
 
 permissions:
