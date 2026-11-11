@@ -57,8 +57,16 @@ const isArticle = (quote, c) =>
     (a) => quote?.document_id === a.expect && (acceptable(a).length === 0 || acceptable(a).some((ref) => sameArticle(quote.ref, ref))),
   );
 
-async function answer(q, variant) {
-  const url = `${base}/v1/answer?q=${encodeURIComponent(q)}&limit=5&debug=1&${variant}`;
+// oracle_doc=1: the expected statute is given as document_id, so the run shows
+// how well the article is found once the statute is right (the ceiling of
+// statute selection). Unanswerable questions run without it.
+async function answer(q, variant, c = {}) {
+  let query = variant;
+  if (/(^|&)oracle_doc=1(&|$)/.test(variant)) {
+    query = variant.replace(/(^|&)oracle_doc=1(?=&|$)/, "");
+    if (c.expect) query += `${query ? "&" : ""}document_id=${encodeURIComponent(c.expect)}`;
+  }
+  const url = `${base}/v1/answer?q=${encodeURIComponent(q)}&limit=5&debug=1&${query}`;
   for (let attempt = 0; ; attempt++) {
     const started = Date.now();
     const response = await fetch(url);
@@ -77,7 +85,7 @@ for (const [n, c] of cases.entries()) {
   const marks = [];
   for (const variant of variants) {
     try {
-      const { body, ms, rowsRead } = await answer(c.q, variant);
+      const { body, ms, rowsRead } = await answer(c.q, variant, c);
       const quotes = body.quotes ?? [];
       const top = quotes[0];
       const seenByClef = body.rerank?.debug_candidates ?? null;

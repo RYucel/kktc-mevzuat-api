@@ -235,6 +235,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       strong_laws: ["1", "true", "yes"].includes((c.req.query("strong") ?? "").toLowerCase()),
       rewrite_laws: !["0", "false", "no"].includes((c.req.query("laws") ?? "").toLowerCase()),
       concept_agree: ["1", "true", "yes"].includes((c.req.query("concept_agree") ?? "").toLowerCase()),
+      doc_ids: documentParam(c.req.query("document_id")),
       focus_two: ["1", "true", "yes"].includes((c.req.query("focus2") ?? "").toLowerCase()),
       window: !["0", "false", "no"].includes((c.req.query("window") ?? "").toLowerCase()),
       statute_first: !["0", "false", "no"].includes((c.req.query("statute_first") ?? "").toLowerCase()),
@@ -569,6 +570,15 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
   });
 
   return app;
+}
+
+/** A statute id to restrict an answer to ("yasa-22-1992"); undefined when absent. */
+function documentParam(raw: string | undefined): string[] | undefined {
+  if (!raw) return undefined;
+  if (!/^[a-z0-9][a-z0-9-]{1,120}$/.test(raw)) {
+    throw new ApiError(400, "invalid_document_id", "document_id geçerli bir belge kimliği olmalıdır (ör. yasa-22-1992).");
+  }
+  return [raw];
 }
 
 export function timingSafeEqual(a: string, b: string): boolean {
