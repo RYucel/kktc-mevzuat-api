@@ -858,6 +858,8 @@ def split_articles(text: str) -> list[Chunk]:
     if len(selected) < 2:
         return []
 
+    selected, annex_start = _cut_annexes(text, selected)
+
     chunks: list[Chunk] = []
     preface = text[: selected[0]["pos"]].strip()
     if len(preface) > 120:
@@ -867,7 +869,7 @@ def split_articles(text: str) -> list[Chunk]:
 
     for idx, cand in enumerate(selected):
         start = cand["pos"]
-        end = selected[idx + 1]["pos"] if idx + 1 < len(selected) else len(text)
+        end = selected[idx + 1]["pos"] if idx + 1 < len(selected) else (annex_start if annex_start is not None else len(text))
         body = text[start:end].strip()
         if len(body) < 20:
             continue
@@ -875,7 +877,50 @@ def split_articles(text: str) -> list[Chunk]:
         parts = _split_long(body)
         for part_no, part in enumerate(parts, 1):
             chunks.append(Chunk("article", ref if len(parts) == 1 else f"{ref} ({part_no}/{len(parts)})", part))
+    if annex_start is not None:
+        for part in split_paragraphs(text[annex_start:], kind="annex"):
+            part.ref = "Ek"
+            chunks.append(part)
     return chunks
+
+
+# Annexes after the last article: "EK", "Ek – 1", "EK I", "CETVEL", forms.
+_ANNEX_RE = re.compile(r"(?:(?<=\n)|(?<=\s{2}))(?:E[Kk](?:[ \t]*[–\-—][ \t]*\d+|[ \t]+[IVX\d]+|[ \t]*\n)|EKLER\b|CETVEL\b|[IVX]+\.?[ \t]*CETVEL\b)")
+_IN_FORCE_RE = re.compile(r"yürürlüğe\s+gir", re.I)
+_FORM_FIELD_RE = re.compile(r"\.{6,}|(?:\.\s?){8,}")
+
+
+def _cut_annexes(text: str, selected: list[dict]) -> tuple[list[dict], Optional[int]]:
+    """Stop the article sequence at the annexes that follow the last article.
+
+    Forms printed after "Yürürlüğe Giriş" ("15. İşverenin adı, soyadı: ....")
+    were taken as articles 15-25 of the Daimi İkamet İzni Tüzüğü (11 Nov
+    2026), so their text could be cited as "Madde 15". Returns the articles up
+    to the entry-into-force article, and where the annex text starts.
+    """
+    in_force = None
+    for idx, cand in enumerate(selected):
+        head = text[cand["pos"] : cand["pos"] + 260]
+        if "Yürürlüğe Giriş" in head or "YÜRÜRLÜĞE GİRİŞ" in head or _IN_FORCE_RE.search(head):
+            in_force = idx
+    if in_force is None or in_force == len(selected) - 1:
+        return selected, None
+    start = selected[in_force]["pos"]
+    sentence = _IN_FORCE_RE.search(text, start)
+    search_from = text.find(".", sentence.end()) + 1 if sentence else start + 20
+    marker = _ANNEX_RE.search(text, search_from)
+    following = selected[in_force + 1 :]
+    if marker and marker.start() <= following[0]["pos"] + 40:
+        return selected[: in_force + 1], marker.start()
+    # No annex heading: later "articles" that are form fields are the annex.
+    def body(i: int) -> str:
+        cand = selected[i]
+        end = selected[i + 1]["pos"] if i + 1 < len(selected) else len(text)
+        return text[cand["pos"] : end]
+    forms = [i for i in range(in_force + 1, len(selected)) if _FORM_FIELD_RE.search(body(i))]
+    if forms and len(forms) * 2 >= len(following):
+        return selected[: in_force + 1], selected[in_force + 1]["pos"]
+    return selected, None
 
 
 def split_paragraphs(text: str, *, limit: int = 1500, kind: str = "paragraph") -> list[Chunk]:
