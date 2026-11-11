@@ -133,15 +133,15 @@ jobs:
           else
             python -m kktc build
           fi
+          echo "### D1 dışa aktarımı" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat ../dist/d1/summary.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       # Citations depend on the article split; this shows its health per run.
       - name: Article structure report
         continue-on-error: true
         run: python scripts/article_report.py data/kktc.db
-          echo "### D1 dışa aktarımı" >> "$GITHUB_STEP_SUMMARY"
-          echo '```json' >> "$GITHUB_STEP_SUMMARY"
-          cat ../dist/d1/summary.json >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       # Article units for the semantic index (see vectors.yml). Exported from
       # the fresh database so chunk ordinals match D1.
