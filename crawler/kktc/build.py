@@ -14,6 +14,7 @@ from typing import Any, Iterable, Optional
 
 from .config import DB_PATH, DIST_DIR
 from .history import HISTORY_TABLES_SQL
+from .cards import display_title, statute_card
 from .textproc import Chunk, chunk_document, clean_text, index_text, normalize_title
 
 log = logging.getLogger(__name__)
@@ -152,6 +153,9 @@ def _valid_date(doc: dict[str, Any]) -> Optional[str]:
     return None
 
 
+CARD_TYPES = {"yasa", "tuzuk", "anayasa"}
+
+
 def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[str, Any]:
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -186,6 +190,12 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
             status = "metadata"
         sources = doc.get("sources") or []
         extra = {k: v for k, v in (doc.get("extra") or {}).items() if v is not None}
+        if (doc.get("type") or "yasa") in CARD_TYPES and chunks:
+            # Readable name and subject card for choosing the statute first.
+            extra["display_title"] = display_title(title, doc.get("number"))
+            card = statute_card(chunks)
+            if card:
+                extra["card"] = card
         date = _valid_date(doc)
         if doc.get("date") and not date:
             extra["source_date_raw"] = str(doc.get("date"))
