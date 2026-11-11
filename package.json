@@ -19,7 +19,7 @@
     "eval:search": "node scripts/eval-search.mjs",
     "db:local": "npm --workspace apps/worker run db:local",
     "typecheck": "npm --workspace packages/core run typecheck && npm --workspace apps/node run typecheck && npm --workspace apps/worker run typecheck",
-    "test": "npm --workspace packages/core run test"
+    "test": "npm --workspace packages/core run test && node --experimental-strip-types --no-warnings --test 'apps/worker/test/*.test.mjs'"
   },
   "engines": {
     "node": ">=22.5"
