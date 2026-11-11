@@ -306,7 +306,10 @@ Sunucu: \`${origin}/mcp\` — Streamable HTTP, \`POST\` JSON-RPC 2.0.
 \`\`\`
 
 Araçlar:
-- \`sor\` — \`{ soru, type?, prefer?, adet? }\` — birebir alıntı + atıf (üretken değil)
+- \`yasa_bul\` — \`{ ad }\` — yasa/tüzüğü adıyla, yaygın adıyla ("Ceza Yasası") veya numarasıyla bulur (id döner)
+- \`katalog\` — \`{ tur?, sayfa? }\` — metni olan yasa ve tüzüklerin listesi (200'lük sayfalar)
+- \`sor\` — \`{ soru, belge?, type?, prefer?, adet? }\` — birebir alıntı + atıf (üretken değil). Yasayı biliyorsanız önce
+  \`yasa_bul\` ile id'yi alın ve \`belge\` olarak verin: cevap yalnızca o yasadan gelir ve doğru madde oranı belirgin artar.
 - \`search_mevzuat\` — \`{ query, type?, year?, source?, court?, mode?, prefer?, min_score?, limit?, offset? }\`
 - \`ictihat_ara\` — \`{ ifade, mahkeme?, yil?, mod?, adet?, sayfa? }\` — yalnız mahkeme kararları; sonuçlarda hazır \`citation\`
 - \`karar_getir\` — \`{ id }\` — kararın künyesi, atfı ve tam metni (Markdown)

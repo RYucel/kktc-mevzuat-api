@@ -12,6 +12,7 @@ import {
 } from "./operations.js";
 import type { SearchParams, Store } from "./types.js";
 import { changesMarkdown, getDocumentChanges, listChanges } from "./changes.js";
+import { findStatutes, statuteCatalog } from "./titles.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
 
@@ -29,7 +30,39 @@ interface McpResult {
   body?: unknown;
 }
 
+/** belge: one statute id to restrict a search or an answer to. */
+function belgeArg(args: Record<string, unknown>): Pick<SearchParams, "doc_ids"> {
+  const id = typeof args.belge === "string" ? args.belge.trim() : "";
+  if (!id) return {};
+  if (!/^[a-z0-9][a-z0-9-]{1,120}$/.test(id)) throw new ApiError(400, "invalid_document_id", "belge geçerli bir belge kimliği olmalıdır (ör. yasa-22-1992).");
+  return { doc_ids: [id] };
+}
+
 const TOOLS = [
+  {
+    name: "yasa_bul",
+    description:
+      "Bir yasa veya tüzüğü adıyla, yaygın adıyla (ör. 'Ceza Yasası', 'Aile Yasası') ya da numarasıyla (22/1992) bulur; id, okunur ad, tür ve metin durumunu döndürür. " +
+      "Sorunun hangi yasayla ilgili olduğunu biliyorsanız önce bunu kullanın, sonra sor aracını belge=id ile çağırın.",
+    inputSchema: {
+      type: "object",
+      properties: { ad: { type: "string", description: "Yasa/tüzük adı veya numarası." } },
+      required: ["ad"],
+    },
+  },
+  {
+    name: "katalog",
+    description:
+      "Metni bulunan yürürlükteki yasa ve tüzüklerin listesi (değişiklik yasaları ve eski kopyalar hariç), sayfa başına 200. " +
+      "Hangi yasanın bir konuyu düzenlediğine karar vermek için okuyun.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tur: { type: "string", enum: ["yasa", "tuzuk", "anayasa"] },
+        sayfa: { type: "integer", minimum: 1, maximum: 50 },
+      },
+    },
+  },
   {
     name: "search_mevzuat",
     description:
@@ -39,6 +72,7 @@ const TOOLS = [
       type: "object",
       properties: {
         query: { type: "string", description: "Arama sözcükleri; tırnak içinde tam ifade." },
+        belge: { type: "string", description: "Aramayı tek bir yasa/tüzükle sınırla (yasa_bul ile bulunan id, ör. yasa-22-1992)." },
         type: {
           type: "string",
           enum: ["yasa", "tuzuk", "karar", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"],
@@ -74,6 +108,7 @@ const TOOLS = [
       type: "object",
       properties: {
         soru: { type: "string", description: "Doğal dilde hukuk sorusu." },
+        belge: { type: "string", description: "Cevabı tek bir yasa/tüzükten al (yasa_bul ile bulunan id, ör. yasa-22-1992). Yasayı biliyorsanız verin." },
         type: {
           type: "string",
           enum: ["yasa", "tuzuk", "karar", "anayasa", "yonetmelik", "emirname", "kararname", "andlasma"],
@@ -256,8 +291,20 @@ async function callTool(
         min_score: intArg(args, "min_score", 0) ?? 0,
         limit: Math.min(50, Math.max(1, intArg(args, "limit", 10) ?? 10)),
         offset: Math.min(1000, Math.max(0, intArg(args, "offset", 0) ?? 0)),
+        ...belgeArg(args),
       };
       return textResult(await searchDocuments(store, params, origin));
+    }
+    case "yasa_bul": {
+      const name = strArg(args, "ad") ?? strArg(args, "name") ?? "";
+      if (!name.trim()) throw new ApiError(400, "missing_name", "ad zorunludur.");
+      return textResult({ query: name, results: await findStatutes(store, name.slice(0, 200)) });
+    }
+    case "katalog": {
+      const type = strArg(args, "tur");
+      const page = Math.min(50, Math.max(1, intArg(args, "sayfa", 1) ?? 1));
+      const { total, items } = await statuteCatalog(store, type, page);
+      return textResult({ total, page, page_size: 200, items: items.map((i) => ({ id: i.id, ad: i.name, tur: i.type })) });
     }
     case "sor": {
       const query = strArg(args, "soru") ?? strArg(args, "query") ?? "";
@@ -272,6 +319,7 @@ async function callTool(
             prefer: (strArg(args, "prefer") as SearchParams["prefer"]) || "mevzuat",
             limit: Math.min(5, Math.max(1, intArg(args, "adet", 3) ?? 3)),
             offset: 0,
+            ...belgeArg(args),
           },
           origin,
         ),
