@@ -29,6 +29,11 @@ export class MinuteWindow {
   private window = -1;
   private count = 0;
 
+  reset(): void {
+    this.window = -1;
+    this.count = 0;
+  }
+
   take(limit: number, now = Date.now()): GateDecision {
     const minute = Math.floor(now / 60_000);
     if (minute !== this.window) {
@@ -87,14 +92,23 @@ export async function passGate(
     if (!decision.allowed) closedUntil = now + decision.retryAfter * 1000;
     return decision;
   } catch (error) {
-    // The gate is a cost guard, not a dependency: if it cannot be reached,
-    // serve the request (the per-client limit still applies).
+    // The gate is a cost guard, not a dependency: if it cannot be reached the
+    // API keeps serving, but each isolate then counts on its own, at a quarter
+    // of the global limit, instead of letting everything through.
     console.warn("traffic gate unavailable:", error instanceof Error ? error.message : error);
-    return { allowed: true, retryAfter: 0, count: 0 };
+    return fallbackWindow.take(fallbackLimit(limit), now);
   }
+}
+
+// Per-isolate counter used only while the Durable Object cannot be reached.
+const fallbackWindow = new MinuteWindow();
+
+export function fallbackLimit(limit: number): number {
+  return Math.max(5, Math.floor(limit / 4));
 }
 
 /** Test hook. */
 export function resetGateCache(): void {
   closedUntil = 0;
+  fallbackWindow.reset();
 }
