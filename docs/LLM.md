@@ -88,6 +88,10 @@ GET /v1/answer?q=mal%20paylaşımında%20eşlere%20düşen%20en%20az%20oran&form
   (soru bunları sormadıkça).
 - **Üretken değildir**; hukuki yorum yapmaz, metni yeniden yazmaz.
 - MCP’de `sor` aracı aynı davranışı verir.
+- **Yasayı biliyorsanız verin.** `yasa_bul` (MCP) veya `GET /v1/statutes?name=Ceza Yasası` yasanın id'sini
+  verir; `sor`'a `belge`, `/v1/answer`'a `document_id` olarak geçin. Ölçümde (11 Kasım) yasa doğru verildiğinde
+  doğru madde ilk sırada %83 (verilmediğinde %69). `katalog` / `GET /v1/statutes?type=yasa&page=1` metni olan
+  yasaların listesini verir.
 
 ## Arama ipuçları
 

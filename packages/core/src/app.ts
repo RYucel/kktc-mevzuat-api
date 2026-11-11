@@ -20,6 +20,7 @@ import { DOC_TYPES, type SearchParams, type Store, TYPE_LABELS } from "./types.j
 import { llmsText } from "./llms.js";
 import { changesHtml, changesMarkdown, feedHtml, getDocumentChanges, listChanges } from "./changes.js";
 import { openapiDocument } from "./openapi.js";
+import { findStatutes, statuteCatalog } from "./titles.js";
 import { handleMcp } from "./mcp.js";
 import { SEMANTIC_DIMS, SEMANTIC_MODEL, type VectorUnit, type VectorWriter } from "./semantic.js";
 
@@ -358,6 +359,19 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
     const response = await getDocumentChanges(store, id, origin);
     if (!response) throw new ApiError(404, "document_not_found", `Belge bulunamadı: ${id}`);
     return c.html(changesHtml(response, origin));
+  });
+
+  // Statute finder and catalog (no model): ?name=Ceza Yasası or ?type=yasa&page=1.
+  app.get("/v1/statutes", async (c) => {
+    const name = (c.req.query("name") ?? c.req.query("q") ?? "").trim();
+    if (name) {
+      if (name.length > 200) throw new ApiError(400, "query_too_long", "name en fazla 200 karakter olabilir.");
+      return c.json({ query: name, results: await findStatutes(store, name) });
+    }
+    const type = c.req.query("type");
+    if (type && !["yasa", "tuzuk", "anayasa"].includes(type)) throw new ApiError(400, "invalid_type", "type yasa, tuzuk veya anayasa olmalıdır.");
+    const page = intParam(c.req.query("page"), "page", 1, 1, 50);
+    return c.json({ page, page_size: 200, ...(await statuteCatalog(store, type, page)) });
   });
 
   app.get("/v1/stats", async (c) => {

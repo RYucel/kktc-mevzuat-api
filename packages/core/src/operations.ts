@@ -18,7 +18,7 @@ import {
 import { buildCitation } from "./citation.js";
 import { conceptMatch, type LegalConcept, matchConcepts } from "./legal-concepts.js";
 import { ANSWER_PASSAGES, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, wantsRerank } from "./rerank.js";
-import { isAmendment, legislationTitles, supersededStatutes } from "./titles.js";
+import { isAmendment, legislationTitles, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
 import { resolveLawsDetailed, RewriteLimitError } from "./rewrite.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
 import {
@@ -1434,7 +1434,9 @@ async function runRewrite(
     if (rewrite.laws.length) {
       // Resolve names to the consolidated copy, not a first-published duplicate.
       const superseded = params.dedupe !== false ? await supersededStatutes(store) : new Set<string>();
-      const titles = (await legislationTitles(store)).filter((t) => !superseded.has(t.id));
+      const titles = (await legislationTitles(store))
+        .filter((t) => !superseded.has(t.id))
+        .flatMap((t) => [t, ...(STATUTE_ALIASES[t.id] ?? []).map((alias) => ({ id: t.id, title: alias }))]);
       const hits = resolveLawsDetailed(titles, rewrite.laws);
       info.documents = hits.map((hit) => hit.id);
       info.strong_documents = hits.filter((hit) => hit.strong).map((hit) => hit.id);
