@@ -959,6 +959,7 @@ export async function answerQuestion(
       parents.set(passage.result.id, await parentLaw(store, passage.result.id).catch(() => null));
     }
   }
+  const later = await laterAmendments(store, candidates.slice(0, limit).map((c) => c.result.id));
   for (const [index, passage] of candidates.entries()) {
     if (quotes.length >= limit) break;
     const result = passage.result;
@@ -975,6 +976,11 @@ export async function answerQuestion(
       consolidated_through: result.consolidated_through,
       excerpt: passage.snippet.startsWith("…") || passage.snippet.endsWith("…"),
       ...(parents.get(result.id) ? { parent_law: parents.get(result.id)! } : {}),
+      ...(() => {
+        const article = (passage.ref ?? "").match(/^Madde\s+(\d+)/)?.[1];
+        const hits = (later.get(result.id) ?? []).filter((a) => !a.articles.length || !article || a.articles.includes(article));
+        return hits.length ? { amended_after: hits } : {};
+      })(),
       // Measured on the quoted window itself: that is what the reader gets.
       coverage: stemCoverage(passage.snippet, params.q),
       score: result.score,
@@ -1010,6 +1016,8 @@ export async function answerQuestion(
     // dictionary), and the answer is from another statute: KDV oranı -> KDV
     // İadesi, gece çalışması -> Basın İş (11 Nov 2026). Measured before default.
     if (params.concept_agree === true && conceptDisagrees(params.q, top.document_id)) caps.push("concept_disagrees");
+    // A later amendment may have changed the quoted article (regulations; OPUS-GOREVLER-4 item 11).
+    if (params.amended !== false && top.amended_after?.length) caps.push("possibly_amended");
     // Part of the statute is missing: another article (or a later paragraph) may change the answer.
     if (top.text_status !== "full") caps.push("partial_text");
   }
@@ -1158,6 +1166,30 @@ async function focusStatutes(
     info.error = error instanceof RerankLimitError ? "daily_limit" : "unavailable";
     return { info };
   }
+}
+
+/** amended_after of the quoted documents (build: crawler/kktc/amendments.py). */
+async function laterAmendments(store: Store, ids: string[]): Promise<Map<string, { id: string; date: string; articles: string[] }[]>> {
+  const out = new Map<string, { id: string; date: string; articles: string[] }[]>();
+  const unique = [...new Set(ids)];
+  if (!unique.length) return out;
+  try {
+    const rows = await store.all(
+      `SELECT id, json_extract(extra_json, '$.amended_after') AS later FROM documents WHERE id IN (${unique.map(() => "?").join(",")}) AND json_extract(extra_json, '$.amended_after') IS NOT NULL`,
+      unique,
+    );
+    for (const row of rows) {
+      try {
+        const list = JSON.parse(String(row.later)) as { id: string; date: string; articles?: string[] }[];
+        out.set(String(row.id), list.map((a) => ({ id: a.id, date: a.date, articles: a.articles ?? [] })));
+      } catch {
+        // a bad row: no warning rather than a wrong one
+      }
+    }
+  } catch (error) {
+    console.warn("amendments unavailable:", error instanceof Error ? error.message : error);
+  }
+  return out;
 }
 
 /** children=1: regulations offered with their law (at most), and the share a regulation needs to join. */
@@ -1426,6 +1458,7 @@ const CAP_LABELS: Record<ConfidenceCap, string> = {
   partial_text: "kaynak metin eksik",
   foreign_jurisdiction: "soru başka bir ülkenin hukukunu soruyor",
   unverified: "alıntının soruyu doğrudan cevapladığı doğrulanamadı",
+  possibly_amended: "metinden sonra çıkan bir değişiklik bu maddeyi değiştirmiş olabilir",
 };
 
 export function answerMarkdown(response: AnswerResponse): string {
@@ -1438,6 +1471,13 @@ export function answerMarkdown(response: AnswerResponse): string {
     if (quote.excerpt) lines.push("_Alıntı maddenin bir bölümüdür; maddenin tamamı için API bağlantısına bakın._", "");
     lines.push(`- **Atıf:** ${quote.citation}`);
     if (quote.ref) lines.push(`- **Madde:** ${quote.ref}`);
+    if (quote.amended_after?.length) {
+      lines.push(
+        `- **Uyarı:** Bu metinden sonra çıkan değişiklik(ler) maddeyi değiştirmiş olabilir: ${quote.amended_after
+          .map((a) => `${a.date.split("-").reverse().join(".")} (\`${a.id}\`)`)
+          .join(", ")}. Resmî Gazete'den kontrol edin.`,
+      );
+    }
     if (quote.parent_law) lines.push(`- **Dayanak yasa:** ${quote.parent_law.title} (\`${quote.parent_law.id}\`)`);
     lines.push(`- **Güncellik:** ${consolidationLabel(quote.consolidated_through) ?? "Metnin hangi değişikliklere kadar güncel olduğu kaynakta belirtilmiyor; Resmî Gazete'den kontrol edin."}`);
     lines.push(`- **Kaynak:** ${quote.source_url}`);

@@ -117,6 +117,8 @@ export interface SearchParams {
    * made under the law (default false; measuring).
    */
   children?: boolean;
+  /** /v1/answer: cap "high" when a later amendment may have changed the quoted regulation article (default true). */
+  amended?: boolean;
   verify_high?: number;
   verify_low?: number;
   /** /v1/answer: statutes shown in the statute-choice step (default 20, 5-30). */
@@ -209,6 +211,11 @@ export interface AnswerQuote {
   excerpt: boolean;
   /** Regulations: the law it is made under, when known. */
   parent_law?: { id: string; title: string };
+  /**
+   * Amendments dated after this text that may change the quoted article
+   * (regulations; those naming other articles only are left out).
+   */
+  amended_after?: { id: string; date: string; articles: string[] }[];
   /** Query content words found in the quoted passage. */
   coverage: { found: number; total: number };
   score: number;
@@ -387,7 +394,8 @@ export type ConfidenceCap =
   | "concept_disagrees"
   | "partial_text"
   | "foreign_jurisdiction"
-  | "unverified";
+  | "unverified"
+  | "possibly_amended";
 
 export interface QueryRewriteInfo {
   terms: string[];
