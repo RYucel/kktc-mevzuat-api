@@ -19,7 +19,7 @@ import {
 import { buildCitation } from "./citation.js";
 import { conceptMatch, type LegalConcept, matchConcepts } from "./legal-concepts.js";
 import { ANSWER_PASSAGES, CHILDREN_OPTIONS, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, TOC_OPTIONS, wantsRerank } from "./rerank.js";
-import { isAmendment, legislationTitles, parentLaw, regulationsOf, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
+import { displayNames, isAmendment, legislationTitles, parentLaw, regulationsOf, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
 import { resolveLawsDetailed, RewriteLimitError } from "./rewrite.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
 import {
@@ -960,6 +960,7 @@ export async function answerQuestion(
     }
   }
   const later = await laterAmendments(store, candidates.slice(0, limit).map((c) => c.result.id));
+  const names = await displayNames(store).catch(() => new Map<string, string>());
   for (const [index, passage] of candidates.entries()) {
     if (quotes.length >= limit) break;
     const result = passage.result;
@@ -975,6 +976,7 @@ export async function answerQuestion(
       source: result.source,
       consolidated_through: result.consolidated_through,
       excerpt: passage.snippet.startsWith("…") || passage.snippet.endsWith("…"),
+      kaynak: sourceLine(names.get(result.id) ?? result.citation ?? result.title, passage.ref, result),
       ...(parents.get(result.id) ? { parent_law: parents.get(result.id)! } : {}),
       ...(() => {
         const article = (passage.ref ?? "").match(/^Madde\s+(\d+)/)?.[1];
@@ -1166,6 +1168,23 @@ async function focusStatutes(
     info.error = error instanceof RerankLimitError ? "daily_limit" : "unavailable";
     return { info };
   }
+}
+
+const SOURCE_NAMES: Record<string, string> = { gov: "mevzuat.gov.ct.tr", mahkemeler: "mevzuat.mahkemeler.net" };
+
+/** "İş Yasası (22/1992) m.43, 25/2026 sayılı değişikliğe kadar birleştirilmiş metin, mevzuat.gov.ct.tr". */
+export function sourceLine(
+  name: string,
+  ref: string | null,
+  result: { source?: string | null; consolidated_through?: string | null; text_status?: string | null },
+): string {
+  const article = ref ? ref.replace(/^Madde\s+/, "m.").replace(/\s*\((\d+)\/\d+\)$/, "") : null;
+  const parts = [article ? `${name} ${article}` : name];
+  parts.push(consolidationLabel(result.consolidated_through ?? null) ?? "güncelliği kaynakta belirtilmemiş metin");
+  if (result.text_status && result.text_status !== "full") parts.push("kısmi metin");
+  const source = result.source ? SOURCE_NAMES[result.source] ?? result.source : null;
+  if (source) parts.push(source);
+  return parts.join(", ");
 }
 
 /** amended_after of the quoted documents (build: crawler/kktc/amendments.py). */
@@ -1469,7 +1488,7 @@ export function answerMarkdown(response: AnswerResponse): string {
     const quote = response.quotes[0];
     lines.push(`> ${quote.text.replace(/\n+/g, " ")}`, "");
     if (quote.excerpt) lines.push("_Alıntı maddenin bir bölümüdür; maddenin tamamı için API bağlantısına bakın._", "");
-    lines.push(`- **Atıf:** ${quote.citation}`);
+    lines.push(`- **Kaynak:** ${quote.kaynak}`);
     if (quote.ref) lines.push(`- **Madde:** ${quote.ref}`);
     if (quote.amended_after?.length) {
       lines.push(

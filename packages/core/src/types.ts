@@ -212,6 +212,12 @@ export interface AnswerQuote {
   /** Regulations: the law it is made under, when known. */
   parent_law?: { id: string; title: string };
   /**
+   * The one citation line to show for this quote: name (number), article,
+   * how current the text is, source ("İş Yasası (22/1992) m.43, 25/2026
+   * sayılı değişikliğe kadar birleştirilmiş metin, mevzuat.gov.ct.tr").
+   */
+  kaynak: string;
+  /**
    * Amendments dated after this text that may change the quoted article
    * (regulations; those naming other articles only are left out).
    */
