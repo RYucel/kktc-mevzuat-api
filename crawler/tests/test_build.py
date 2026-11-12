@@ -36,3 +36,12 @@ def test_title_chunk_includes_number_for_metadata_only_documents() -> None:
 
     already = _chunks_for({"title": "24/1982 SAYILI GELİR VERGİSİ YASASI", "number": "24/1982"})
     assert already[0].text == "24/1982 SAYILI GELİR VERGİSİ YASASI"
+
+
+def test_canonical_id_drops_leading_zeros():
+    from kktc.textproc import canonical_id, make_doc_id
+
+    assert make_doc_id("yasa", "09/1976", "") == "yasa-9-1976"
+    assert make_doc_id("yasa", "9/1976", "") == "yasa-9-1976"
+    assert canonical_id("yasa-10-2000") == "yasa-10-2000"
+    assert canonical_id("tuzuk-0-2020") == "tuzuk-0-2020"

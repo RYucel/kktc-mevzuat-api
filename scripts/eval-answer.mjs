@@ -48,7 +48,9 @@ cases = cases.filter((c) => (seen.has(c.q) ? false : seen.add(c.q)));
 // A case may accept other statutes' articles too (alt: [{expect, ref|refs}]),
 // each checked against the text by hand.
 const answers = (c) => (c.expect ? [c, ...(c.alt ?? [])] : []);
-const isDoc = (quote, c) => answers(c).some((a) => quote?.document_id === a.expect);
+// Same id with and without leading zeros ("yasa-09-1976" / "yasa-9-1976") is one statute.
+const canon = (id) => (id ?? "").replace(/(?<![0-9])0+(?=[0-9])/g, "");
+const isDoc = (quote, c) => answers(c).some((a) => !!quote?.document_id && canon(quote.document_id) === canon(a.expect));
 // "Madde 3" must not match "Madde 30"; a part suffix ("Madde 3 (2/2)") is fine.
 const sameArticle = (ref, expected) => ref === expected || (ref ?? "").startsWith(`${expected} `);
 // The answer must be in what the reader gets (the quoted window), not only in the article.
@@ -57,7 +59,7 @@ const hasAnswer = (quote, c) => !!quote && (c.must ?? []).some((m) => foldText(q
 const acceptable = (c) => c.refs ?? (c.ref ? [c.ref] : []);
 const isArticle = (quote, c) =>
   answers(c).some(
-    (a) => quote?.document_id === a.expect && (acceptable(a).length === 0 || acceptable(a).some((ref) => sameArticle(quote.ref, ref))),
+    (a) => !!quote?.document_id && canon(quote.document_id) === canon(a.expect) && (acceptable(a).length === 0 || acceptable(a).some((ref) => sameArticle(quote.ref, ref))),
   );
 
 // oracle_doc=1: the expected statute is given as document_id, so the run shows

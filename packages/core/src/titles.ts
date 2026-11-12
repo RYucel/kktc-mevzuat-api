@@ -76,6 +76,14 @@ export async function supersededStatutes(store: Store): Promise<Set<string>> {
   return (await load(store)).superseded;
 }
 
+/**
+ * "yasa-09-1976" -> "yasa-9-1976" (crawler/kktc/textproc.py canonical_id):
+ * documents once stored with a zero-padded number are found by either id.
+ */
+export function canonicalDocId(id: string): string {
+  return id.replace(/(?<![0-9])0+(?=[0-9])/g, "");
+}
+
 /** "Mal ve Hizmetlerin Etiket, Tarife ve Fiyat Listeleri Tüzüğü" -> "mal ve hizmetlerin etiket tarife ve fiyat listeleri tuzugu". */
 export function titleKey(title: string): string {
   return foldTr(title)
