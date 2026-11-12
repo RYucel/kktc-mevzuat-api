@@ -101,7 +101,7 @@ check("answer text", typeof answer.body.answer === "string" && answer.body.answe
 check("answer citation", typeof answer.body.quotes[0]?.citation === "string");
 check("answer disclaimer", answer.body.disclaimer.includes("alıntı"));
 const answerMarkdown = await fetch(base + "/v1/answer?q=nafaka&format=markdown");
-check("answer markdown", answerMarkdown.ok && (await answerMarkdown.text()).includes("Atıf"));
+check("answer markdown", answerMarkdown.ok && (await answerMarkdown.text()).includes("Kaynak"));
 
 const fraction = await json(
   "/v1/search?q=mal%20payla%C5%9F%C4%B1m%C4%B1%202%2F3&prefer=mevzuat&type=yasa&limit=5",
