@@ -238,6 +238,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       concept_agree: ["1", "true", "yes"].includes((c.req.query("concept_agree") ?? "").toLowerCase()),
       doc_ids: documentParam(c.req.query("document_id")),
       lawpick: ["1", "true", "yes"].includes((c.req.query("lawpick") ?? "").toLowerCase()),
+      toc: ["1", "true", "yes"].includes((c.req.query("toc") ?? "").toLowerCase()),
       lawpick_n: c.req.query("lawpick_n") ? intParam(c.req.query("lawpick_n"), "lawpick_n", 20, 5, 30) : undefined,
       focus_two: ["1", "true", "yes"].includes((c.req.query("focus2") ?? "").toLowerCase()),
       window: !["0", "false", "no"].includes((c.req.query("window") ?? "").toLowerCase()),

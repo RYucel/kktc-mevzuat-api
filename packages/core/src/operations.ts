@@ -8,6 +8,7 @@ import {
   CHUNK_PAIRS_PER_QUERY,
   chunkRowsSql,
   chunksForArticlesSql,
+  tocSql,
   chunksSql,
   documentSql,
   inDocArticlesSql,
@@ -17,7 +18,7 @@ import {
 } from "./sql.js";
 import { buildCitation } from "./citation.js";
 import { conceptMatch, type LegalConcept, matchConcepts } from "./legal-concepts.js";
-import { ANSWER_PASSAGES, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, wantsRerank } from "./rerank.js";
+import { ANSWER_PASSAGES, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, TOC_OPTIONS, wantsRerank } from "./rerank.js";
 import { isAmendment, legislationTitles, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
 import { resolveLawsDetailed, RewriteLimitError } from "./rewrite.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
@@ -1005,6 +1006,7 @@ async function focusStatutes(
     candidates: 0,
     applied: false,
   };
+  const tocInfo: NonNullable<typeof info.toc> = [];
   const lists = await Promise.all(
     targets.map(async ({ law, count }) => {
       // Articles Clef already saw for this statute lead the vector hits.
@@ -1012,6 +1014,12 @@ async function focusStatutes(
         ...seen.filter((c) => c.result.id === law.id).map((c) => ({ doc_id: law.id, ref: c.ref })),
         ...semanticHits.filter((hit) => hit.doc_id === law.id),
       ];
+      const tocRun = params.toc
+        ? tocArticles(store, reranker, params, origin, law, hints.map((h) => h.ref)).then((t) => {
+            tocInfo.push(t.info);
+            return t.passages;
+          })
+        : Promise.resolve([] as Passage[]);
       const search = await searchDocuments(
         store,
         {
@@ -1026,8 +1034,10 @@ async function focusStatutes(
         },
         origin,
       );
-      // What Clef already saw for this statute comes first and always stays in.
-      const passages: Passage[] = seen.filter((c) => c.result.id === law.id);
+      // What Clef already saw for this statute comes first and always stays in;
+      // then the articles chosen from the table of contents (toc=1).
+      const fromToc = await tocRun;
+      const passages: Passage[] = [...seen.filter((c) => c.result.id === law.id), ...fromToc];
       const result = search.results.find((r) => r.id === law.id);
       if (result?.matched_ref && result.matched_kind !== "title") {
         passages.push({
@@ -1043,9 +1053,10 @@ async function focusStatutes(
       }
       return passages
         .filter((p, i) => passages.findIndex((q) => q.ref === p.ref) === i && !skipBoilerplate(p.ref, p.text, params))
-        .slice(0, Math.max(count, 2));
+        .slice(0, Math.max(count, 2) + fromToc.length);
     }),
   );
+  if (params.toc && params.debug) info.toc = tocInfo;
   const unique = lists.flat();
   info.candidates = unique.length;
   if (unique.length < 2) return { info };
@@ -1070,6 +1081,109 @@ async function focusStatutes(
     info.error = error instanceof RerankLimitError ? "daily_limit" : "unavailable";
     return { info };
   }
+}
+
+/** Articles per table-of-contents call, and calls per statute (OPUS-GOREVLER-3 item 5). */
+const TOC_PART = 60;
+const TOC_MAX_PARTS = 3;
+/** Articles taken from the table of contents into the focus step. */
+const TOC_PICK = 5;
+const TOC_HEADING = /^\s*([A-ZÇĞİÖŞÜ][^\n.:;]{2,80}?)\s+\d{1,4}[A-Z]?\s*[.(]/u;
+
+/** "Madde 203: Taammüden Katil", or the article's first words when it has no heading. */
+export function tocLabel(ref: string, head: string): string {
+  const match = TOC_HEADING.exec(head);
+  let heading = match ? match[1].replace(/\s+/g, " ").replace(/(?<=[a-zçğıöşü])-\s*(?=[a-zçğıöşü])/gu, "").trim() : "";
+  if (heading.split(" ").length > 10) heading = "";
+  const text = heading || head.replace(/\s+/g, " ").trim().slice(0, 80);
+  return `${ref}: ${text}`;
+}
+
+/**
+ * The right article is often not a candidate at all, because candidates come
+ * from word and vector matches ("önceden planlayarak öldürme" vs "Taammüden
+ * Katil"). Clef chooses from the statute's article headings instead; the
+ * chosen articles join the focus candidates, and the last step still reads
+ * their text. Statutes longer than TOC_PART * TOC_MAX_PARTS articles send the
+ * parts that hold the search hints (and the first part).
+ */
+async function tocArticles(
+  store: Store,
+  reranker: NonNullable<Store["rerank"]>,
+  params: SearchParams,
+  origin: string,
+  law: SearchResult,
+  hintRefs: (string | null)[],
+): Promise<{ info: { document_id: string; articles: number; calls: number; refs: string[]; error?: string }; passages: Passage[] }> {
+  const info = { document_id: law.id, articles: 0, calls: 0, refs: [] as string[] } as {
+    document_id: string;
+    articles: number;
+    calls: number;
+    refs: string[];
+    error?: string;
+  };
+  const query = tocSql(law.id);
+  const rows = await store.all(query.sql, query.binds);
+  const entries: { ref: string; label: string }[] = [];
+  for (const row of rows) {
+    const ref = baseArticleRef(asString(row.ref));
+    const head = String(row.head ?? "");
+    if (!ref || entries.some((e) => e.ref === ref) || skipBoilerplate(ref, head, params)) continue;
+    entries.push({ ref, label: tocLabel(ref, head) });
+  }
+  info.articles = entries.length;
+  if (entries.length < 2) return { info, passages: [] };
+  const parts: { ref: string; label: string }[][] = [];
+  for (let i = 0; i < entries.length; i += TOC_PART) parts.push(entries.slice(i, i + TOC_PART));
+  let chosen = parts;
+  if (parts.length > TOC_MAX_PARTS) {
+    const hinted = new Set(hintRefs.map((ref) => (ref ? baseArticleRef(ref) : null)).filter(Boolean) as string[]);
+    const score = (part: { ref: string }[]) => part.filter((e) => hinted.has(e.ref)).length;
+    chosen = parts
+      .map((part, i) => ({ part, i, n: score(part) }))
+      .sort((a, b) => b.n - a.n || a.i - b.i)
+      .slice(0, TOC_MAX_PARTS)
+      .sort((a, b) => a.i - b.i)
+      .map((x) => x.part);
+  }
+  info.calls = chosen.length;
+  const picks: { ref: string; p: number }[] = [];
+  try {
+    const answers = await Promise.all(
+      chosen.map((part) => reranker.rerank(params.q, part.map((e) => ({ label: e.label, text: "" })), TOC_OPTIONS)),
+    );
+    answers.forEach((answer, k) => {
+      chosen[k].forEach((e, i) => {
+        const p = answer.probabilities[i] ?? 0;
+        if (p > 0.02) picks.push({ ref: e.ref, p });
+      });
+    });
+  } catch (error) {
+    info.error = error instanceof RerankLimitError ? "daily_limit" : "unavailable";
+    return { info, passages: [] };
+  }
+  const top = picks.sort((a, b) => b.p - a.p).slice(0, TOC_PICK);
+  info.refs = top.map((t) => t.ref);
+  if (!top.length) return { info, passages: [] };
+  const textQuery = chunksForArticlesSql(top.map((t) => ({ docId: law.id, ref: t.ref })));
+  const chunks = await store.all(textQuery.sql, textQuery.binds);
+  const passages: Passage[] = [];
+  for (const { ref } of top) {
+    const full = chunks
+      .filter((chunk) => baseArticleRef(asString(chunk.ref)) === ref)
+      .map((chunk) => String(chunk.text))
+      .join("\n\n")
+      .trim();
+    if (!full) continue;
+    passages.push({
+      result: law,
+      ref,
+      text: capText(full, MATCHED_TEXT_LIMIT).text,
+      snippet: makeSnippet(full, params.q),
+      url: articleUrl(origin, law.id, ref),
+    });
+  }
+  return { info, passages };
 }
 
 function round3(value: number): number {

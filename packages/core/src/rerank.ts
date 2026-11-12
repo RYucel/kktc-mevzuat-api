@@ -70,6 +70,13 @@ export const LAW_PICK_OPTIONS: RerankOptions = {
   none: "Hiçbiri bu konuyu düzenlemiyor",
 };
 
+/** Article choice over a statute's table of contents (OPUS-GOREVLER-3 item 5). */
+export const TOC_OPTIONS: RerankOptions = {
+  instructions: "Bu soruyu yasanın hangi maddesi düzenler? Madde başlıklarına göre en uygun olanı seç.",
+  chars: 90,
+  none: "Hiçbiri",
+};
+
 /** Runs one decision-model request (Workers AI binding in the Worker). */
 export type DecideFn = (model: string, input: Record<string, unknown>) => Promise<unknown>;
 
