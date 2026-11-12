@@ -108,6 +108,17 @@ export function rerankInput(question: string, candidates: RerankCandidate[], opt
   };
 }
 
+/** Clef-flash price on Workers AI: neurons per million tokens. */
+export const CLEF_NEURONS_PER_MTOK = 3455;
+/** Tokens of the choice answer (one choice and its probabilities). */
+const ANSWER_TOKENS = 40;
+
+/** Estimated neurons of one Clef call: request characters / 3 as tokens, plus the answer. */
+export function clefNeurons(input: Record<string, unknown>): number {
+  const tokens = JSON.stringify(input).length / 3 + ANSWER_TOKENS;
+  return (tokens * CLEF_NEURONS_PER_MTOK) / 1_000_000;
+}
+
 /** Workers AI shape: { answers: { pick: { type: "choice", choice, probabilities: { c1: 0.1, ..., none } } } }. */
 export function parseRerank(output: unknown, count: number, model = RERANK_MODEL): RerankResult | null {
   const pick = (output as { answers?: { pick?: { probabilities?: Record<string, unknown> } } } | null)?.answers?.pick;

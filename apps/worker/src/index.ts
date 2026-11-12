@@ -1,4 +1,5 @@
 import {
+  clefNeurons,
   clefReranker,
   createApp,
   DECISION_MODELS,
@@ -13,6 +14,7 @@ import {
   timingSafeEqual,
   type Reranker,
   RerankLimitError,
+  rerankInput,
   type SemanticIndex,
   type Store,
   type StoreRow,
@@ -34,10 +36,10 @@ export interface Env {
   VECTOR_ADMIN_TOKEN?: string;
   /** "off" disables Clef answer reranking. */
   RERANK?: string;
-  /** Clef calls allowed per UTC day (default 1000, inside the free Workers AI allocation). */
-  CLEF_DAILY_LIMIT?: string;
-  /** Clef calls per UTC day for our own jobs (admin token: evals, smoke), counted apart (default 1500). */
-  CLEF_ADMIN_DAILY_LIMIT?: string;
+  /** Clef neurons allowed per UTC day (default 8000, inside the free Workers AI allocation). */
+  CLEF_DAILY_NEURONS?: string;
+  /** Clef neurons per UTC day for our own jobs (admin token: evals, smoke), counted apart (default 12000). */
+  CLEF_ADMIN_DAILY_NEURONS?: string;
   /** "off" disables the LLM query rewrite. */
   REWRITE?: string;
   /** Workers AI model for the query rewrite (default @cf/openai/gpt-oss-20b). */
@@ -56,32 +58,37 @@ export interface Env {
 }
 
 /**
- * ~1000 Clef-flash calls (~2.3K tokens each, 3,455 neurons per M tokens) use
- * ~8K of the 10K neurons Workers AI gives free every day, leaving room for
- * query embeddings and the weekly vector sync. Above the limit answers keep
- * the search order, so Clef can never put a Workers AI charge on the bill.
+ * The Clef budget is counted in neurons, not calls: the statute choice over
+ * cards and the table-of-contents step make calls of very different sizes
+ * (OPUS-GOREVLER-3 item 6). 8000 neurons are what ~1000 average calls
+ * (~2.3K tokens each, 3,455 neurons per M tokens) used, inside the 10K free
+ * daily neurons with room for query embeddings and the weekly vector sync.
+ * Above the limit answers keep the search order, so Clef can never put a
+ * Workers AI charge on the bill.
  */
-const DEFAULT_CLEF_DAILY_LIMIT = 1000;
+const DEFAULT_CLEF_DAILY_NEURONS = 8000;
 /**
  * Our own measurement jobs (admin token) count on a separate counter, so an
  * eval run can never use up the users' daily Clef budget (it did on
  * 2026-11-09). On eval days the two together may pass the free 10K neurons:
- * 1500 calls are ~12K neurons, about $0.13 at $0.011 per 1K neurons.
+ * 12K neurons are about $0.13 at $0.011 per 1K neurons (the old 1500 calls).
  */
-const DEFAULT_CLEF_ADMIN_DAILY_LIMIT = 1500;
+const DEFAULT_CLEF_ADMIN_DAILY_NEURONS = 12000;
+/** The neuron counters keep hundredths of a neuron (D1 stores integers). */
+const CENTI = 100;
 /** /admin/decide calls per UTC day (eval-clef measurements; ~2.3K tokens each). */
 const DEFAULT_DECIDE_ADMIN_DAILY_LIMIT = 300;
 
-/** Daily counter in D1 (one small write per Clef call). */
-async function takeDaily(db: D1Database, key: string, limit: number): Promise<boolean> {
+/** Daily counter in D1 (one small write per call); `amount` is added before the check. */
+async function takeDaily(db: D1Database, key: string, limit: number, amount = 1): Promise<boolean> {
   const day = new Date().toISOString().slice(0, 10);
   const bump = () =>
     db
       .prepare(
-        "INSERT INTO usage_counters (day, key, n) VALUES (?, ?, 1) " +
-          "ON CONFLICT(day, key) DO UPDATE SET n = n + 1 RETURNING n",
+        "INSERT INTO usage_counters (day, key, n) VALUES (?, ?, ?) " +
+          "ON CONFLICT(day, key) DO UPDATE SET n = n + excluded.n RETURNING n",
       )
-      .bind(day, key)
+      .bind(day, key, amount)
       .first<{ n: number }>();
   let row: { n: number } | null;
   try {
@@ -97,12 +104,23 @@ async function takeDaily(db: D1Database, key: string, limit: number): Promise<bo
   return Number(row?.n ?? Infinity) <= limit;
 }
 
-function limitedReranker(inner: Reranker, db: D1Database, limit: number, key = "clef"): Reranker {
+/** Clef use of one request (sent back as x-clef-calls and x-clef-neurons). */
+interface ClefMeter {
+  calls: number;
+  neurons: number;
+}
+
+/**
+ * Clef calls are charged before they run, from the request size (see
+ * clefNeurons: characters / 3 as tokens, plus the short choice answer).
+ */
+function limitedReranker(inner: Reranker, db: D1Database, neuronLimit: number, key: string, meter: ClefMeter): Reranker {
   return {
     async rerank(question, candidates, options) {
+      const neurons = clefNeurons(rerankInput(question, candidates, options));
       let allowed: boolean;
       try {
-        allowed = await takeDaily(db, key, limit);
+        allowed = await takeDaily(db, key, Math.round(neuronLimit * CENTI), Math.max(1, Math.ceil(neurons * CENTI)));
       } catch (error) {
         // Without a working counter, do not spend: fail closed (reported as
         // "unavailable", not "daily_limit").
@@ -110,6 +128,8 @@ function limitedReranker(inner: Reranker, db: D1Database, limit: number, key = "
         throw new Error(`Clef counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
       }
       if (!allowed) throw new RerankLimitError();
+      meter.calls += 1;
+      meter.neurons += neurons;
       return inner.rerank(question, candidates, options);
     },
   };
@@ -387,11 +407,13 @@ export default {
     // Clef answer reranking (see packages/core/src/rerank.ts); RERANK=off disables it.
     const admin = bearerIsAdmin(request, env);
     const clefLimit = admin
-      ? Number(env.CLEF_ADMIN_DAILY_LIMIT ?? DEFAULT_CLEF_ADMIN_DAILY_LIMIT)
-      : Number(env.CLEF_DAILY_LIMIT ?? DEFAULT_CLEF_DAILY_LIMIT);
+      ? Number(env.CLEF_ADMIN_DAILY_NEURONS ?? DEFAULT_CLEF_ADMIN_DAILY_NEURONS)
+      : Number(env.CLEF_DAILY_NEURONS ?? DEFAULT_CLEF_DAILY_NEURONS);
+    const meter: ClefMeter = { calls: 0, neurons: 0 };
+    // New keys in hundredths of a neuron (the old "clef" and "clef-admin" counted calls).
     const rerank =
       decide && env.RERANK !== "off" && clefLimit > 0
-        ? limitedReranker(clefReranker(decide), env.DB, clefLimit, admin ? "clef-admin" : "clef")
+        ? limitedReranker(clefReranker(decide), env.DB, clefLimit, admin ? "clef-admin-cn" : "clef-cn", meter)
         : undefined;
     const rewriteLimit = admin
       ? Number(env.REWRITE_ADMIN_DAILY_LIMIT ?? DEFAULT_REWRITE_ADMIN_DAILY_LIMIT)
@@ -428,6 +450,8 @@ export default {
     const out = new Response(response.body, response);
     out.headers.set("x-d1-rows-read", String(store.rowsRead));
     out.headers.set("x-d1-queries", String(store.queries));
+    out.headers.set("x-clef-calls", String(meter.calls));
+    out.headers.set("x-clef-neurons", meter.neurons.toFixed(2));
     return out;
   },
 };
