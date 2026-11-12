@@ -18,8 +18,8 @@ import {
 } from "./sql.js";
 import { buildCitation } from "./citation.js";
 import { conceptMatch, type LegalConcept, matchConcepts } from "./legal-concepts.js";
-import { ANSWER_PASSAGES, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, TOC_OPTIONS, wantsRerank } from "./rerank.js";
-import { isAmendment, legislationTitles, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
+import { ANSWER_PASSAGES, CHILDREN_OPTIONS, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, TOC_OPTIONS, wantsRerank } from "./rerank.js";
+import { isAmendment, legislationTitles, parentLaw, regulationsOf, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
 import { resolveLawsDetailed, RewriteLimitError } from "./rewrite.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
 import {
@@ -776,6 +776,8 @@ export async function answerQuestion(
   let probabilities: number[] | null = null;
   let rerank: AnswerResponse["rerank"];
   let lawTwo = false;
+  // children=1: a regulation of the chosen law that joined the focus step.
+  let childOfLaw: string | null = null;
   if (lawPick && reranker && candidates.length + statuteOnly.length > 1) {
     // One entry per statute in search order, regulations last (at most 8 unless asked for).
     const asks = asksRegulation(params.q);
@@ -895,12 +897,29 @@ export async function answerQuestion(
       const both =
         !!second &&
         (lawTwo || (params.focus_two === true && (probs[0] ?? 0) < FOCUS_TWO_BELOW && massOf(second.id) >= FOCUS_TWO_MIN_MASS));
-      const targets = both
+      let targets = both
         ? [
             { law: first, count: Math.ceil(focusCount * 0.6) },
             { law: second, count: focusCount - Math.ceil(focusCount * 0.6) },
           ]
         : [{ law: first, count: focusCount }];
+      // children=1: the law's regulations compete with the law itself.
+      if (params.children && !both && first.type === "yasa") {
+        const child = await chooseRegulation(store, reranker, params, origin, first, rerank);
+        if (child) {
+          childOfLaw = child.regulation.id;
+          const lead = Math.ceil(focusCount * 0.6);
+          targets = child.leads
+            ? [
+                { law: child.regulation, count: lead },
+                { law: first, count: focusCount - lead },
+              ]
+            : [
+                { law: first, count: lead },
+                { law: child.regulation, count: focusCount - lead },
+              ];
+        }
+      }
       const focus = await focusStatutes(store, reranker, params, origin, targets, candidates, semanticSink);
       rerank.focus = focus.info;
       if (focus.passages) {
@@ -934,6 +953,12 @@ export async function answerQuestion(
     }
   }
   const quotes: AnswerQuote[] = [];
+  const parents = new Map<string, { id: string; title: string } | null>();
+  for (const passage of candidates.slice(0, limit)) {
+    if (passage.result.type === "tuzuk" && !parents.has(passage.result.id)) {
+      parents.set(passage.result.id, await parentLaw(store, passage.result.id).catch(() => null));
+    }
+  }
   for (const [index, passage] of candidates.entries()) {
     if (quotes.length >= limit) break;
     const result = passage.result;
@@ -949,6 +974,7 @@ export async function answerQuestion(
       source: result.source,
       consolidated_through: result.consolidated_through,
       excerpt: passage.snippet.startsWith("…") || passage.snippet.endsWith("…"),
+      ...(parents.get(result.id) ? { parent_law: parents.get(result.id)! } : {}),
       // Measured on the quoted window itself: that is what the reader gets.
       coverage: stemCoverage(passage.snippet, params.q),
       score: result.score,
@@ -974,7 +1000,8 @@ export async function answerQuestion(
   const caps: ConfidenceCap[] = [];
   if (base === "high" && top) {
     // A regulation quoted for a general question: the parent law may say otherwise or more.
-    if (statuteFirst && top && candidates[0]?.result.type === "tuzuk") caps.push("regulation");
+    // Not when the regulation was offered as one made under the chosen law (children=1).
+    if (statuteFirst && top && candidates[0]?.result.type === "tuzuk" && candidates[0].result.id !== childOfLaw) caps.push("regulation");
     // The LLM named the statutes it expects to answer, and Clef chose another one:
     // on 2026-11-10 four of the six confident wrong answers were exactly this
     // (Kira (Denetim) -> İskan Yasası, KDV -> KDV İadesi, Hayvan Refahı -> Ceza).
@@ -1130,6 +1157,70 @@ async function focusStatutes(
   } catch (error) {
     info.error = error instanceof RerankLimitError ? "daily_limit" : "unavailable";
     return { info };
+  }
+}
+
+/** children=1: regulations offered with their law (at most), and the share a regulation needs to join. */
+const CHILDREN_MAX = 12;
+const CHILD_JOIN = 0.5;
+
+/**
+ * children=1 (OPUS-GOREVLER-4 item 8): the chosen law and the regulations made
+ * under it, by their cards, in one choice. The regulation joins the focus
+ * step when it wins, or gets at least half of the law's probability.
+ */
+async function chooseRegulation(
+  store: Store,
+  reranker: NonNullable<Store["rerank"]>,
+  params: SearchParams,
+  origin: string,
+  law: SearchResult,
+  rerank: NonNullable<AnswerResponse["rerank"]>,
+): Promise<{ regulation: SearchResult; leads: boolean } | null> {
+  let regulations = await regulationsOf(store, law.id).catch(() => []);
+  rerank.children = { law: law.id, regulations: regulations.length };
+  if (!regulations.length) return null;
+  const cards = await statuteCards(store, [law.id, ...regulations.map((r) => r.id)]);
+  if (regulations.length > CHILDREN_MAX) {
+    // Many regulations (Motorlu Araçlar: 38): the ones whose name and card share most words with the question.
+    const words = (r: { id: string; title: string }) => {
+      const card = cards.get(r.id);
+      return stemCoverage(`${card?.title ?? r.title} ${card?.card ?? ""}`, params.q).found;
+    };
+    regulations = regulations
+      .map((r, i) => ({ r, i, n: words(r) }))
+      .sort((a, b) => b.n - a.n || a.i - b.i)
+      .slice(0, CHILDREN_MAX)
+      .map((x) => x.r);
+  }
+  const options = [law.id, ...regulations.map((r) => r.id)];
+  const titles = new Map(regulations.map((r) => [r.id, r.display || r.title]));
+  try {
+    const result = await reranker.rerank(
+      params.q,
+      options.map((id) => {
+        const card = cards.get(id);
+        const name = card?.title || (id === law.id ? law.citation ?? law.title : titles.get(id)) || id;
+        return { label: name, text: card?.card ?? "" };
+      }),
+      CHILDREN_OPTIONS,
+    );
+    const pLaw = result.probabilities[0] ?? 0;
+    let best = 1;
+    for (let i = 2; i < options.length; i++) if ((result.probabilities[i] ?? 0) > (result.probabilities[best] ?? 0)) best = i;
+    const pReg = result.probabilities[best] ?? 0;
+    rerank.children.law_probability = round3(pLaw);
+    if (pReg < CHILD_JOIN * pLaw || pReg <= result.none) return null;
+    const query = documentSql(options[best]);
+    const row = await store.first(query.sql, query.binds);
+    if (!row) return null;
+    rerank.children.chosen = options[best];
+    rerank.children.probability = round3(pReg);
+    const summary = mapSummary(row, origin);
+    return { regulation: { ...summary, score: 0, snippet: "", highlights: [] } as unknown as SearchResult, leads: pReg > pLaw };
+  } catch (error) {
+    rerank.children.error = error instanceof RerankLimitError ? "daily_limit" : "unavailable";
+    return null;
   }
 }
 
@@ -1347,6 +1438,7 @@ export function answerMarkdown(response: AnswerResponse): string {
     if (quote.excerpt) lines.push("_Alıntı maddenin bir bölümüdür; maddenin tamamı için API bağlantısına bakın._", "");
     lines.push(`- **Atıf:** ${quote.citation}`);
     if (quote.ref) lines.push(`- **Madde:** ${quote.ref}`);
+    if (quote.parent_law) lines.push(`- **Dayanak yasa:** ${quote.parent_law.title} (\`${quote.parent_law.id}\`)`);
     lines.push(`- **Güncellik:** ${consolidationLabel(quote.consolidated_through) ?? "Metnin hangi değişikliklere kadar güncel olduğu kaynakta belirtilmiyor; Resmî Gazete'den kontrol edin."}`);
     lines.push(`- **Kaynak:** ${quote.source_url}`);
     lines.push(`- **API:** ${quote.url}`);

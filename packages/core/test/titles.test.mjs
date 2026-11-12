@@ -21,3 +21,18 @@ test("a mahkemeler copy is superseded by the gov copy of the same statute (10 No
   ];
   assert.deepEqual([...supersededCopies(titles)], ["tuzuk-869"]);
 });
+
+test("regulationsOf and parentLaw use the parent_law of the build", async () => {
+  const { regulationsOf, parentLaw, resetTitleCache } = await import("../.test-build/titles.js");
+  resetTitleCache?.();
+  const rows = [
+    { id: "yasa-fasil-352", title: "BÖLÜM 352 ÇOCUKLAR YASASI", type: "yasa", source: "gov", display: "Çocuklar Yasası (Fasıl 352)", text_status: "full" },
+    { id: "tuzuk-koruyucu-aile-tuzugu", title: "Koruyucu Aile Tüzüğü", type: "tuzuk", source: "gov", text_status: "full", parent: "yasa-fasil-352" },
+    { id: "tuzuk-x-degisiklik", title: "Koruyucu Aile (Değişiklik) Tüzüğü", type: "tuzuk", source: "gov", text_status: "full", parent: "yasa-fasil-352" },
+  ];
+  const store = { all: async () => rows, first: async () => null };
+  const regs = await regulationsOf(store, "yasa-fasil-352");
+  assert.deepEqual(regs.map((r) => r.id), ["tuzuk-koruyucu-aile-tuzugu"]);
+  assert.deepEqual(await parentLaw(store, "tuzuk-koruyucu-aile-tuzugu"), { id: "yasa-fasil-352", title: "Çocuklar Yasası (Fasıl 352)" });
+  resetTitleCache?.();
+});

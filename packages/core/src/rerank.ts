@@ -116,6 +116,14 @@ export const LAW_PICK_OPTIONS: RerankOptions = {
   none: "Hiçbiri bu konuyu düzenlemiyor",
 };
 
+/** children=1: a law and the regulations made under it (OPUS-GOREVLER-4 item 8). */
+export const CHILDREN_OPTIONS: RerankOptions = {
+  instructions:
+    "Bu sorunun cevabı yasanın kendisinde mi, yoksa bu yasa altında çıkarılan tüzüklerden birinde mi? Ayrıntı, usul, süre, form ve ücret soruları çoğu zaman tüzüktedir.",
+  chars: 500,
+  none: "Hiçbiri bu konuyu düzenlemiyor",
+};
+
 /** Article choice over a statute's table of contents (OPUS-GOREVLER-3 item 5). */
 export const TOC_OPTIONS: RerankOptions = {
   instructions: "Bu soruyu yasanın hangi maddesi düzenler? Madde başlıklarına göre en uygun olanı seç.",
