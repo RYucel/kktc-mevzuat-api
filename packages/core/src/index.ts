@@ -11,3 +11,4 @@ export * from "./semantic.js";
 export * from "./rerank.js";
 export * from "./rewrite.js";
 export * from "./feedback.js";
+export * from "./terms.js";

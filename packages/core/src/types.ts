@@ -127,6 +127,10 @@ export interface SearchParams {
    * made under the law (default false; measuring).
    */
   children?: boolean;
+  /** /v1/answer: articles named by the term dictionary join the candidates (default false; measuring). */
+  terms?: boolean;
+  /** Internal: receives the dictionary terms found in the question. */
+  term_sink?: { term: string; doc_id: string; ref: string; status: string }[];
   /** /v1/answer: cap "high" when a later amendment may have changed the quoted regulation article (default true). */
   amended?: boolean;
   verify_high?: number;
@@ -248,6 +252,8 @@ export interface AnswerResponse {
   confidence: "high" | "medium" | "low";
   /** Why a "high" was lowered to "medium" (absent when nothing was capped). */
   confidence_caps?: ConfidenceCap[];
+  /** debug=1 with terms=1: dictionary terms found in the question. */
+  terms_matched?: { term: string; document_id: string; ref: string; status: string }[];
   /** Present when an LLM rewrote the question for the search (never the answer). */
   query_rewrite?: QueryRewriteInfo;
   /** Present when the question went to the reranker. */

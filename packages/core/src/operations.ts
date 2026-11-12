@@ -19,6 +19,7 @@ import {
 import { buildCitation } from "./citation.js";
 import { conceptMatch, type LegalConcept, matchConcepts } from "./legal-concepts.js";
 import { ANSWER_PASSAGES, CHILDREN_OPTIONS, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, TOC_OPTIONS, wantsRerank } from "./rerank.js";
+import { findTerms, TERM_HITS, type TermHit } from "./terms.js";
 import { canonicalDocId, displayNames, isAmendment, legislationTitles, parentLaw, regulationsOf, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
 import { resolveLawsDetailed, RewriteLimitError } from "./rewrite.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
@@ -429,6 +430,17 @@ export async function searchDocuments(
       // The index is optional (e.g. not filled yet); lexical search still works.
       console.warn("semantic search unavailable:", error instanceof Error ? error.message : error);
     }
+    // terms=1: articles named by the term dictionary lead the vector hits
+    // (they then also lead the focus step's candidates).
+    if (params.terms) {
+      const found = (await findTerms(store, params.q).catch(() => [] as TermHit[])).slice(0, TERM_HITS);
+      params.term_sink?.push(...found);
+      const located = await locateArticles(store, found.map((t) => ({ docId: t.doc_id, ref: t.ref })));
+      const termHits: SemanticHit[] = found
+        .map((t) => ({ doc_id: t.doc_id, ref: t.ref, ord: located.get(`${t.doc_id}\u0000${t.ref}`) ?? -1, type: null, score: 1 }))
+        .filter((h) => h.ord >= 0);
+      hits = [...termHits, ...hits.filter((h) => !termHits.some((t) => t.doc_id === h.doc_id && t.ref === baseArticleRef(h.ref)))];
+    }
     semanticHits = hits;
     params.semantic_sink?.push(...hits);
     const bestHit = new Map<string, SemanticHit>();
@@ -717,6 +729,7 @@ export async function answerQuestion(
       : 1;
   const semanticSink: { doc_id: string; ref: string | null }[] = [];
   const rewriteSink: QueryRewriteInfo[] = [];
+  const termSink: NonNullable<SearchParams["term_sink"]> = [];
   const statuteFirst = params.statute_first !== false && !asksRegulation(params.q);
   const search = await searchDocuments(
     store,
@@ -725,6 +738,7 @@ export async function answerQuestion(
       semantic_sink: semanticSink,
       rewrite: !!reranker && params.rewrite !== false,
       rewrite_sink: rewriteSink,
+      term_sink: termSink,
       statute_first: statuteFirst,
       skip_amendments: params.dedupe !== false && !/degisiklik/.test(foldTr(params.q)),
       prefer: params.prefer ?? "mevzuat",
@@ -1068,6 +1082,7 @@ export async function answerQuestion(
     ...(caps.length ? { confidence_caps: caps } : {}),
     ...(rewriteSink[0] ? { query_rewrite: rewriteSink[0] } : {}),
     ...(rerank ? { rerank } : {}),
+    ...(params.debug && params.terms ? { terms_matched: termSink.map((t) => ({ term: t.term, document_id: t.doc_id, ref: t.ref, status: t.status })) } : {}),
     concepts: search.concepts,
     disclaimer:
       "Bu yanıt metinden birebir alıntıdır; hukuki yorum veya bağlayıcı görüş değildir. " +
@@ -1185,6 +1200,22 @@ export function sourceLine(
   const source = result.source ? SOURCE_NAMES[result.source] ?? result.source : null;
   if (source) parts.push(source);
   return parts.join(", ");
+}
+
+/** First chunk ord of each (document, article). */
+async function locateArticles(store: Store, pairs: { docId: string; ref: string }[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!pairs.length) return out;
+  const where = pairs.map(() => "(doc_id = ? AND (ref = ? OR ref LIKE ?))").join(" OR ");
+  const rows = await store.all(
+    `SELECT doc_id, ref, ord FROM chunks WHERE kind = 'article' AND (${where}) ORDER BY ord`,
+    pairs.flatMap((p) => [p.docId, p.ref, `${p.ref} (%`]),
+  );
+  for (const row of rows) {
+    const key = `${String(row.doc_id)}\u0000${baseArticleRef(asString(row.ref))}`;
+    if (!out.has(key)) out.set(key, Number(row.ord));
+  }
+  return out;
 }
 
 /** amended_after of the quoted documents (build: crawler/kktc/amendments.py). */

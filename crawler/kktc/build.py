@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import logging
 import sqlite3
 import time
@@ -17,6 +18,7 @@ from .history import HISTORY_TABLES_SQL
 from .cards import display_title, statute_card
 from .parents import LawIndex, parent_law
 from .amendments import later_amendments
+from .terms import accepted, load_terms
 from .textproc import Chunk, chunk_document, clean_text, index_text, normalize_title
 
 log = logging.getLogger(__name__)
@@ -81,6 +83,16 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     scope,
     tokenize = 'unicode61 remove_diacritics 2'
 );
+
+-- Term dictionary (crawler/kktc/terms.py; files in terms/): everyday words -> article.
+CREATE TABLE IF NOT EXISTS terms (
+    key TEXT NOT NULL,
+    term TEXT NOT NULL,
+    doc_id TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    status TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS terms_key ON terms(key);
 """
 
 
@@ -273,6 +285,19 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
     used_ids: set[int] = set()
     for row in chunk_rows:
         chunk_ids.append((_chunk_id(row[0], row[1], used_ids), row))
+
+    # Term dictionary: checked against the article text of this build.
+    article_texts: dict[tuple[str, str], str] = {}
+    for row in chunk_rows:
+        if row[2] == "article" and row[3]:
+            base = re.sub(r"\s*\(\d+/\d+\)$", "", row[3])
+            article_texts[(row[0], base)] = (article_texts.get((row[0], base), "") + " " + row[4])[:4000]
+    terms, dropped = accepted(load_terms(TERMS_DIR), article_texts)
+    conn.executemany(
+        "INSERT INTO terms (key, term, doc_id, ref, status) VALUES (?,?,?,?,?)",
+        [(t["key"], t["term"], t["doc"], t["ref"], t.get("status", "claude")) for t in terms],
+    )
+    log.info("terms: %d kept, dropped %s", len(terms), dropped)
 
     conn.executemany(
         "INSERT INTO chunks (id, doc_id, ord, kind, ref, text, chars) VALUES (?,?,?,?,?,?,?)",
@@ -474,6 +499,16 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     tokenize = 'unicode61 remove_diacritics 2'
 );
 
+-- Term dictionary (crawler/kktc/terms.py; files in terms/): everyday words -> article.
+CREATE TABLE IF NOT EXISTS terms (
+    key TEXT NOT NULL,
+    term TEXT NOT NULL,
+    doc_id TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    status TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS terms_key ON terms(key);
+
 -- Worker-side daily counters (Clef budget); never reset by the data import.
 CREATE TABLE IF NOT EXISTS usage_counters (
     day TEXT NOT NULL,
@@ -597,6 +632,19 @@ def _insert(table: str, record: dict[str, Any]) -> str:
     return f"INSERT OR REPLACE INTO {table} ({cols}) VALUES ({values});"
 
 
+TERMS_DIR = Path(__file__).resolve().parents[2] / "terms"
+
+
+def _terms_fingerprint(conn: sqlite3.Connection) -> Optional[str]:
+    has = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'terms'").fetchone()[0]
+    if not has:
+        return None
+    h = hashlib.sha1()
+    for row in conn.execute("SELECT key, term, doc_id, ref, status FROM terms ORDER BY 1, 3, 4, 2"):
+        h.update(json.dumps(list(row), ensure_ascii=False).encode("utf-8"))
+    return h.hexdigest()
+
+
 def _history_fingerprint(conn: sqlite3.Connection) -> Optional[str]:
     has = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'changes'").fetchone()[0]
     if not has:
@@ -649,6 +697,7 @@ def export_d1(
     conn.row_factory = sqlite3.Row
     fingerprints = _fingerprints(conn)
     history_fp = _history_fingerprint(conn)
+    terms_fp = _terms_fingerprint(conn)
     incremental = previous_state is not None
     old = (previous_state or {}).get("docs", {})
     if incremental:
@@ -734,6 +783,16 @@ def export_d1(
                 writer.write(statement)
         writer.close()
 
+    # Term dictionary: small; rewritten whole, and only when it changed.
+    if terms_fp is not None and terms_fp != (previous_state or {}).get("terms"):
+        writer = SqlFileWriter(out_dir / "050-terms.sql")
+        writer.write("DELETE FROM terms;")
+        for row in conn.execute("SELECT key, term, doc_id, ref, status FROM terms"):
+            writer.write(
+                f"INSERT INTO terms (key, term, doc_id, ref, status) VALUES ({_sql(row['key'])},{_sql(row['term'])},{_sql(row['doc_id'])},{_sql(row['ref'])},{_sql(row['status'])});"
+            )
+        writer.close()
+
     writer = SqlFileWriter(out_dir / "090-meta.sql")
     for row in conn.execute("SELECT key, value FROM meta"):
         writer.write(f"INSERT OR REPLACE INTO meta (key, value) VALUES ({_sql(row['key'])},{_sql(row['value'])});")
@@ -748,7 +807,7 @@ def export_d1(
         "history": bool(write_history),
     }
     (out_dir / D1_STATE_FILE).write_text(
-        json.dumps({"version": D1_STATE_VERSION, "docs": fingerprints, "history": history_fp, "last_export": summary}),
+        json.dumps({"version": D1_STATE_VERSION, "docs": fingerprints, "history": history_fp, "terms": terms_fp, "last_export": summary}),
         encoding="utf-8",
     )
     (out_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
