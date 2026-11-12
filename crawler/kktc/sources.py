@@ -604,6 +604,7 @@ def merge_documents(catalogs: Iterable[list[dict[str, Any]]]) -> list[dict[str, 
     and primary URL; mahkemeler metadata is kept in ``sources``.
     """
     merged: dict[str, dict[str, Any]] = {}
+    zero_padded = 0  # copies joined only because of canonical_id (report)
     for docs in catalogs:
         for doc in docs:
             doc = dict(doc)
@@ -634,6 +635,8 @@ def merge_documents(catalogs: Iterable[list[dict[str, Any]]]) -> list[dict[str, 
                 merged[base_id] = doc
                 continue
             # Same document from the other source.
+            if number and slugify(str(number), max_len=24) != slugify(str(existing.get("number") or ""), max_len=24):
+                zero_padded += 1
             existing.setdefault("sources", []).append(_source_ref(doc))
             for key in ("court", "parties", "subject", "summary", "date", "year", "number"):
                 if not existing.get(key) and doc.get(key):
@@ -653,6 +656,8 @@ def merge_documents(catalogs: Iterable[list[dict[str, Any]]]) -> list[dict[str, 
             elif not existing.get("content") and doc.get("content"):
                 existing["content"] = doc["content"]
             existing["_id"] = base_id
+    if zero_padded:
+        log.info("merged %d copies whose numbers differ only in leading zeros", zero_padded)
     return list(merged.values())
 
 

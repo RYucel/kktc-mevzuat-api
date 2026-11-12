@@ -994,9 +994,19 @@ def slugify(value: str, *, max_len: int = 70) -> str:
     return value[:max_len].strip("-") or "belge"
 
 
+_LEADING_ZEROS = re.compile(r"(?<![0-9])0+(?=[0-9])")
+
+
+def canonical_id(doc_id: str) -> str:
+    """'yasa-09-1976' -> 'yasa-9-1976': the two sources write numbers with and
+    without leading zeros, and the same statute was kept twice (12 Nov 2026).
+    Mirrored in packages/core/src/titles.ts (canonicalDocId)."""
+    return _LEADING_ZEROS.sub("", doc_id)
+
+
 def make_doc_id(prefix: str, number: Optional[str], title: str, fallback: str = "") -> str:
     if number:
-        return f"{prefix}-{slugify(number, max_len=24)}"
+        return canonical_id(f"{prefix}-{slugify(number, max_len=24)}")
     if fallback:
         return f"{prefix}-{slugify(fallback, max_len=24)}"
     return f"{prefix}-{slugify(title, max_len=60)}"

@@ -19,7 +19,7 @@ import {
 import { buildCitation } from "./citation.js";
 import { conceptMatch, type LegalConcept, matchConcepts } from "./legal-concepts.js";
 import { ANSWER_PASSAGES, CHILDREN_OPTIONS, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, TOC_OPTIONS, wantsRerank } from "./rerank.js";
-import { displayNames, isAmendment, legislationTitles, parentLaw, regulationsOf, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
+import { canonicalDocId, displayNames, isAmendment, legislationTitles, parentLaw, regulationsOf, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
 import { resolveLawsDetailed, RewriteLimitError } from "./rewrite.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
 import {
@@ -1513,15 +1513,28 @@ export function answerMarkdown(response: AnswerResponse): string {
   return lines.join("\n");
 }
 
+/** The document row, by its id or (for ids once zero-padded) its canonical id. */
+async function findDocument(store: Store, id: string): Promise<{ row: StoreRow; id: string } | null> {
+  const query = documentSql(id);
+  const row = await store.first(query.sql, query.binds);
+  if (row) return { row, id };
+  const canonical = canonicalDocId(id);
+  if (canonical === id) return null;
+  const again = documentSql(canonical);
+  const other = await store.first(again.sql, again.binds);
+  return other ? { row: other, id: canonical } : null;
+}
+
 export async function getDocument(
   store: Store,
   id: string,
   origin: string,
   includeChunks = false,
 ): Promise<DocumentResponse | null> {
-  const docQuery = documentSql(id);
-  const row = await store.first(docQuery.sql, docQuery.binds);
-  if (!row) return null;
+  const found = await findDocument(store, id);
+  if (!found) return null;
+  const { row } = found;
+  id = found.id;
 
   const chunkQuery = chunksSql(id);
   const chunkRows = await store.all(chunkQuery.sql, chunkQuery.binds);
@@ -1557,9 +1570,10 @@ export async function getArticle(
       'Madde referansı "12", "Madde 12" veya "30A" biçiminde olmalıdır.',
     );
   }
-  const docQuery = documentSql(id);
-  const row = await store.first(docQuery.sql, docQuery.binds);
-  if (!row) return null;
+  const found = await findDocument(store, id);
+  if (!found) return null;
+  const { row } = found;
+  id = found.id;
 
   const query = articleSql(id, ref);
   const partRows = await store.all(query.sql, query.binds);
@@ -1596,9 +1610,10 @@ export async function listArticleRefs(
   id: string,
   origin: string,
 ): Promise<{ document: DocumentSummary; articles: string[]; _meta: ApiMeta } | null> {
-  const docQuery = documentSql(id);
-  const row = await store.first(docQuery.sql, docQuery.binds);
-  if (!row) return null;
+  const found = await findDocument(store, id);
+  if (!found) return null;
+  const { row } = found;
+  id = found.id;
   const query = articleListSql(id);
   const rows = await store.all(query.sql, query.binds);
   const articles = Array.from(

@@ -20,7 +20,7 @@ import { DOC_TYPES, type SearchParams, type Store, TYPE_LABELS } from "./types.j
 import { llmsText } from "./llms.js";
 import { changesHtml, changesMarkdown, feedHtml, getDocumentChanges, listChanges } from "./changes.js";
 import { openapiDocument } from "./openapi.js";
-import { findStatutes, statuteCatalog } from "./titles.js";
+import { canonicalDocId, findStatutes, statuteCatalog } from "./titles.js";
 import { handleMcp } from "./mcp.js";
 import { recordFeedback } from "./feedback.js";
 import { SEMANTIC_DIMS, SEMANTIC_MODEL, type VectorUnit, type VectorWriter } from "./semantic.js";
@@ -616,7 +616,7 @@ function documentParam(raw: string | undefined): string[] | undefined {
   if (!/^[a-z0-9][a-z0-9-]{1,120}$/.test(raw)) {
     throw new ApiError(400, "invalid_document_id", "document_id geçerli bir belge kimliği olmalıdır (ör. yasa-22-1992).");
   }
-  return [raw];
+  return [canonicalDocId(raw)];
 }
 
 export function timingSafeEqual(a: string, b: string): boolean {

@@ -36,3 +36,10 @@ test("regulationsOf and parentLaw use the parent_law of the build", async () => 
   assert.deepEqual(await parentLaw(store, "tuzuk-koruyucu-aile-tuzugu"), { id: "yasa-fasil-352", title: "Çocuklar Yasası (Fasıl 352)" });
   resetTitleCache?.();
 });
+
+test("canonicalDocId drops leading zeros only", async () => {
+  const { canonicalDocId } = await import("../.test-build/titles.js");
+  assert.equal(canonicalDocId("yasa-09-1976"), "yasa-9-1976");
+  assert.equal(canonicalDocId("yasa-10-2000"), "yasa-10-2000");
+  assert.equal(canonicalDocId("yasa-fasil-154"), "yasa-fasil-154");
+});
