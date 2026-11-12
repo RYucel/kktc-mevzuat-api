@@ -9,8 +9,8 @@ def test_term_key_is_order_and_suffix_free():
 def test_filters():
     texts = {("yasa-x", "Madde 1"): "Taammüden Katil 203. Kim ki önceden tasarlayarak ölümüne neden olursa"}
     rows = [
-        {"term": "önceden planlayarak öldürme", "doc": "yasa-x", "ref": "Madde 1", "status": "claude"},
-        {"term": "hırsızlık", "doc": "yasa-x", "ref": "Madde 1", "status": "claude"},
+        {"term": "önceden planlayarak öldürme", "doc": "yasa-x", "ref": "Madde 1", "source": "claude", "status": "claude"},
+        {"term": "hırsızlık kapkaç", "doc": "yasa-x", "ref": "Madde 1", "source": "model", "status": "claude"},
         {"term": "kasıt", "doc": "yasa-x", "ref": "Madde 1", "status": "avukat"},
         {"term": "taammüden katil", "doc": "yasa-x", "ref": "Madde 9", "status": "claude"},
         {"term": "katil", "doc": "yasa-x", "ref": "Madde 1", "status": "red"},

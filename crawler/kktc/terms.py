@@ -3,7 +3,14 @@
 Terms live in data/terms/<statute id>.jsonl, one per line:
 
     {"term": "mahkeme kararı olmadan gözaltı", "doc": "yasa-fasil-155",
-     "ref": "Madde 14", "source": "baslik" | "claude", "status": "claude" | "avukat" | "red"}
+     "ref": "Madde 14", "source": "baslik" | "claude" | "model",
+     "status": "claude" | "avukat" | "red"}
+
+source: "baslik" is the article heading itself; "claude" was written by
+Claude from the heading and opening text and read a second time against
+them; "model" was generated in bulk by a model and is only kept when it
+shares a word with the article (an invented term that touches nothing in the
+article is more likely wrong than helpful).
 
 They are written from the statute text only (article headings and opening
 sentences), never from the eval questions. "claude": checked by a second
@@ -30,7 +37,7 @@ STOPWORDS = {
     "gibi", "kim", "kimdir", "nerede", "zaman", "ise", "bir", "bu", "su", "da", "de", "ki",
 }
 STEM = 4
-MAX_DOCS_PER_KEY = 5
+MAX_DOCS_PER_KEY = 3
 
 
 def stems(text: str) -> list[str]:
@@ -62,9 +69,10 @@ def accepted(rows: Iterable[dict[str, Any]], texts: dict[tuple[str, str], str]) 
     """Terms that pass the filters, with the reasons others were dropped.
 
     - rejected ("red") terms and terms without content words are dropped;
-    - a term must share at least one stem with its article (heading or text),
-      unless a lawyer approved it: an invented term that touches nothing in
-      the article is more likely wrong than helpful;
+    - a model-generated term must share at least one stem with its article
+      (heading or text). Written and reviewed terms are exempt: bridging the
+      words people use to the statute's own ("önceden planlayarak öldürme" ->
+      "taammüden katil") is their whole point;
     - single-stem terms must be at least 6 letters long (\"ceza\" says nothing);
     - a key used for more than MAX_DOCS_PER_KEY statutes is not distinctive.
     """
@@ -82,7 +90,7 @@ def accepted(rows: Iterable[dict[str, Any]], texts: dict[tuple[str, str], str]) 
         if text is None:
             dropped["unknown_article"] += 1
             continue
-        if row.get("status") != "avukat":
+        if row.get("source") == "model" and row.get("status") != "avukat":
             article = set(stems(text))
             if not set(key.split()) & article:
                 dropped["no_overlap"] += 1
@@ -96,7 +104,10 @@ def accepted(rows: Iterable[dict[str, Any]], texts: dict[tuple[str, str], str]) 
         docs_by_key.setdefault(row["key"], set()).add(row["doc"])
     final = []
     for row in kept:
-        if len(docs_by_key[row["key"]]) > MAX_DOCS_PER_KEY:
+        # Headings shared by several statutes ("Suç ve Cezalar", "Yetkili
+        # Makam", "Geçici Madde") say nothing about the subject.
+        limit = 1 if row.get("source") == "baslik" else MAX_DOCS_PER_KEY
+        if len(docs_by_key[row["key"]]) > limit:
             dropped["not_distinctive"] += 1
             continue
         final.append(row)
