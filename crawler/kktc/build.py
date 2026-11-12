@@ -586,6 +586,17 @@ def _fingerprints(conn: sqlite3.Connection) -> dict[str, str]:
     return {doc_id: h.hexdigest() for doc_id, h in hashes.items()}
 
 
+# D1 limits one SQL statement to 100 KB.
+_D1_STATEMENT_BYTES = 95_000
+_HISTORY_TEXT_CHARS = 20_000
+
+
+def _insert(table: str, record: dict[str, Any]) -> str:
+    cols = ",".join(record.keys())
+    values = ",".join(_sql(v) for v in record.values())
+    return f"INSERT OR REPLACE INTO {table} ({cols}) VALUES ({values});"
+
+
 def _history_fingerprint(conn: sqlite3.Connection) -> Optional[str]:
     has = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'changes'").fetchone()[0]
     if not has:
@@ -709,9 +720,18 @@ def export_d1(
             writer.write("DELETE FROM doc_versions;")
         for table in ("doc_versions", "changes"):
             for row in conn.execute(f"SELECT * FROM {table}"):
-                cols = ",".join(row.keys())
-                values = ",".join(_sql(row[k]) for k in row.keys())
-                writer.write(f"INSERT OR REPLACE INTO {table} ({cols}) VALUES ({values});")
+                record = dict(row)
+                statement = _insert(table, record)
+                if len(statement.encode("utf-8")) > _D1_STATEMENT_BYTES:
+                    # D1 refuses statements over 100 KB (SQLITE_TOOBIG, 12 Nov 2026):
+                    # keep the change, shorten its texts and drop the word diff.
+                    for key in ("old_text", "new_text"):
+                        if isinstance(record.get(key), str) and len(record[key]) > _HISTORY_TEXT_CHARS:
+                            record[key] = record[key][:_HISTORY_TEXT_CHARS] + "…"
+                    if "ops_json" in record:
+                        record["ops_json"] = None
+                    statement = _insert(table, record)
+                writer.write(statement)
         writer.close()
 
     writer = SqlFileWriter(out_dir / "090-meta.sql")

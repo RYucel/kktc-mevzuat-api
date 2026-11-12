@@ -154,3 +154,12 @@ def test_fts_scope_column_filters_by_type_and_group(tmp_path: Path) -> None:
         assert not docs("xqt*") - everything
     finally:
         conn.close()
+
+
+def test_history_statements_fit_d1(tmp_path):
+    from kktc.build import _D1_STATEMENT_BYTES, _insert, _HISTORY_TEXT_CHARS
+
+    record = {"id": 1, "doc_id": "yasa-x", "old_text": "a" * 150_000, "new_text": "b" * 150_000, "ops_json": "[]"}
+    assert len(_insert("changes", record)) > _D1_STATEMENT_BYTES
+    short = {**record, "old_text": record["old_text"][:_HISTORY_TEXT_CHARS], "new_text": record["new_text"][:_HISTORY_TEXT_CHARS], "ops_json": None}
+    assert len(_insert("changes", short).encode()) < _D1_STATEMENT_BYTES
