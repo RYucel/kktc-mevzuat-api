@@ -21,3 +21,12 @@ test("tocLabel: heading before the article number, or the first words", async ()
   assert.equal(tocLabel("Madde 5", "Hizmet Akdinin Fes-hinde Bildirim 5.(1) İşveren"), "Madde 5: Hizmet Akdinin Feshinde Bildirim");
   assert.match(tocLabel("Madde 7", "7. (1) Bu Yasa kuralları uyarınca kurulan Kurul"), /^Madde 7: 7\. \(1\) Bu Yasa/);
 });
+
+test("parseAsk reads noul answers in the shapes seen", async () => {
+  const { parseAsk, askInput } = await import("../.test-build/rerank.js");
+  assert.deepEqual(parseAsk({ answers: { answers: { type: "noul", noul: 0.9 }, refers: { probability: 0.2 } } }, ["answers", "refers"]), { answers: 0.9, refers: 0.2 });
+  assert.deepEqual(parseAsk({ answers: { answers: { probabilities: { yes: 0.3, no: 0.7 } } } }, ["answers"]), { answers: 0.3 });
+  assert.equal(parseAsk({}, ["answers"]), null);
+  const input = askInput({ soru: "s" }, { answers: "q?" });
+  assert.equal(input.questions.answers.type, "noul");
+});

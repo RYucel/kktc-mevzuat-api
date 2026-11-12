@@ -986,7 +986,34 @@ export async function answerQuestion(
     // Part of the statute is missing: another article (or a later paragraph) may change the answer.
     if (top.text_status !== "full") caps.push("partial_text");
   }
+  // verify=1: "which candidate fits best" always has a winner, even when
+  // none answers. One more, cheap question about the quoted window alone.
+  let verifiedLow = false;
+  if (params.verify && top && reranker?.ask && rerank && (base === "high" || base === "medium")) {
+    try {
+      const answer = await reranker.ask(
+        { soru: params.q, madde: `${top.citation ?? top.title}${top.ref ? `, ${top.ref}` : ""}`, metin: top.text.slice(0, VERIFY_CHARS) },
+        VERIFY_QUESTIONS,
+      );
+      rerank.verify = {
+        applied: true,
+        answers: round3(answer.answers ?? 0),
+        refers: round3(answer.refers ?? 0),
+        // Confidence with every other cap but before this check (for choosing thresholds).
+        before: capConfidence(base, caps),
+      };
+      const p = answer.answers ?? 0;
+      if (p < (params.verify_low ?? 0.15)) verifiedLow = true;
+      else if (base === "high" && p < (params.verify_high ?? 0.5)) caps.push("unverified");
+    } catch (error) {
+      rerank.verify = { applied: false, error: error instanceof RerankLimitError ? "daily_limit" : "unavailable" };
+    }
+  }
   let confidence = capConfidence(base, caps);
+  if (verifiedLow && confidence !== "low") {
+    caps.push("unverified");
+    confidence = "low";
+  }
   // "Türkiye'de bedelli askerlik ücreti" is not answered by a KKTC statute,
   // however well one matches (10 Nov: Askerlik Yasası m.17 with p=0.81).
   if (params.jurisdiction !== false && confidence !== "low" && foreignJurisdiction(params.q)) {
@@ -1209,6 +1236,13 @@ async function tocArticles(
   return { info, passages };
 }
 
+/** verify=1 (OPUS-GOREVLER-4 item 5): the quoted window and two yes/no questions. */
+const VERIFY_CHARS = 900;
+const VERIFY_QUESTIONS = {
+  answers: "Bu metin, soruyu doğrudan ve tek başına cevaplıyor mu? Yalnızca konuya değinmesi yetmez; sorulan şeyin cevabı metinde olmalı.",
+  refers: "Metin, cevabı vermek için başka bir maddeye veya fıkraya atıf yapıyor mu?",
+};
+
 function round3(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
@@ -1300,6 +1334,7 @@ const CAP_LABELS: Record<ConfidenceCap, string> = {
   concept_disagrees: "konunun temel yasasından değil",
   partial_text: "kaynak metin eksik",
   foreign_jurisdiction: "soru başka bir ülkenin hukukunu soruyor",
+  unverified: "alıntının soruyu doğrudan cevapladığı doğrulanamadı",
 };
 
 export function answerMarkdown(response: AnswerResponse): string {

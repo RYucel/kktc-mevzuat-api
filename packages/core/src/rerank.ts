@@ -61,6 +61,52 @@ export interface RerankOptions {
 
 export interface Reranker {
   rerank(question: string, candidates: RerankCandidate[], options?: RerankOptions): Promise<RerankResult>;
+  /**
+   * Yes/no questions about one shared state (decision models' `noul` type):
+   * returns the probability of "yes" for each question key.
+   */
+  ask?(state: Record<string, unknown>, questions: Record<string, string>): Promise<Record<string, number>>;
+}
+
+/** Decision-model input for yes/no questions (Clef shape; Gemini takes `state` as its `input` string). */
+export function askInput(state: Record<string, unknown>, questions: Record<string, string>): Record<string, unknown> {
+  return {
+    state,
+    questions: Object.fromEntries(Object.entries(questions).map(([k, instructions]) => [k, { type: "noul", instructions }])),
+  };
+}
+
+/** Probability of "yes" from a `noul` answer ({ type: "noul", noul: 0.9 } or { probability }, ...). */
+function yesProbability(answer: unknown): number | null {
+  if (typeof answer === "number" && Number.isFinite(answer)) return answer > 1 ? answer / 100 : answer;
+  if (typeof answer === "boolean") return answer ? 1 : 0;
+  if (!answer || typeof answer !== "object") return null;
+  const a = answer as Record<string, unknown>;
+  const probs = a.probabilities as Record<string, unknown> | undefined;
+  if (probs && typeof probs === "object") {
+    for (const key of ["yes", "true", "evet"]) if (typeof probs[key] === "number") return probs[key] as number;
+    for (const key of ["no", "false", "hayır"]) if (typeof probs[key] === "number") return 1 - (probs[key] as number);
+  }
+  for (const key of [typeof a.type === "string" ? a.type : "", "noul", "probability", "p", "yes", "value", "score"]) {
+    if (key && key in a) {
+      const p = yesProbability(a[key]);
+      if (p !== null) return p;
+    }
+  }
+  return null;
+}
+
+/** { answers: { k: <noul answer> } } -> { k: p(yes) }; null when nothing parsed. */
+export function parseAsk(output: unknown, keys: string[]): Record<string, number> | null {
+  const o = output as { answers?: Record<string, unknown>; output?: { answers?: Record<string, unknown> } } | null;
+  const answers = o?.answers ?? o?.output?.answers;
+  if (!answers) return null;
+  const result: Record<string, number> = {};
+  for (const key of keys) {
+    const p = yesProbability(answers[key]);
+    if (p !== null) result[key] = Math.min(1, Math.max(0, p));
+  }
+  return Object.keys(result).length ? result : null;
 }
 
 /** Statute choice over statute cards (OPUS-GOREVLER-3 item 3). */
@@ -155,6 +201,12 @@ export function geminiDecisionInput(question: string, candidates: RerankCandidat
 
 export function clefReranker(decide: DecideFn, model = RERANK_MODEL): Reranker {
   return {
+    async ask(state, questions) {
+      const output = await decide(model, { model, ...askInput(state, questions) });
+      const result = parseAsk(output, Object.keys(questions));
+      if (!result) throw new Error("Clef evet/hayır yanıtı çözümlenemedi.");
+      return result;
+    },
     async rerank(question, candidates, options) {
       const output = await decide(model, { model, ...rerankInput(question, candidates, options) });
       const result = parseRerank(output, candidates.length, model);

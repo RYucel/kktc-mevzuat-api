@@ -119,6 +119,10 @@ for (const [n, c] of cases.entries()) {
         abstained: body.confidence === "low",
         rewrite_cached: body.query_rewrite ? !!body.query_rewrite.cached : null,
         caps: body.confidence_caps ?? [],
+        // verify=1: probability that the quoted window answers (for choosing thresholds offline).
+        verify: body.rerank?.verify?.applied ? body.rerank.verify.answers : null,
+        verify_refers: body.rerank?.verify?.applied ? body.rerank.verify.refers : null,
+        verify_before: body.rerank?.verify?.applied ? body.rerank.verify.before : null,
         // lawpick: was the expected statute among the statutes shown, and chosen first?
         law_listed: body.rerank?.debug_laws ? body.rerank.debug_laws.some((x) => isDoc(x, c)) : null,
         law_pick1: body.rerank?.debug_laws ? isDoc(body.rerank.debug_laws[0], c) : null,
@@ -237,6 +241,43 @@ if (Object.values(summary).some((s) => s.must_known)) {
   for (const [variant, s] of Object.entries(summary)) {
     md.push(`| ${variant} | ${pct(s.article1, s.n)} (${wilson(s.article1, s.n)}) | ${s.must_known ? `${s.quote_has_answer}/${s.must_known} (${wilson(s.quote_has_answer, s.must_known)})` : "–"} | ${s.must_known ? `${s.quote3_has_answer}/${s.must_known}` : "–"} | ${s.must_known ? s.article_without_answer : "–"} |`);
   }
+}
+// verify=1: which threshold on "does the quote answer?" keeps "high" honest.
+// 5-fold cross-validation over the questions: each fold's threshold is chosen
+// on the other four (fewest wrong "high", then most right "high"), so the
+// reported numbers are not fitted to the same questions.
+for (const variant of variants) {
+  const pts = rows
+    .map((r) => ({ v: r.variants[variant], unanswerable: r.unanswerable }))
+    .filter(({ v }) => v && !v.error && typeof v.verify === "number" && v.verify_before === "high")
+    .map(({ v, unanswerable }) => ({ p: v.verify, right: !unanswerable && v.article1 }));
+  if (pts.length < 10) continue;
+  const grid = Array.from({ length: 19 }, (_, i) => (i + 1) / 20);
+  const score = (set, t) => {
+    const kept = set.filter((x) => x.p >= t);
+    return { high: kept.length, wrong: kept.filter((x) => !x.right).length };
+  };
+  const pick = (set) =>
+    grid.reduce((best, t) => {
+      const a = score(set, t), b = score(set, best);
+      return a.wrong < b.wrong || (a.wrong === b.wrong && a.high > b.high) ? t : best;
+    }, 0);
+  let cvHigh = 0, cvWrong = 0;
+  const chosen = [];
+  for (let k = 0; k < 5; k++) {
+    const test = pts.filter((_, i) => i % 5 === k), train = pts.filter((_, i) => i % 5 !== k);
+    const t = pick(train);
+    chosen.push(t);
+    const s = score(test, t);
+    cvHigh += s.high;
+    cvWrong += s.wrong;
+  }
+  md.push("", `### Doğrulama eşiği (${variant}): doğrulamadan önce "high" olan ${pts.length} cevap, ${pts.filter((x) => !x.right).length} yanlış`, "", "| eşik | high kalır | high ama yanlış |", "|---|---|---|");
+  for (const t of [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]) {
+    const s = score(pts, t);
+    md.push(`| ${t} | ${s.high} | ${s.wrong} |`);
+  }
+  md.push("", `5 katlı çapraz doğrulama: seçilen eşikler ${chosen.join(", ")}; ayrılan sorularda high ${cvHigh}, yanlış ${cvWrong}.`);
 }
 if (Object.values(summary).some((s) => s.law_known)) {
   md.push("", "| Varyant | beklenen yasa kısa listede | yasa seçimi @1 |", "|---|---|---|");

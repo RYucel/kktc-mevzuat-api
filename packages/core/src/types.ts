@@ -104,6 +104,15 @@ export interface SearchParams {
    * candidates (default false; measuring).
    */
   toc?: boolean;
+  /**
+   * /v1/answer: before reporting high or medium, ask the decision model a
+   * yes/no question about the quoted window itself ("does this text answer
+   * the question?"); below verify_high "high" becomes "medium", below
+   * verify_low the answer is "low" (default false; measuring).
+   */
+  verify?: boolean;
+  verify_high?: number;
+  verify_low?: number;
   /** /v1/answer: statutes shown in the statute-choice step (default 20, 5-30). */
   lawpick_n?: number;
   /** /v1/answer: "high" needs the answer from a concept's canonical statute when the question matches one (default false; measuring). */
@@ -217,6 +226,8 @@ export interface AnswerResponse {
     candidates?: number;
     passages_per_document?: number;
     /** Focus step: Clef asked again among more articles of its chosen statute. */
+    /** verify=1: the yes/no check of the first quote. */
+    verify?: { applied: boolean; answers?: number; refers?: number; error?: string; before?: "high" | "medium" | "low" };
     focus?: {
       document_id: string;
       document_ids?: string[];
@@ -360,7 +371,13 @@ export interface StatsResponse {
  * partial_text: the statute's text is incomplete (partial download or scan);
  * foreign_jurisdiction: the question asks about another country (lowered to "low").
  */
-export type ConfidenceCap = "regulation" | "rewrite_disagrees" | "concept_disagrees" | "partial_text" | "foreign_jurisdiction";
+export type ConfidenceCap =
+  | "regulation"
+  | "rewrite_disagrees"
+  | "concept_disagrees"
+  | "partial_text"
+  | "foreign_jurisdiction"
+  | "unverified";
 
 export interface QueryRewriteInfo {
   terms: string[];
