@@ -16,6 +16,7 @@ from .config import DB_PATH, DIST_DIR
 from .history import HISTORY_TABLES_SQL
 from .cards import display_title, statute_card
 from .parents import LawIndex, parent_law
+from .amendments import later_amendments
 from .textproc import Chunk, chunk_document, clean_text, index_text, normalize_title
 
 log = logging.getLogger(__name__)
@@ -181,6 +182,8 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
     # Regulations name the law they are made under (OPUS-GOREVLER-4 item 8).
     laws = LawIndex((d["_id"], clean_text(d.get("title") or "")) for d in docs if (d.get("type") or "yasa") == "yasa")
     parents_found = parents_missing = 0
+    # Amendment regulations dated after a regulation's text (OPUS-GOREVLER-4 item 11).
+    later = later_amendments((d["_id"], d, _valid_date(d)) for d in docs if d.get("type") == "tuzuk")
 
     for doc in sorted(docs, key=lambda d: (d.get("type") or "", d.get("date") or "", d.get("title") or "")):
         pkey = (doc.get("extra") or {}).get("pkey") or doc.get("number")
@@ -200,6 +203,8 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
             card = statute_card(chunks)
             if card:
                 extra["card"] = card
+        if doc["_id"] in later:
+            extra["amended_after"] = later[doc["_id"]][:20]
         if doc.get("type") == "tuzuk" and content:
             parent = parent_law(content[:4000], laws)
             if parent:
@@ -336,6 +341,7 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
     conn.close()
 
     meta["db_bytes"] = db_path.stat().st_size
+    log.info("regulations with later amendments not in their text: %d", len(later))
     log.info("regulations with a parent law: %d (not found: %d, amendments excluded)", parents_found, parents_missing)
     log.info(
         "built %s: %d documents, %d chunks, %.1f MB",
@@ -474,6 +480,16 @@ CREATE TABLE IF NOT EXISTS usage_counters (
     key TEXT NOT NULL,
     n INTEGER NOT NULL,
     PRIMARY KEY (day, key)
+);
+
+-- Worker-side user verdicts (POST /v1/feedback); the question is stored only as a hash.
+CREATE TABLE IF NOT EXISTS feedback (
+    day TEXT NOT NULL,
+    q_hash TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    ref TEXT,
+    verdict TEXT NOT NULL,
+    created_at TEXT NOT NULL
 );
 
 -- Worker-side LLM query-rewrite cache (apps/worker/src/index.ts); never reset by the data import.

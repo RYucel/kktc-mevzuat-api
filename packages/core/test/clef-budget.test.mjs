@@ -30,3 +30,15 @@ test("parseAsk reads noul answers in the shapes seen", async () => {
   const input = askInput({ soru: "s" }, { answers: "q?" });
   assert.equal(input.questions.answers.type, "noul");
 });
+
+test("sourceLine: name, article, currency, source", async () => {
+  const { sourceLine } = await import("../.test-build/operations.js");
+  assert.equal(
+    sourceLine("İş Yasası (22/1992)", "Madde 43", { source: "gov", consolidated_through: "25/2026", text_status: "full" }),
+    "İş Yasası (22/1992) m.43, 25/2026 sayılı değişikliğe kadar birleştirilmiş metin, mevzuat.gov.ct.tr",
+  );
+  assert.equal(
+    sourceLine("Ceza Yasası (Fasıl 154)", "Madde 14 (2/3)", { source: "mahkemeler", consolidated_through: null, text_status: "partial" }),
+    "Ceza Yasası (Fasıl 154) m.14, güncelliği kaynakta belirtilmemiş metin, kısmi metin, mevzuat.mahkemeler.net",
+  );
+});

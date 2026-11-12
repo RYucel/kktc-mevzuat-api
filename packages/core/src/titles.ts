@@ -60,6 +60,12 @@ export async function parentLaw(store: Store, id: string): Promise<{ id: string;
   return law ? { id: law.id, title: law.display || law.title } : null;
 }
 
+/** Readable names (display_title) by id, for citation lines. */
+export async function displayNames(store: Store): Promise<Map<string, string>> {
+  const { titles } = await load(store);
+  return new Map(titles.filter((t) => t.display).map((t) => [t.id, t.display!]));
+}
+
 /** Titles of all statutes, cached per isolate for ten minutes (one small D1 read). */
 export async function legislationTitles(store: Store): Promise<{ id: string; title: string }[]> {
   return (await load(store)).titles;

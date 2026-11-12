@@ -10,3 +10,4 @@ export * from "./citation.js";
 export * from "./semantic.js";
 export * from "./rerank.js";
 export * from "./rewrite.js";
+export * from "./feedback.js";

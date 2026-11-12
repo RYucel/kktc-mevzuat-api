@@ -12,6 +12,8 @@ name: D1 maintenance
 #              only) and ids stored with leading zeros (scripts/eval-articles.py).
 #   regulation-heads: the opening text of every regulation (where it names
 #              its parent law; OPUS-GOREVLER-4 item 8).
+#   usage:     daily counters (answers by confidence, caps, Clef neurons) and
+#              verdicts per document for the last 14 days; numbers only.
 #   rewrites:  the cached LLM rewrites of the eval questions only. The cache
 #              also holds real users' questions; the log is public, so those
 #              are never printed.
@@ -22,7 +24,7 @@ on:
       task:
         description: "Görev"
         type: choice
-        options: [optimize, info, inventory, texts, rewrites, articles, regulation-heads]
+        options: [optimize, info, inventory, texts, rewrites, articles, regulation-heads, usage, sample-articles]
         default: optimize
 
 permissions:
@@ -121,3 +123,12 @@ jobs:
           print("HEADS-JSON-END")
           print(len(rows), "regulations")
           PY
+      - name: Usage counters and verdicts
+        if: ${{ inputs.task == 'usage' }}
+        working-directory: apps/worker
+        run: |
+          npx wrangler d1 execute kktc-mevzuat --remote --command "SELECT day, key, n FROM usage_counters WHERE day >= date('now', '-14 days') ORDER BY day, key"
+          npx wrangler d1 execute kktc-mevzuat --remote --command "SELECT document_id, ref, verdict, COUNT(*) AS n FROM feedback WHERE day >= date('now', '-14 days') GROUP BY document_id, ref, verdict ORDER BY n DESC LIMIT 100" || echo "no feedback table yet"
+      - name: Sample articles for new eval questions
+        if: ${{ inputs.task == 'sample-articles' }}
+        run: python3 scripts/sample-articles.py scripts/eval-questions.json scripts/eval-holdout.json

@@ -13,6 +13,8 @@ tek madde için GET /v1/documents/{id}/articles/{ref} kullan.
 Yasa ve tüzüklerde önce source=gov olan birleştirilmiş metni ara; yoksa mahkemeler
 kaynağındaki birleştirilmiş metni kullan ve consolidated_through alanına bak.
 Atıf için sonuçtaki citation alanını aynen kullan; mahkeme veya esas/karar numarası uydurma.
+`sor` ve `/v1/answer` alıntılarında atıf olarak yalnızca `kaynak` satırını kullan (ad, numara, madde, güncellik, kaynak site);
+madde numarasını kendin üretme. `amended_after` doluysa maddenin sonradan değişmiş olabileceğini söyle.
 Yanıtlarında belgenin title, number, date ve source_url alanlarını ver.
 Bir maddenin yakın zamanda değişip değişmediğini merak ediyorsan /v1/documents/{id}/changes kullan.
 Metinde olmayan hüküm uydurma; text_status=metadata ise tam metin olmadığını söyle.

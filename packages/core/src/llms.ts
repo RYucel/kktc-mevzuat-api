@@ -209,7 +209,9 @@ saymayın, \`/v1/search\` ile daha geniş arayın. \`confidence_caps\` "high"ın
 ülke hukuku soruluyorsa "low"a) düşürüldüğünü söyler. Her alıntıda \`source\` (\`gov\` = birleştirilmiş
 güncel metin), \`consolidated_through\` (\`null\` ise metnin güncelliği bilinmiyor; Resmî Gazete'den
 kontrol edin) ve \`excerpt\` (alıntı maddenin bir bölümüyse \`true\`; tamamı \`url\`'de) bulunur. Alıntıyı
-değiştirmeden aktarın; atfı \`citation\`/\`citations\` alanından alın, numara uydurmayın.
+değiştirmeden aktarın; atıf olarak yalnızca alıntının \`kaynak\` satırını kullanın (ad, numara, madde, güncellik,
+kaynak site). Madde veya yasa numarasını kendiniz üretmeyin. \`amended_after\` doluysa metinden sonra çıkan bir
+değişiklik maddeyi değiştirmiş olabilir; \`parent_law\` tüzüğün dayanak yasasıdır.
 Kısa anahtar kelime aramaları yeniden sıralanmaz. Günlük Clef
 sınırı dolarsa \`rerank.error: "daily_limit"\` döner ve sıralama aramadan gelir.
 
