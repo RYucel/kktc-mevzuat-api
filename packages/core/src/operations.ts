@@ -743,10 +743,20 @@ export async function answerQuestion(
   const dedupe = params.dedupe !== false;
   const superseded = dedupe ? await supersededStatutes(store).catch(() => new Set<string>()) : new Set<string>();
   const wantsAmendment = /degisiklik/.test(foldTr(params.q));
+  // lawpick chooses statutes by their cards, so a statute stays on the list
+  // even when its best match is only its title or its definitions article
+  // (with one passage per statute that dropped it entirely: 13 of 64 expected
+  // statutes on 12 Nov). Such entries have no ref and are never quoted.
+  const statuteOnly: Passage[] = [];
   for (const result of search.results) {
     if (result.text_status === "metadata") continue;
     if (dedupe && (superseded.has(result.id) || (!wantsAmendment && isAmendment(result.title)))) continue;
-    if (result.snippet && result.matched_kind !== "title" && !skipBoilerplate(result.matched_ref, result.matched_text || result.snippet, params)) {
+    const quotable =
+      !!result.snippet && result.matched_kind !== "title" && !skipBoilerplate(result.matched_ref, result.matched_text || result.snippet, params);
+    if (lawPick && !quotable && LEGISLATION_TYPES.has(result.type)) {
+      statuteOnly.push({ result, ref: null, text: result.snippet || result.title, snippet: result.snippet || "", url: result.url });
+    }
+    if (quotable) {
       rounds[0].push({
         result,
         ref: result.matched_ref,
@@ -766,11 +776,15 @@ export async function answerQuestion(
   let probabilities: number[] | null = null;
   let rerank: AnswerResponse["rerank"];
   let lawTwo = false;
-  if (lawPick && reranker && candidates.length > 1) {
-    // One passage per statute, regulations last (at most 8 unless asked for).
+  if (lawPick && reranker && candidates.length + statuteOnly.length > 1) {
+    // One entry per statute in search order, regulations last (at most 8 unless asked for).
     const asks = asksRegulation(params.q);
     let regulations = 0;
-    candidates = candidates
+    const rank = new Map(search.results.map((r, i) => [r.id, i]));
+    const merged = [...candidates, ...statuteOnly]
+      .filter((c, i, all) => all.findIndex((o) => o.result.id === c.result.id) === i)
+      .sort((a, b) => (rank.get(a.result.id) ?? 0) - (rank.get(b.result.id) ?? 0));
+    candidates = (statuteFirst ? lawsBeforeRegulations(merged) : merged)
       .filter((c) => LEGISLATION_TYPES.has(c.result.type))
       .filter((c) => asks || !statuteFirst || c.result.type !== "tuzuk" || ++regulations <= 8)
       .slice(0, lawPickCount);
@@ -804,7 +818,7 @@ export async function answerQuestion(
         top_probability: round3(order[0]?.p ?? 0),
         none_probability: round3(result.none),
         ...(params.debug
-          ? { debug_laws: order.slice(0, 10).map((o) => ({ document_id: o.c.result.id, probability: round3(o.p) })) }
+          ? { debug_laws: order.map((o) => ({ document_id: o.c.result.id, probability: round3(o.p) })) }
           : {}),
       };
     } catch (error) {
@@ -871,7 +885,7 @@ export async function answerQuestion(
     const massOf = (id: string) => candidates.reduce((sum, c, i) => sum + (c.result.id === id ? probs[i] ?? 0 : 0), 0);
     const laws: SearchResult[] = [];
     for (const c of candidates) {
-      if (!LEGISLATION_TYPES.has(c.result.type) || !c.ref || laws.some((law) => law.id === c.result.id)) continue;
+      if (!LEGISLATION_TYPES.has(c.result.type) || (!c.ref && !lawPick) || laws.some((law) => law.id === c.result.id)) continue;
       laws.push(c.result);
       if (laws.length === 2) break;
     }
@@ -910,6 +924,15 @@ export async function answerQuestion(
     }
   }
 
+  // Statutes listed only for the statute choice are never quoted.
+  if (lawPick && candidates.some((c) => !c.ref)) {
+    const keep = candidates.map((c, i) => ({ c, p: probabilities?.[i] })).filter(({ c }) => !!c.ref);
+    candidates = keep.map((k) => k.c);
+    if (probabilities) {
+      probabilities = keep.map((k) => k.p ?? 0);
+      if (rerank) rerank.top_probability = round3(probabilities[0] ?? 0);
+    }
+  }
   const quotes: AnswerQuote[] = [];
   for (const [index, passage] of candidates.entries()) {
     if (quotes.length >= limit) break;
@@ -1037,7 +1060,7 @@ async function focusStatutes(
       // What Clef already saw for this statute comes first and always stays in;
       // then the articles chosen from the table of contents (toc=1).
       const fromToc = await tocRun;
-      const passages: Passage[] = [...seen.filter((c) => c.result.id === law.id), ...fromToc];
+      const passages: Passage[] = [...seen.filter((c) => c.result.id === law.id && !!c.ref), ...fromToc];
       const result = search.results.find((r) => r.id === law.id);
       if (result?.matched_ref && result.matched_kind !== "title") {
         passages.push({
