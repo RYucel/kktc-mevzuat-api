@@ -3,6 +3,8 @@ import {
   GEMINI_DECISION_MODEL,
   geminiDecisionInput,
   parseRerank,
+  askInput,
+  parseAsk,
   clefReranker,
   createApp,
   DECISION_MODELS,
@@ -123,33 +125,41 @@ const GEMINI_TIMEOUT_MS = 15000;
  * retried after a pause (free tier: 200 requests and 50K tokens a minute).
  */
 function geminiReranker(apiKey: string, db: D1Database, limit: number): Reranker {
+  const call = async (input: Record<string, unknown>): Promise<unknown> => {
+    let allowed: boolean;
+    try {
+      allowed = limit > 0 && (await takeDaily(db, "gemini-admin", limit));
+    } catch (error) {
+      throw new Error(`gemini counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!allowed) throw new RerankLimitError("Gemini daily limit reached");
+    const body = JSON.stringify(input);
+    for (let attempt = 0; ; attempt++) {
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/decisions", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+        body,
+        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+      });
+      if (response.ok) return response.json();
+      const text = (await response.text()).slice(0, 300);
+      const limited = response.status === 429 || /quota|rate|limit/i.test(text);
+      if (!limited || attempt >= 3) throw new Error(`Gemini HTTP ${response.status}: ${text}`);
+      await new Promise((resolve) => setTimeout(resolve, 15000 * (attempt + 1)));
+    }
+  };
   return {
     async rerank(question, candidates, options) {
-      let allowed: boolean;
-      try {
-        allowed = limit > 0 && (await takeDaily(db, "gemini-admin", limit));
-      } catch (error) {
-        throw new Error(`gemini counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      if (!allowed) throw new RerankLimitError("Gemini daily limit reached");
-      const body = JSON.stringify(geminiDecisionInput(question, candidates, options));
-      for (let attempt = 0; ; attempt++) {
-        const response = await fetch("https://generativelanguage.googleapis.com/v1beta/decisions", {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-          body,
-          signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-        });
-        if (response.ok) {
-          const result = parseRerank(await response.json(), candidates.length, GEMINI_DECISION_MODEL);
-          if (!result) throw new Error("Gemini yanıtı çözümlenemedi.");
-          return result;
-        }
-        const text = (await response.text()).slice(0, 300);
-        const limited = response.status === 429 || /quota|rate|limit/i.test(text);
-        if (!limited || attempt >= 3) throw new Error(`Gemini HTTP ${response.status}: ${text}`);
-        await new Promise((resolve) => setTimeout(resolve, 15000 * (attempt + 1)));
-      }
+      const result = parseRerank(await call(geminiDecisionInput(question, candidates, options)), candidates.length, GEMINI_DECISION_MODEL);
+      if (!result) throw new Error("Gemini yanıtı çözümlenemedi.");
+      return result;
+    },
+    async ask(state, questions) {
+      const clef = askInput(state, questions) as { questions: unknown };
+      const output = await call({ model: GEMINI_DECISION_MODEL, input: JSON.stringify(state), questions: clef.questions });
+      const result = parseAsk(output, Object.keys(questions));
+      if (!result) throw new Error("Gemini evet/hayır yanıtı çözümlenemedi.");
+      return result;
     },
   };
 }
@@ -165,23 +175,35 @@ interface ClefMeter {
  * clefNeurons: characters / 3 as tokens, plus the short choice answer).
  */
 function limitedReranker(inner: Reranker, db: D1Database, neuronLimit: number, key: string, meter: ClefMeter): Reranker {
+  const charge = async (input: Record<string, unknown>): Promise<number> => {
+    const neurons = clefNeurons(input);
+    let allowed: boolean;
+    try {
+      allowed = await takeDaily(db, key, Math.round(neuronLimit * CENTI), Math.max(1, Math.ceil(neurons * CENTI)));
+    } catch (error) {
+      // Without a working counter, do not spend: fail closed (reported as
+      // "unavailable", not "daily_limit").
+      console.warn("clef counter unavailable:", error instanceof Error ? error.message : error);
+      throw new Error(`Clef counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!allowed) throw new RerankLimitError();
+    meter.calls += 1;
+    meter.neurons += neurons;
+    return neurons;
+  };
   return {
     async rerank(question, candidates, options) {
-      const neurons = clefNeurons(rerankInput(question, candidates, options));
-      let allowed: boolean;
-      try {
-        allowed = await takeDaily(db, key, Math.round(neuronLimit * CENTI), Math.max(1, Math.ceil(neurons * CENTI)));
-      } catch (error) {
-        // Without a working counter, do not spend: fail closed (reported as
-        // "unavailable", not "daily_limit").
-        console.warn("clef counter unavailable:", error instanceof Error ? error.message : error);
-        throw new Error(`Clef counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      if (!allowed) throw new RerankLimitError();
-      meter.calls += 1;
-      meter.neurons += neurons;
+      await charge(rerankInput(question, candidates, options));
       return inner.rerank(question, candidates, options);
     },
+    ...(inner.ask
+      ? {
+          async ask(state: Record<string, unknown>, questions: Record<string, string>) {
+            await charge(askInput(state, questions));
+            return inner.ask!(state, questions);
+          },
+        }
+      : {}),
   };
 }
 
