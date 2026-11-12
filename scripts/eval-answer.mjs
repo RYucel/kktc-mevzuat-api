@@ -51,6 +51,9 @@ const answers = (c) => (c.expect ? [c, ...(c.alt ?? [])] : []);
 const isDoc = (quote, c) => answers(c).some((a) => quote?.document_id === a.expect);
 // "Madde 3" must not match "Madde 30"; a part suffix ("Madde 3 (2/2)") is fine.
 const sameArticle = (ref, expected) => ref === expected || (ref ?? "").startsWith(`${expected} `);
+// The answer must be in what the reader gets (the quoted window), not only in the article.
+const foldText = (text) => (text ?? "").replace(/I/g, "ı").replace(/İ/g, "i").toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, " ");
+const hasAnswer = (quote, c) => !!quote && (c.must ?? []).some((m) => foldText(quote.text).includes(foldText(m)));
 const acceptable = (c) => c.refs ?? (c.ref ? [c.ref] : []);
 const isArticle = (quote, c) =>
   answers(c).some(
@@ -106,6 +109,9 @@ for (const [n, c] of cases.entries()) {
         top: top ? { doc: top.document_id, ref: top.ref, p: top.probability ?? null } : null,
         doc1: isDoc(top, c),
         article1: isArticle(top, c),
+        // must: the quoted text of the first answer contains the answer phrase.
+        quote_has_answer: c.must?.length ? hasAnswer(top, c) : null,
+        quote3_has_answer: c.must?.length ? quotes.slice(0, 3).some((q) => hasAnswer(q, c)) : null,
         article5: quotes.some((quote) => isArticle(quote, c)),
         // Was the right article (or law) among what Clef chose from?
         candidates_article: seenByClef ? seenByClef.some((x) => isArticle(x, c)) : null,
@@ -150,6 +156,11 @@ for (const variant of variants) {
     doc1: ok.filter((v) => v.doc1).length,
     article1: ok.filter((v) => v.article1).length,
     article5: ok.filter((v) => v.article5).length,
+    must_known: ok.filter((v) => v.quote_has_answer !== null).length,
+    quote_has_answer: ok.filter((v) => v.quote_has_answer).length,
+    // Right article first, but its quoted window misses the answer.
+    article_without_answer: ok.filter((v) => v.article1 && v.quote_has_answer === false).length,
+    quote3_has_answer: ok.filter((v) => v.quote3_has_answer).length,
     reranked: ok.filter((v) => v.rerank?.applied).length,
     ms: ok.length ? Math.round(ok.reduce((s, v) => s + v.ms, 0) / ok.length) : null,
     rows_read: (() => {
@@ -213,6 +224,19 @@ for (const [variant, s] of Object.entries(summary)) {
     return b ? `${b.right}/${b.n}` : "–";
   };
   md.push(`| ${variant} | **${s.high_wrong}/${s.high}** | ${pct(s.doc1, s.n)} | ${pct(s.article1, s.n)} | ${pct(s.article5, s.n)} | ${s.reranked}/${s.n} | ${s.rewrite_known ? `${s.rewrite_cached}/${s.rewrite_known}` : "–"} | ${s.ms ?? "–"} | ${s.rows_read ?? "–"} | ${s.neurons ?? "–"}${s.clef_calls !== null ? ` (${s.clef_calls})` : ""} | ${conf("high")} | ${conf("medium")} | ${conf("low")} |`);
+}
+// 95% Wilson interval: with 64 questions one question is 1.6 points.
+const wilson = (x, n) => {
+  if (!n) return "–";
+  const z = 1.96, p = x / n, d = 1 + (z * z) / n;
+  const mid = (p + (z * z) / (2 * n)) / d, half = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / d;
+  return `${(Math.max(0, mid - half) * 100).toFixed(0)}–${(Math.min(1, mid + half) * 100).toFixed(0)}%`;
+};
+if (Object.values(summary).some((s) => s.must_known)) {
+  md.push("", "| Varyant | doğru madde @1 (%95 aralık) | alıntı cevabı içeriyor @1 | ilk 3 alıntıdan biri cevabı içeriyor | doğru madde ama alıntıda cevap yok |", "|---|---|---|---|---|");
+  for (const [variant, s] of Object.entries(summary)) {
+    md.push(`| ${variant} | ${pct(s.article1, s.n)} (${wilson(s.article1, s.n)}) | ${s.must_known ? `${s.quote_has_answer}/${s.must_known} (${wilson(s.quote_has_answer, s.must_known)})` : "–"} | ${s.must_known ? `${s.quote3_has_answer}/${s.must_known}` : "–"} | ${s.must_known ? s.article_without_answer : "–"} |`);
+  }
 }
 if (Object.values(summary).some((s) => s.law_known)) {
   md.push("", "| Varyant | beklenen yasa kısa listede | yasa seçimi @1 |", "|---|---|---|");
