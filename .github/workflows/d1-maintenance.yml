@@ -14,6 +14,8 @@ name: D1 maintenance
 #              its parent law; OPUS-GOREVLER-4 item 8).
 #   usage:     daily counters (answers by confidence, caps, Clef neurons) and
 #              verdicts per document for the last 14 days; numbers only.
+#   toc:       article headings and opening text of the given statutes
+#              (input ids), for the term dictionary.
 #   rewrites:  the cached LLM rewrites of the eval questions only. The cache
 #              also holds real users' questions; the log is public, so those
 #              are never printed.
@@ -24,8 +26,12 @@ on:
       task:
         description: "Görev"
         type: choice
-        options: [optimize, info, inventory, texts, rewrites, articles, regulation-heads, usage, sample-articles]
+        options: [optimize, info, inventory, texts, rewrites, articles, regulation-heads, usage, sample-articles, toc]
         default: optimize
+      ids:
+        description: "toc: belge kimlikleri (virgülle)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -132,3 +138,8 @@ jobs:
       - name: Sample articles for new eval questions
         if: ${{ inputs.task == 'sample-articles' }}
         run: python3 scripts/sample-articles.py scripts/eval-questions.json scripts/eval-holdout.json
+      - name: Table of contents of given statutes
+        if: ${{ inputs.task == 'toc' }}
+        env:
+          IDS: ${{ inputs.ids }}
+        run: python3 scripts/statute-toc.py "$IDS"
