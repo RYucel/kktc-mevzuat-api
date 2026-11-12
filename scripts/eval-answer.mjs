@@ -72,7 +72,14 @@ async function answer(q, variant, c = {}) {
     const response = await fetch(url);
     if (response.ok) {
       const rows = response.headers.get("x-d1-rows-read");
-      return { body: await response.json(), ms: Date.now() - started, rowsRead: rows === null ? null : Number(rows) };
+      const neurons = response.headers.get("x-clef-neurons");
+      return {
+        body: await response.json(),
+        ms: Date.now() - started,
+        rowsRead: rows === null ? null : Number(rows),
+        neurons: neurons === null ? null : Number(neurons),
+        clefCalls: response.headers.get("x-clef-calls") === null ? null : Number(response.headers.get("x-clef-calls")),
+      };
     }
     if (attempt >= 2 || response.status < 500) throw new Error(`HTTP ${response.status}`);
     await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
@@ -85,13 +92,15 @@ for (const [n, c] of cases.entries()) {
   const marks = [];
   for (const variant of variants) {
     try {
-      const { body, ms, rowsRead } = await answer(c.q, variant, c);
+      const { body, ms, rowsRead, neurons, clefCalls } = await answer(c.q, variant, c);
       const quotes = body.quotes ?? [];
       const top = quotes[0];
       const seenByClef = body.rerank?.debug_candidates ?? null;
       const result = {
         ms,
         rows_read: rowsRead,
+        neurons,
+        clef_calls: clefCalls,
         confidence: body.confidence,
         rerank: body.rerank ?? null,
         top: top ? { doc: top.document_id, ref: top.ref, p: top.probability ?? null } : null,
@@ -143,6 +152,15 @@ for (const variant of variants) {
       const counted = ok.filter((v) => typeof v.rows_read === "number" && v.rows_read > 0);
       return counted.length ? Math.round(counted.reduce((s, v) => s + v.rows_read, 0) / counted.length) : null;
     })(),
+    // Clef neurons and calls per question (x-clef-neurons; all questions, unanswerable too).
+    neurons: (() => {
+      const counted = all.filter((v) => typeof v.neurons === "number");
+      return counted.length ? Number((counted.reduce((s, v) => s + v.neurons, 0) / counted.length).toFixed(1)) : null;
+    })(),
+    clef_calls: (() => {
+      const counted = all.filter((v) => typeof v.clef_calls === "number");
+      return counted.length ? Number((counted.reduce((s, v) => s + v.clef_calls, 0) / counted.length).toFixed(2)) : null;
+    })(),
     byConfidence,
     candidates_article: ok.filter((v) => v.candidates_article).length,
     candidates_known: ok.filter((v) => v.candidates_article !== null).length,
@@ -182,13 +200,13 @@ const md = [
   `${rows.length} soru (${sets.join(", ")}). A = doğru madde, d = doğru yasa/yanlış madde, · = yanlış; cevapsız sorularda u = doğru şekilde "low", ! = emin bir cevap uydurdu.`,
   "",
 ];
-md.push("| Varyant | **high ama yanlış** | doğru yasa @1 | doğru madde @1 | doğru madde ilk 5'te | Clef uygulandı | LLM önbellekten | ort. ms | D1 satır/soru | high: isabet | medium: isabet | low: isabet |", "|---|---|---|---|---|---|---|---|---|---|---|---|");
+md.push("| Varyant | **high ama yanlış** | doğru yasa @1 | doğru madde @1 | doğru madde ilk 5'te | Clef uygulandı | LLM önbellekten | ort. ms | D1 satır/soru | Clef nöron/soru (çağrı) | high: isabet | medium: isabet | low: isabet |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|");
 for (const [variant, s] of Object.entries(summary)) {
   const conf = (label) => {
     const b = s.byConfidence[label];
     return b ? `${b.right}/${b.n}` : "–";
   };
-  md.push(`| ${variant} | **${s.high_wrong}/${s.high}** | ${pct(s.doc1, s.n)} | ${pct(s.article1, s.n)} | ${pct(s.article5, s.n)} | ${s.reranked}/${s.n} | ${s.rewrite_known ? `${s.rewrite_cached}/${s.rewrite_known}` : "–"} | ${s.ms ?? "–"} | ${s.rows_read ?? "–"} | ${conf("high")} | ${conf("medium")} | ${conf("low")} |`);
+  md.push(`| ${variant} | **${s.high_wrong}/${s.high}** | ${pct(s.doc1, s.n)} | ${pct(s.article1, s.n)} | ${pct(s.article5, s.n)} | ${s.reranked}/${s.n} | ${s.rewrite_known ? `${s.rewrite_cached}/${s.rewrite_known}` : "–"} | ${s.ms ?? "–"} | ${s.rows_read ?? "–"} | ${s.neurons ?? "–"}${s.clef_calls !== null ? ` (${s.clef_calls})` : ""} | ${conf("high")} | ${conf("medium")} | ${conf("low")} |`);
 }
 if (Object.values(summary).some((s) => s.law_known)) {
   md.push("", "| Varyant | beklenen yasa kısa listede | yasa seçimi @1 |", "|---|---|---|");
