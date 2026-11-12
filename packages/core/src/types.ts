@@ -39,6 +39,16 @@ export interface Store {
   rerank?: Reranker;
   /** Optional LLM query rewriter (Workers AI); used by answerQuestion. */
   rewriter?: QueryRewriter;
+  /** Optional: records a user's verdict on an answer (POST /v1/feedback, MCP geri_bildirim). False when the daily cap is reached. */
+  feedback?(entry: FeedbackEntry): Promise<boolean>;
+}
+
+/** A verdict on one quoted answer. The question itself is never stored, only its hash. */
+export interface FeedbackEntry {
+  q_hash: string;
+  document_id: string;
+  ref: string | null;
+  verdict: "dogru" | "yanlis";
 }
 
 export interface SearchParams {

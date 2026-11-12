@@ -22,6 +22,7 @@ import { changesHtml, changesMarkdown, feedHtml, getDocumentChanges, listChanges
 import { openapiDocument } from "./openapi.js";
 import { findStatutes, statuteCatalog } from "./titles.js";
 import { handleMcp } from "./mcp.js";
+import { recordFeedback } from "./feedback.js";
 import { SEMANTIC_DIMS, SEMANTIC_MODEL, type VectorUnit, type VectorWriter } from "./semantic.js";
 
 export const DECISION_MODELS = {
@@ -256,6 +257,9 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       offset: 0,
     };
     const response = await answerQuestion(store, params, origin);
+    // Read by the Worker for the daily confidence counters (numbers only).
+    c.header("x-answer-confidence", response.confidence);
+    if (response.confidence_caps?.length) c.header("x-answer-caps", response.confidence_caps.join(","));
     const format = (c.req.query("format") ?? "json").toLowerCase();
     if (format === "markdown" || format === "md") {
       return c.text(answerMarkdown(response), 200, {
@@ -475,6 +479,18 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
     return c.json(info);
   });
 
+  // A user's verdict on an answer (OPUS-GOREVLER-4 item 14): the question is
+  // stored only as a hash; capped per day by the Worker.
+  app.post("/v1/feedback", async (c) => {
+    let body: Record<string, unknown>;
+    try {
+      body = (await c.req.json()) as Record<string, unknown>;
+    } catch {
+      throw new ApiError(400, "invalid_json", "Gövde JSON olmalıdır: { soru, document_id, ref, verdict }.");
+    }
+    return c.json(await recordFeedback(store, body), 202);
+  });
+
   app.post("/mcp", async (c) => {
     const origin = requestOrigin(c);
     let payload: unknown;
@@ -616,6 +632,8 @@ function cacheableToolCall(payload: unknown): { id: unknown; key: string } | nul
   if (request.jsonrpc !== "2.0" || request.method !== "tools/call" || request.id === undefined) return null;
   const params = (request.params ?? {}) as { name?: unknown; arguments?: unknown };
   if (typeof params.name !== "string") return null;
+  // Writes are never cached.
+  if (params.name === "geri_bildirim") return null;
   return { id: request.id, key: JSON.stringify([params.name, sortKeys(params.arguments ?? {})]) };
 }
 

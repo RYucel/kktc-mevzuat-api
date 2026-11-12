@@ -13,6 +13,7 @@ import {
 import type { SearchParams, Store } from "./types.js";
 import { changesMarkdown, getDocumentChanges, listChanges } from "./changes.js";
 import { findStatutes, statuteCatalog } from "./titles.js";
+import { recordFeedback } from "./feedback.js";
 
 const PROTOCOL_VERSION = "2025-06-18";
 
@@ -39,6 +40,22 @@ function belgeArg(args: Record<string, unknown>): Pick<SearchParams, "doc_ids"> 
 }
 
 const TOOLS = [
+  {
+    name: "geri_bildirim",
+    description:
+      "sor aracının verdiği bir alıntının soruyu doğru cevaplayıp cevaplamadığını bildirir (yalnızca kullanıcı açıkça söylediğinde). " +
+      "Soru metni saklanmaz; yalnızca özeti (hash), belge, madde ve karar kaydedilir.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        soru: { type: "string" },
+        document_id: { type: "string" },
+        ref: { type: "string", description: "Alıntının maddesi (ör. 'Madde 43')." },
+        verdict: { type: "string", enum: ["dogru", "yanlis"] },
+      },
+      required: ["soru", "document_id", "verdict"],
+    },
+  },
   {
     name: "yasa_bul",
     description:
@@ -295,6 +312,9 @@ async function callTool(
         ...belgeArg(args),
       };
       return textResult(await searchDocuments(store, params, origin));
+    }
+    case "geri_bildirim": {
+      return textResult(await recordFeedback(store, args as Record<string, unknown>));
     }
     case "yasa_bul": {
       const name = strArg(args, "ad") ?? strArg(args, "name") ?? "";

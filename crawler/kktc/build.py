@@ -482,6 +482,16 @@ CREATE TABLE IF NOT EXISTS usage_counters (
     PRIMARY KEY (day, key)
 );
 
+-- Worker-side user verdicts (POST /v1/feedback); the question is stored only as a hash.
+CREATE TABLE IF NOT EXISTS feedback (
+    day TEXT NOT NULL,
+    q_hash TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    ref TEXT,
+    verdict TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 -- Worker-side LLM query-rewrite cache (apps/worker/src/index.ts); never reset by the data import.
 CREATE TABLE IF NOT EXISTS rewrite_cache (
     model TEXT NOT NULL,

@@ -18,6 +18,7 @@ import {
   type SemanticHit,
   timingSafeEqual,
   type Reranker,
+  type FeedbackEntry,
   RerankLimitError,
   rerankInput,
   type SemanticIndex,
@@ -356,6 +357,11 @@ async function rateLimited(request: Request, env: Env): Promise<Response | null>
   );
 }
 
+/** Verdicts per UTC day (POST /v1/feedback, MCP geri_bildirim). */
+const DEFAULT_FEEDBACK_DAILY_LIMIT = 500;
+const FEEDBACK_TABLE =
+  "CREATE TABLE IF NOT EXISTS feedback (day TEXT NOT NULL, q_hash TEXT NOT NULL, document_id TEXT NOT NULL, ref TEXT, verdict TEXT NOT NULL, created_at TEXT NOT NULL)";
+
 class D1Store implements Store {
   /** D1 rows read by this request (sent back as x-d1-rows-read). */
   rowsRead = 0;
@@ -383,6 +389,34 @@ class D1Store implements Store {
     this.rowsRead += Number((result.meta as { rows_read?: number } | undefined)?.rows_read ?? 0);
     return (result.results ?? []) as StoreRow[];
   }
+
+  /** One small write per verdict; capped per day, fail-closed. */
+  async feedback(entry: FeedbackEntry): Promise<boolean> {
+    const limit = this.feedbackLimit;
+    let allowed: boolean;
+    try {
+      allowed = limit > 0 && (await takeDaily(this.db, "feedback", limit));
+    } catch {
+      return false;
+    }
+    if (!allowed) return false;
+    const now = new Date().toISOString();
+    const insert = () =>
+      this.db
+        .prepare("INSERT INTO feedback (day, q_hash, document_id, ref, verdict, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(now.slice(0, 10), entry.q_hash, entry.document_id, entry.ref, entry.verdict, now)
+        .run();
+    try {
+      await insert();
+    } catch (error) {
+      if (!/no such table/i.test(String(error))) throw error;
+      await this.db.prepare(FEEDBACK_TABLE).run();
+      await insert();
+    }
+    return true;
+  }
+
+  feedbackLimit = DEFAULT_FEEDBACK_DAILY_LIMIT;
 
   async first(sql: string, binds: unknown[] = []): Promise<StoreRow | null> {
     // .all() rather than .first(): only .all() reports rows_read.
@@ -525,6 +559,16 @@ export default {
     out.headers.set("x-d1-rows-read", String(store.rowsRead));
     out.headers.set("x-d1-queries", String(store.queries));
     out.headers.set("x-clef-calls", String(meter.calls));
+    // Daily confidence and cap counts of user answers (numbers only, no questions).
+    const confidence = response.headers.get("x-answer-confidence");
+    if (confidence && !admin && response.status === 200) {
+      const keys = [`answer-${confidence}`, ...(response.headers.get("x-answer-caps") ?? "").split(",").filter(Boolean).map((cap) => `cap-${cap}`)];
+      ctx.waitUntil(
+        Promise.all(keys.map((key) => takeDaily(env.DB, key, Number.MAX_SAFE_INTEGER))).catch((error) =>
+          console.warn("answer counters:", error instanceof Error ? error.message : error),
+        ),
+      );
+    }
     out.headers.set("x-clef-neurons", meter.neurons.toFixed(2));
     return out;
   },
