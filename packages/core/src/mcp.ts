@@ -43,7 +43,8 @@ const TOOLS = [
     name: "yasa_bul",
     description:
       "Bir yasa veya tüzüğü adıyla, yaygın adıyla (ör. 'Ceza Yasası', 'Aile Yasası') ya da numarasıyla (22/1992) bulur; id, okunur ad, tür ve metin durumunu döndürür. " +
-      "Sorunun hangi yasayla ilgili olduğunu biliyorsanız önce bunu kullanın, sonra sor aracını belge=id ile çağırın.",
+      "Sorunun hangi yasayla ilgili olduğunu biliyorsanız önce bunu kullanın, sonra sor aracını belge=id ile çağırın. " +
+      "Yasalar için o yasa altında çıkarılan tüzükleri (regulations), tüzükler için dayanak yasayı (parent_law) da verir: usul, süre, form ve ücret gibi ayrıntılar çoğu zaman tüzüktedir.",
     inputSchema: {
       type: "object",
       properties: { ad: { type: "string", description: "Yasa/tüzük adı veya numarası." } },

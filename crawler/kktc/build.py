@@ -15,6 +15,7 @@ from typing import Any, Iterable, Optional
 from .config import DB_PATH, DIST_DIR
 from .history import HISTORY_TABLES_SQL
 from .cards import display_title, statute_card
+from .parents import LawIndex, parent_law
 from .textproc import Chunk, chunk_document, clean_text, index_text, normalize_title
 
 log = logging.getLogger(__name__)
@@ -177,6 +178,9 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
 
     document_rows = []
     chunk_rows = []
+    # Regulations name the law they are made under (OPUS-GOREVLER-4 item 8).
+    laws = LawIndex((d["_id"], clean_text(d.get("title") or "")) for d in docs if (d.get("type") or "yasa") == "yasa")
+    parents_found = parents_missing = 0
 
     for doc in sorted(docs, key=lambda d: (d.get("type") or "", d.get("date") or "", d.get("title") or "")):
         pkey = (doc.get("extra") or {}).get("pkey") or doc.get("number")
@@ -196,6 +200,13 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
             card = statute_card(chunks)
             if card:
                 extra["card"] = card
+        if doc.get("type") == "tuzuk" and content:
+            parent = parent_law(content[:4000], laws)
+            if parent:
+                extra["parent_law"] = parent
+                parents_found += 1
+            elif "degisiklik" not in normalize_title(title):
+                parents_missing += 1
         date = _valid_date(doc)
         if doc.get("date") and not date:
             extra["source_date_raw"] = str(doc.get("date"))
@@ -325,6 +336,7 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
     conn.close()
 
     meta["db_bytes"] = db_path.stat().st_size
+    log.info("regulations with a parent law: %d (not found: %d, amendments excluded)", parents_found, parents_missing)
     log.info(
         "built %s: %d documents, %d chunks, %.1f MB",
         db_path,

@@ -13,6 +13,8 @@ export interface StatuteTitle {
   display?: string;
   number?: string | null;
   text_status?: string;
+  /** Regulations: the law they are made under (crawler/kktc/parents.py). */
+  parent?: string;
 }
 
 let cache: { at: number; titles: StatuteTitle[]; superseded: Set<string> } | null = null;
@@ -21,7 +23,7 @@ async function load(store: Store) {
   const now = Date.now();
   if (cache && now - cache.at < TTL_MS) return cache;
   const rows = await store.all(
-    `SELECT id, title, type, source, number, text_status, json_extract(extra_json, '$.display_title') AS display FROM documents WHERE type IN (${LEGISLATION.map(() => "?").join(",")})`,
+    `SELECT id, title, type, source, number, text_status, json_extract(extra_json, '$.display_title') AS display, json_extract(extra_json, '$.parent_law') AS parent FROM documents WHERE type IN (${LEGISLATION.map(() => "?").join(",")})`,
     LEGISLATION,
   );
   const titles = rows.map((row) => ({
@@ -32,9 +34,30 @@ async function load(store: Store) {
     display: row.display ? String(row.display) : "",
     number: row.number ? String(row.number) : null,
     text_status: String(row.text_status ?? ""),
+    ...(row.parent ? { parent: String(row.parent) } : {}),
   }));
   cache = { at: now, titles, superseded: supersededCopies(titles) };
   return cache;
+}
+
+/**
+ * Regulations made under a law (from their opening text), without amendment
+ * instruments, superseded copies or documents without text.
+ */
+export async function regulationsOf(store: Store, lawId: string): Promise<StatuteTitle[]> {
+  const { titles, superseded } = await load(store);
+  return titles.filter(
+    (t) => t.parent === lawId && t.type === "tuzuk" && !isAmendment(t.title) && !superseded.has(t.id) && t.text_status !== "metadata",
+  );
+}
+
+/** The law a regulation is made under, with its readable name. */
+export async function parentLaw(store: Store, id: string): Promise<{ id: string; title: string } | null> {
+  const { titles } = await load(store);
+  const parent = titles.find((t) => t.id === id)?.parent;
+  if (!parent) return null;
+  const law = titles.find((t) => t.id === parent);
+  return law ? { id: law.id, title: law.display || law.title } : null;
 }
 
 /** Titles of all statutes, cached per isolate for ten minutes (one small D1 read). */
@@ -120,6 +143,10 @@ export interface StatuteHit {
   title: string;
   type: string;
   text_status: string;
+  /** Laws: regulations made under it (yasa_bul). */
+  regulations?: { id: string; name: string }[];
+  /** Regulations: the law it is made under. */
+  parent_law?: { id: string; name: string };
 }
 
 /** Statutes whose name, readable name or common name matches (yasa_bul / GET /v1/statutes). */
@@ -149,7 +176,26 @@ export async function findStatutes(store: Store, name: string, limit = 10): Prom
   return scored
     .sort((a, b) => b.score - a.score || (a.t.display || a.t.title).length - (b.t.display || b.t.title).length)
     .slice(0, limit)
-    .map(({ t }) => ({ id: t.id, name: t.display || t.title, title: t.title, type: t.type, text_status: t.text_status ?? "" }));
+    .map(({ t }) => {
+      // A law's regulations (from their opening text), for searching one of them with `belge`.
+      const regulations =
+        t.type === "yasa"
+          ? titles
+              .filter((r) => r.parent === t.id && r.type === "tuzuk" && !isAmendment(r.title) && !superseded.has(r.id) && r.text_status !== "metadata")
+              .slice(0, 30)
+              .map((r) => ({ id: r.id, name: r.display || r.title }))
+          : [];
+      const parent = t.parent ? titles.find((p) => p.id === t.parent) : undefined;
+      return {
+        id: t.id,
+        name: t.display || t.title,
+        title: t.title,
+        type: t.type,
+        text_status: t.text_status ?? "",
+        ...(regulations.length ? { regulations } : {}),
+        ...(parent ? { parent_law: { id: parent.id, name: parent.display || parent.title } } : {}),
+      };
+    });
 }
 
 /** Statutes with text, without amendments and superseded copies, by name (katalog / GET /v1/statutes). */

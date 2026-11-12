@@ -238,6 +238,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       concept_agree: ["1", "true", "yes"].includes((c.req.query("concept_agree") ?? "").toLowerCase()),
       doc_ids: documentParam(c.req.query("document_id")),
       lawpick: ["1", "true", "yes"].includes((c.req.query("lawpick") ?? "").toLowerCase()),
+      children: ["1", "true", "yes"].includes((c.req.query("children") ?? "").toLowerCase()),
       verify: ["1", "true", "yes"].includes((c.req.query("verify") ?? "").toLowerCase()),
       verify_high: floatParam(c.req.query("verify_high"), "verify_high", 0.5, 0, 1),
       verify_low: floatParam(c.req.query("verify_low"), "verify_low", 0.15, 0, 1),

@@ -111,6 +111,12 @@ export interface SearchParams {
    * verify_low the answer is "low" (default false; measuring).
    */
   verify?: boolean;
+  /**
+   * /v1/answer: once the law is chosen, offer its regulations (by their
+   * cards) too: a question about detail is often answered by a regulation
+   * made under the law (default false; measuring).
+   */
+  children?: boolean;
   verify_high?: number;
   verify_low?: number;
   /** /v1/answer: statutes shown in the statute-choice step (default 20, 5-30). */
@@ -201,6 +207,8 @@ export interface AnswerQuote {
   consolidated_through: string | null;
   /** True when `text` is a window cut out of a longer article (see `url` for all of it). */
   excerpt: boolean;
+  /** Regulations: the law it is made under, when known. */
+  parent_law?: { id: string; title: string };
   /** Query content words found in the quoted passage. */
   coverage: { found: number; total: number };
   score: number;
@@ -227,6 +235,8 @@ export interface AnswerResponse {
     passages_per_document?: number;
     /** Focus step: Clef asked again among more articles of its chosen statute. */
     /** verify=1: the yes/no check of the first quote. */
+    /** children=1: the law's regulations offered, and the one chosen. */
+    children?: { law: string; regulations: number; chosen?: string; probability?: number; law_probability?: number; error?: string };
     verify?: { applied: boolean; answers?: number; refers?: number; error?: string; before?: "high" | "medium" | "low" };
     focus?: {
       document_id: string;
