@@ -126,6 +126,9 @@ for (const [n, c] of cases.entries()) {
         verify_refers: body.rerank?.verify?.applied ? body.rerank.verify.refers : null,
         verify_before: body.rerank?.verify?.applied ? body.rerank.verify.before : null,
         // lawpick: was the expected statute among the statutes shown, and chosen first?
+        // terms=1: a dictionary term found in the question named the right article.
+        term_article: Array.isArray(body.terms_matched) ? body.terms_matched.some((t) => isArticle(t, c)) : null,
+        term_count: Array.isArray(body.terms_matched) ? body.terms_matched.length : null,
         law_listed: body.rerank?.debug_laws ? body.rerank.debug_laws.some((x) => isDoc(x, c)) : null,
         law_pick1: body.rerank?.debug_laws ? isDoc(body.rerank.debug_laws[0], c) : null,
         // toc=1: was the right article among those chosen from the table of contents?
@@ -196,6 +199,9 @@ for (const variant of variants) {
     high: all.filter((v) => v.confidence === "high").length,
     rewrite_cached: all.filter((v) => v.rewrite_cached === true).length,
     rewrite_known: all.filter((v) => v.rewrite_cached !== null).length,
+    term_known: ok.filter((v) => v.term_article !== null).length,
+    term_article: ok.filter((v) => v.term_article).length,
+    term_any: ok.filter((v) => v.term_count > 0).length,
     law_known: ok.filter((v) => v.law_listed !== null).length,
     law_listed: ok.filter((v) => v.law_listed).length,
     law_pick1: ok.filter((v) => v.law_pick1).length,
@@ -280,6 +286,10 @@ for (const variant of variants) {
     md.push(`| ${t} | ${s.high} | ${s.wrong} |`);
   }
   md.push("", `5 katlı çapraz doğrulama: seçilen eşikler ${chosen.join(", ")}; ayrılan sorularda high ${cvHigh}, yanlış ${cvWrong}.`);
+}
+if (Object.values(summary).some((s) => s.term_known)) {
+  md.push("", "| Varyant | sözlükten terim bulunan soru | sözlük doğru maddeyi getirdi |", "|---|---|---|");
+  for (const [variant, s] of Object.entries(summary)) md.push(`| ${variant} | ${s.term_known ? `${s.term_any}/${s.term_known}` : "–"} | ${s.term_known ? `${s.term_article}/${s.term_known}` : "–"} |`);
 }
 if (Object.values(summary).some((s) => s.law_known)) {
   md.push("", "| Varyant | beklenen yasa kısa listede | yasa seçimi @1 |", "|---|---|---|");
