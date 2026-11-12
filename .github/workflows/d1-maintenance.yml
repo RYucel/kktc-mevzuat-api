@@ -10,6 +10,8 @@ name: D1 maintenance
 #   texts:     text status of every statute (JSON lines in the log).
 #   articles:  the expected articles of the eval questions (statute text
 #              only) and ids stored with leading zeros (scripts/eval-articles.py).
+#   regulation-heads: the opening text of every regulation (where it names
+#              its parent law; OPUS-GOREVLER-4 item 8).
 #   rewrites:  the cached LLM rewrites of the eval questions only. The cache
 #              also holds real users' questions; the log is public, so those
 #              are never printed.
@@ -20,7 +22,7 @@ on:
       task:
         description: "Görev"
         type: choice
-        options: [optimize, info, inventory, texts, rewrites, articles]
+        options: [optimize, info, inventory, texts, rewrites, articles, regulation-heads]
         default: optimize
 
 permissions:
@@ -105,3 +107,17 @@ jobs:
       - name: Expected articles of the eval questions
         if: ${{ inputs.task == 'articles' }}
         run: python3 scripts/eval-articles.py scripts/eval-questions.json scripts/eval-holdout.json
+      - name: Opening text of every regulation
+        if: ${{ inputs.task == 'regulation-heads' }}
+        working-directory: apps/worker
+        run: |
+          npx wrangler d1 execute kktc-mevzuat --remote --json --command "SELECT d.id, d.title, substr(c.text, 1, 400) AS head FROM documents d JOIN chunks c ON c.doc_id = d.id AND c.ord = (SELECT MIN(ord) FROM chunks WHERE doc_id = d.id AND kind != 'title') WHERE d.type = 'tuzuk' AND d.text_status != 'metadata' ORDER BY d.id" > /tmp/heads.json
+          python3 - <<'PY'
+          import json
+          rows = json.load(open("/tmp/heads.json"))[0]["results"]
+          print("HEADS-JSON-BEGIN")
+          for r in rows:
+              print(json.dumps(r, ensure_ascii=False))
+          print("HEADS-JSON-END")
+          print(len(rows), "regulations")
+          PY
