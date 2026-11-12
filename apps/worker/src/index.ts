@@ -1,10 +1,6 @@
 import {
   clefNeurons,
-  GEMINI_DECISION_MODEL,
-  geminiDecisionInput,
-  parseRerank,
   askInput,
-  parseAsk,
   clefReranker,
   createApp,
   DECISION_MODELS,
@@ -55,13 +51,6 @@ export interface Env {
   REWRITE_ADMIN_DAILY_LIMIT?: string;
   /** /admin/decide calls per UTC day (default 300). */
   DECIDE_ADMIN_DAILY_LIMIT?: string;
-  /**
-   * Gemini Decisions API key (measurement only): admin requests with
-   * decider=gemini use it instead of Clef, so user questions never go to Google.
-   */
-  GEMINI_API_KEY?: string;
-  /** Gemini decision calls per UTC day (default 3000; admin only). */
-  GEMINI_ADMIN_DAILY_LIMIT?: string;
   /** Per-client request limit (wrangler.toml [[ratelimits]]). */
   RATE_LIMITER?: RateLimit;
   /** Global per-minute circuit breaker (Durable Object, see gate.ts). */
@@ -115,54 +104,6 @@ async function takeDaily(db: D1Database, key: string, limit: number, amount = 1)
     row = await bump();
   }
   return Number(row?.n ?? Infinity) <= limit;
-}
-
-const DEFAULT_GEMINI_ADMIN_DAILY_LIMIT = 3000;
-const GEMINI_TIMEOUT_MS = 15000;
-
-/**
- * Gemini Decisions API as the decision model, for comparing with Clef on our
- * own eval questions. Counted per day, fail-closed; a rate-limit answer is
- * retried after a pause (free tier: 200 requests and 50K tokens a minute).
- */
-function geminiReranker(apiKey: string, db: D1Database, limit: number): Reranker {
-  const call = async (input: Record<string, unknown>): Promise<unknown> => {
-    let allowed: boolean;
-    try {
-      allowed = limit > 0 && (await takeDaily(db, "gemini-admin", limit));
-    } catch (error) {
-      throw new Error(`gemini counter unavailable: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    if (!allowed) throw new RerankLimitError("Gemini daily limit reached");
-    const body = JSON.stringify(input);
-    for (let attempt = 0; ; attempt++) {
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/decisions", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-        body,
-        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
-      });
-      if (response.ok) return response.json();
-      const text = (await response.text()).slice(0, 300);
-      const limited = response.status === 429 || /quota|rate|limit/i.test(text);
-      if (!limited || attempt >= 3) throw new Error(`Gemini HTTP ${response.status}: ${text}`);
-      await new Promise((resolve) => setTimeout(resolve, 15000 * (attempt + 1)));
-    }
-  };
-  return {
-    async rerank(question, candidates, options) {
-      const result = parseRerank(await call(geminiDecisionInput(question, candidates, options)), candidates.length, GEMINI_DECISION_MODEL);
-      if (!result) throw new Error("Gemini yanıtı çözümlenemedi.");
-      return result;
-    },
-    async ask(state, questions) {
-      const clef = askInput(state, questions) as { questions: unknown };
-      const output = await call({ model: GEMINI_DECISION_MODEL, input: JSON.stringify(state), questions: clef.questions });
-      const result = parseAsk(output, Object.keys(questions));
-      if (!result) throw new Error("Gemini evet/hayır yanıtı çözümlenemedi.");
-      return result;
-    },
-  };
 }
 
 /** Clef use of one request (sent back as x-clef-calls and x-clef-neurons). */
@@ -517,10 +458,8 @@ export default {
       : Number(env.CLEF_DAILY_NEURONS ?? DEFAULT_CLEF_DAILY_NEURONS);
     const meter: ClefMeter = { calls: 0, neurons: 0 };
     // New keys in hundredths of a neuron (the old "clef" and "clef-admin" counted calls).
-    const gemini = admin && !!env.GEMINI_API_KEY && new URL(request.url).searchParams.get("decider") === "gemini";
-    const rerank = gemini
-      ? geminiReranker(env.GEMINI_API_KEY!, env.DB, Number(env.GEMINI_ADMIN_DAILY_LIMIT ?? DEFAULT_GEMINI_ADMIN_DAILY_LIMIT))
-      : decide && env.RERANK !== "off" && clefLimit > 0
+    const rerank =
+      decide && env.RERANK !== "off" && clefLimit > 0
         ? limitedReranker(clefReranker(decide), env.DB, clefLimit, admin ? "clef-admin-cn" : "clef-cn", meter)
         : undefined;
     const rewriteLimit = admin

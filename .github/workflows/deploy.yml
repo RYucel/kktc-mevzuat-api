@@ -59,17 +59,10 @@ jobs:
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         run: npm --workspace apps/worker run deploy
 
-      # Measurement only (decider=gemini on admin requests); skipped without the secret.
-      - name: Gemini key for measurements
+      # The Gemini comparison ended on 12 Nov 2026 (Clef stays); remove its key from the Worker.
+      - name: Remove the unused Gemini key
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          if [ -n "$GEMINI_API_KEY" ]; then
-            cd apps/worker && printf "%s" "$GEMINI_API_KEY" | npx wrangler secret put GEMINI_API_KEY
-          else
-            echo "GEMINI_API_KEY secret not set; skipping."
-          fi
+        run: cd apps/worker && (printf 'y\n' | npx wrangler secret delete GEMINI_API_KEY || true)
 
       - name: Derive admin token
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}

@@ -195,18 +195,6 @@ export function parseRerank(output: unknown, count: number, model = RERANK_MODEL
   return { model, probabilities, none: Number.isFinite(none) ? none : 0 };
 }
 
-/** Gemini Decisions API model (measured against Clef only; admin requests). */
-export const GEMINI_DECISION_MODEL = "gemini-decision-1";
-
-/**
- * The same choice question for the Gemini Decisions API: it takes the shared
- * context as one `input` string instead of Clef's `state` object.
- */
-export function geminiDecisionInput(question: string, candidates: RerankCandidate[], options: RerankOptions = {}): Record<string, unknown> {
-  const clef = rerankInput(question, candidates, options) as { state: unknown; questions: unknown };
-  return { model: GEMINI_DECISION_MODEL, input: JSON.stringify(clef.state), questions: clef.questions };
-}
-
 export function clefReranker(decide: DecideFn, model = RERANK_MODEL): Reranker {
   return {
     async ask(state, questions) {
