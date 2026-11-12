@@ -98,6 +98,12 @@ export interface SearchParams {
   rewrite_prompt?: "v1" | "v2";
   /** /v1/answer: choose the statute first from statute cards, then the article (default false; measuring). */
   lawpick?: boolean;
+  /**
+   * /v1/answer: in the focus step, also let Clef choose articles from the
+   * statute's table of contents (article headings); they join the focus
+   * candidates (default false; measuring).
+   */
+  toc?: boolean;
   /** /v1/answer: statutes shown in the statute-choice step (default 20, 5-30). */
   lawpick_n?: number;
   /** /v1/answer: "high" needs the answer from a concept's canonical statute when the question matches one (default false; measuring). */
@@ -211,7 +217,17 @@ export interface AnswerResponse {
     candidates?: number;
     passages_per_document?: number;
     /** Focus step: Clef asked again among more articles of its chosen statute. */
-    focus?: { document_id: string; document_ids?: string[]; candidates: number; applied: boolean; top_probability?: number; none_probability?: number; error?: string };
+    focus?: {
+      document_id: string;
+      document_ids?: string[];
+      candidates: number;
+      applied: boolean;
+      top_probability?: number;
+      none_probability?: number;
+      error?: string;
+      /** toc=1: articles chosen from the table of contents, best first (debug). */
+      toc?: { document_id: string; articles: number; calls: number; refs: string[]; error?: string }[];
+    };
     /** Only with debug=1: every candidate Clef saw, best first. */
     debug_candidates?: { document_id: string; ref: string | null; probability: number }[];
     /** The first step chose among statutes (lawpick), not passages. */

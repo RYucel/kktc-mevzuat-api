@@ -240,6 +240,19 @@ export function articleSql(id: string, ref: string): { sql: string; binds: unkno
   };
 }
 
+/**
+ * Table of contents: the first part of every article (SQLite takes the bare
+ * text column from the MIN(ord) row), cut to the heading and a line.
+ */
+export function tocSql(id: string): { sql: string; binds: unknown[] } {
+  return {
+    sql: `SELECT ref, MIN(ord) AS ord, substr(text, 1, 160) AS head FROM chunks
+          WHERE doc_id = ? AND kind = 'article' AND ref IS NOT NULL
+          GROUP BY ref ORDER BY ord`,
+    binds: [id],
+  };
+}
+
 export function articleListSql(id: string): { sql: string; binds: unknown[] } {
   return {
     sql: `SELECT ref, kind, MIN(ord) AS ord FROM chunks

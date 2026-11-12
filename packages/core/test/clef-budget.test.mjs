@@ -14,3 +14,10 @@ test("clefNeurons grows with the request", () => {
   const large = clefNeurons(rerankInput("soru", [{ label: "a", text: "x".repeat(400) }, { label: "b", text: "y".repeat(400) }]));
   assert.ok(large > small);
 });
+
+test("tocLabel: heading before the article number, or the first words", async () => {
+  const { tocLabel } = await import("../.test-build/operations.js");
+  assert.equal(tocLabel("Madde 203", "Taammüden Katil 203. Kim ki önceden tasarlayarak"), "Madde 203: Taammüden Katil");
+  assert.equal(tocLabel("Madde 5", "Hizmet Akdinin Fes-hinde Bildirim 5.(1) İşveren"), "Madde 5: Hizmet Akdinin Feshinde Bildirim");
+  assert.match(tocLabel("Madde 7", "7. (1) Bu Yasa kuralları uyarınca kurulan Kurul"), /^Madde 7: 7\. \(1\) Bu Yasa/);
+});

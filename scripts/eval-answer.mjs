@@ -116,6 +116,10 @@ for (const [n, c] of cases.entries()) {
         // lawpick: was the expected statute among the statutes shown, and chosen first?
         law_listed: body.rerank?.debug_laws ? body.rerank.debug_laws.some((x) => isDoc(x, c)) : null,
         law_pick1: body.rerank?.debug_laws ? isDoc(body.rerank.debug_laws[0], c) : null,
+        // toc=1: was the right article among those chosen from the table of contents?
+        toc5: body.rerank?.focus?.toc
+          ? body.rerank.focus.toc.some((t) => t.refs.some((ref) => isArticle({ document_id: t.document_id, ref }, c)))
+          : null,
       };
       row.variants[variant] = result;
       marks.push(c.unanswerable ? (result.abstained ? "u" : "!") : result.article1 ? "A" : result.doc1 ? "d" : "·");
@@ -178,6 +182,8 @@ for (const variant of variants) {
     law_known: ok.filter((v) => v.law_listed !== null).length,
     law_listed: ok.filter((v) => v.law_listed).length,
     law_pick1: ok.filter((v) => v.law_pick1).length,
+    toc_known: ok.filter((v) => v.toc5 !== null).length,
+    toc5: ok.filter((v) => v.toc5).length,
     // Questions answered by a regulation (tüzük): the statute_first rule must not lose them.
     tuzuk: ok.filter((v) => /tuzuk$/.test(v.set ?? "")).length,
     tuzuk_article1: ok.filter((v) => /tuzuk$/.test(v.set ?? "") && v.article1).length,
@@ -211,6 +217,10 @@ for (const [variant, s] of Object.entries(summary)) {
 if (Object.values(summary).some((s) => s.law_known)) {
   md.push("", "| Varyant | beklenen yasa kısa listede | yasa seçimi @1 |", "|---|---|---|");
   for (const [variant, s] of Object.entries(summary)) md.push(`| ${variant} | ${s.law_known ? `${s.law_listed}/${s.law_known}` : "–"} | ${s.law_known ? `${s.law_pick1}/${s.law_known}` : "–"} |`);
+}
+if (Object.values(summary).some((s) => s.toc_known)) {
+  md.push("", "| Varyant | doğru madde içindekiler seçiminde ilk 5'te |", "|---|---|");
+  for (const [variant, s] of Object.entries(summary)) md.push(`| ${variant} | ${s.toc_known ? `${s.toc5}/${s.toc_known}` : "–"} |`);
 }
 if (Object.values(summary).some((s) => s.tuzuk)) {
   md.push("", "| Varyant | cevabı tüzükte olan sorular: doğru madde @1 |", "|---|---|");
