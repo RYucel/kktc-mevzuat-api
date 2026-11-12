@@ -24,7 +24,7 @@ on:
       task:
         description: "Görev"
         type: choice
-        options: [optimize, info, inventory, texts, rewrites, articles, regulation-heads, usage]
+        options: [optimize, info, inventory, texts, rewrites, articles, regulation-heads, usage, sample-articles]
         default: optimize
 
 permissions:
@@ -129,3 +129,6 @@ jobs:
         run: |
           npx wrangler d1 execute kktc-mevzuat --remote --command "SELECT day, key, n FROM usage_counters WHERE day >= date('now', '-14 days') ORDER BY day, key"
           npx wrangler d1 execute kktc-mevzuat --remote --command "SELECT document_id, ref, verdict, COUNT(*) AS n FROM feedback WHERE day >= date('now', '-14 days') GROUP BY document_id, ref, verdict ORDER BY n DESC LIMIT 100" || echo "no feedback table yet"
+      - name: Sample articles for new eval questions
+        if: ${{ inputs.task == 'sample-articles' }}
+        run: python3 scripts/sample-articles.py scripts/eval-questions.json scripts/eval-holdout.json
