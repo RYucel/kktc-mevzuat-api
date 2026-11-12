@@ -8,6 +8,8 @@ name: D1 maintenance
 #              The repository is public: the report lists resource names
 #              and usage counts only (no ids, no secrets).
 #   texts:     text status of every statute (JSON lines in the log).
+#   articles:  the expected articles of the eval questions (statute text
+#              only) and ids stored with leading zeros (scripts/eval-articles.py).
 #   rewrites:  the cached LLM rewrites of the eval questions only. The cache
 #              also holds real users' questions; the log is public, so those
 #              are never printed.
@@ -18,7 +20,7 @@ on:
       task:
         description: "Görev"
         type: choice
-        options: [optimize, info, inventory, texts, rewrites]
+        options: [optimize, info, inventory, texts, rewrites, articles]
         default: optimize
 
 permissions:
@@ -100,3 +102,6 @@ jobs:
           print("REWRITES-JSON-END")
           print(f"{sum(r['q'] in wanted for r in rows)} eval rewrites printed; {len(rows)} cached in total")
           PY
+      - name: Expected articles of the eval questions
+        if: ${{ inputs.task == 'articles' }}
+        run: python3 scripts/eval-articles.py scripts/eval-questions.json scripts/eval-holdout.json
