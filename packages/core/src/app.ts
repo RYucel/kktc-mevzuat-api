@@ -240,6 +240,8 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       doc_ids: documentParam(c.req.query("document_id")),
       lawpick: ["1", "true", "yes"].includes((c.req.query("lawpick") ?? "").toLowerCase()),
       amended: !["0", "false", "no"].includes((c.req.query("amended") ?? "").toLowerCase()),
+      quote_chars: c.req.query("quote_chars") ? intParam(c.req.query("quote_chars"), "quote_chars", 320, 200, 2000) : undefined,
+      quote_pick: ["1", "true", "yes"].includes((c.req.query("quote_pick") ?? "").toLowerCase()),
       terms: ["1", "true", "yes"].includes((c.req.query("terms") ?? "").toLowerCase()),
       children: ["1", "true", "yes"].includes((c.req.query("children") ?? "").toLowerCase()),
       verify: ["1", "true", "yes"].includes((c.req.query("verify") ?? "").toLowerCase()),

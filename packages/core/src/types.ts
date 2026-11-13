@@ -129,6 +129,10 @@ export interface SearchParams {
   children?: boolean;
   /** /v1/answer: articles named by the term dictionary join the candidates (default false; measuring). */
   terms?: boolean;
+  /** /v1/answer: quoted text up to this many characters (whole article when shorter; default: 320-character snippet). */
+  quote_chars?: number;
+  /** /v1/answer: with quote_chars, let Clef choose the paragraph of a longer first article. */
+  quote_pick?: boolean;
   /** Internal: receives the dictionary terms found in the question. */
   term_sink?: { term: string; doc_id: string; ref: string; status: string }[];
   /** /v1/answer: cap "high" when a later amendment may have changed the quoted regulation article (default true). */
@@ -266,6 +270,8 @@ export interface AnswerResponse {
     /** verify=1: the yes/no check of the first quote. */
     /** children=1: the law's regulations offered, and the one chosen. */
     children?: { law: string; regulations: number; chosen?: string; probability?: number; law_probability?: number; error?: string };
+    /** quote_pick=1: the paragraph shown for the first quote. */
+    quote_pick?: { paragraphs: number; chosen: number; probability: number };
     verify?: { applied: boolean; answers?: number; refers?: number; error?: string; before?: "high" | "medium" | "low" };
     focus?: {
       document_id: string;

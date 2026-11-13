@@ -978,18 +978,21 @@ export async function answerQuestion(
   for (const [index, passage] of candidates.entries()) {
     if (quotes.length >= limit) break;
     const result = passage.result;
+    // quote_chars / quote_pick (OPUS-GOREVLER-4 item 12): the 320-character
+    // window missed the answer in 42 of 94 right articles on 13 Nov.
+    const shown = await quoteWindow(passage, params, quotes.length === 0 ? reranker : undefined, rerank);
     quotes.push({
       document_id: result.id,
       title: result.title,
       ref: passage.ref,
       citation: result.citation,
-      text: passage.snippet,
+      text: shown,
       url: passage.url,
       source_url: result.source_url,
       text_status: result.text_status,
       source: result.source,
       consolidated_through: result.consolidated_through,
-      excerpt: passage.snippet.startsWith("…") || passage.snippet.endsWith("…"),
+      excerpt: shown.startsWith("…") || shown.endsWith("…"),
       kaynak: sourceLine(names.get(result.id) ?? result.citation ?? result.title, passage.ref, result),
       ...(parents.get(result.id) ? { parent_law: parents.get(result.id)! } : {}),
       ...(() => {
@@ -998,7 +1001,7 @@ export async function answerQuestion(
         return hits.length ? { amended_after: hits } : {};
       })(),
       // Measured on the quoted window itself: that is what the reader gets.
-      coverage: stemCoverage(passage.snippet, params.q),
+      coverage: stemCoverage(shown, params.q),
       score: result.score,
       ...(probabilities ? { probability: round3(probabilities[index]) } : {}),
     });
@@ -1216,6 +1219,59 @@ async function locateArticles(store: Store, pairs: { docId: string; ref: string 
     if (!out.has(key)) out.set(key, Number(row.ord));
   }
   return out;
+}
+
+/** quote_pick: the paragraph choice question. */
+const QUOTE_PICK_OPTIONS = {
+  instructions: "Sorunun cevabı maddenin hangi fıkrasında? Cevabı doğrudan veren fıkrayı seç.",
+  chars: 450,
+  none: "Hiçbir fıkra soruyu cevaplamıyor",
+};
+
+/**
+ * The text shown for a quote. Default: the search snippet (320 characters
+ * around the question's words). quote_chars=N: the whole article when it is at
+ * most N characters, otherwise an N-character window. quote_pick=1 (first
+ * quote only): for a longer article, Clef chooses the paragraph ("(1)", "(2)",
+ * ...) that answers, and that paragraph is shown.
+ */
+async function quoteWindow(
+  passage: Passage,
+  params: SearchParams,
+  reranker: Store["rerank"] | undefined,
+  rerank: AnswerResponse["rerank"] | undefined,
+): Promise<string> {
+  const width = params.quote_chars;
+  if (!width) return passage.snippet;
+  const full = passage.text.replace(/…\s*$/, "").replace(/\s+/g, " ").trim();
+  if (full.length <= width) return full;
+  if (params.quote_pick && reranker) {
+    const parts = full.split(/(?=\(\d{1,2}\)\s)/).map((p) => p.trim()).filter((p) => p.length > 20);
+    if (parts.length >= 2 && parts.length <= 30) {
+      try {
+        const answer = await reranker.rerank(
+          params.q,
+          parts.map((p, i) => ({ label: `${passage.ref ?? ""} fıkra ${i + 1}`, text: p })),
+          QUOTE_PICK_OPTIONS,
+        );
+        let best = 0;
+        answer.probabilities.forEach((p, i) => {
+          if (p > (answer.probabilities[best] ?? 0)) best = i;
+        });
+        const p = answer.probabilities[best] ?? 0;
+        if (rerank) rerank.quote_pick = { paragraphs: parts.length, chosen: best + 1, probability: round3(p) };
+        if (p > answer.none) {
+          const chosen = parts[best];
+          const text = chosen.length <= width ? chosen : makeSnippet(chosen, params.q, width);
+          const startsArticle = full.startsWith(chosen);
+          return `${startsArticle || text.startsWith("…") ? "" : "…"}${text}${full.endsWith(chosen) || text.endsWith("…") ? "" : "…"}`;
+        }
+      } catch {
+        // fall back to the window below
+      }
+    }
+  }
+  return makeSnippet(full, params.q, width);
 }
 
 /** amended_after of the quoted documents (build: crawler/kktc/amendments.py). */
