@@ -193,7 +193,11 @@ taşır. \`relevant_documents\` getirilen pencere içinde \`min_score\` eşiğin
 
 ### 1b) Alıntı yanıtı — \`GET /v1/answer\`
 
-Parametreler: \`q\` (zorunlu), \`type?\`, \`prefer?\`, \`mode?\`, \`limit\` (1–5), \`rerank=0?\`, \`format=json|markdown\`.
+Parametreler: \`q\` (zorunlu), \`type?\`, \`prefer?\`, \`mode?\`, \`limit\` (1–5), \`rerank=0?\`, \`category?\`, \`format=json|markdown\`.
+
+\`category\` sorunun konusudur (liste: \`GET /v1/categories\`; ör. \`aile\`, \`ceza\`, \`is-sosyal-guvenlik\`). Konuyu
+biliyorsanız verin, emin değilseniz vermeyin: konunun yasaları öne alınır, diğerleri dışlanmaz. Cevap konunun
+dışındaki bir yasadansa \`category.outside\` true olur ve \`confidence\` "high" olamaz (\`outside_category\`).
 
 \`\`\`bash
 curl "${origin}/v1/answer?q=mal%20payla%C5%9F%C4%B1m%C4%B1nda%20e%C5%9Flere%20d%C3%BC%C5%9Fen%20en%20az%20oran&format=markdown"

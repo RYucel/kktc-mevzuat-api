@@ -65,11 +65,49 @@ const isArticle = (quote, c) =>
 // oracle_doc=1: the expected statute is given as document_id, so the run shows
 // how well the article is found once the statute is right (the ceiling of
 // statute selection). Unanswerable questions run without it.
+// category=auto / category=wrong (OPUS-GOREVLER-4 item 21): the category is
+// derived from the expected statute's own categories (from the build, never
+// written by hand per question). auto: its first category; wrong: the next
+// category in the list that the statute does not have (deterministic).
+// Unanswerable questions get a category picked from the question's hash
+// (choosing a category must not break "low").
+let categoryList = null;
+const docCategories = new Map();
+async function categoryFor(c, how) {
+  if (!categoryList) {
+    const body = await (await fetch(`${base}/v1/categories`)).json();
+    categoryList = body.categories.map((x) => x.id);
+  }
+  if (!c.expect) {
+    let h = 0;
+    for (const ch of c.q) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return categoryList[h % categoryList.length];
+  }
+  if (!docCategories.has(c.expect)) {
+    const body = await (await fetch(`${base}/v1/categories?document_id=${encodeURIComponent(c.expect)}`)).json();
+    docCategories.set(c.expect, body.categories ?? []);
+  }
+  const own = docCategories.get(c.expect);
+  if (!own.length) return null;
+  if (how === "auto") return own[0];
+  const start = categoryList.indexOf(own[0]);
+  for (let i = 1; i < categoryList.length; i++) {
+    const next = categoryList[(start + i) % categoryList.length];
+    if (!own.includes(next) && next !== "diger") return next;
+  }
+  return null;
+}
+
 async function answer(q, variant, c = {}) {
   let query = variant;
   if (/(^|&)oracle_doc=1(&|$)/.test(variant)) {
     query = variant.replace(/(^|&)oracle_doc=1(?=&|$)/, "");
     if (c.expect) query += `${query ? "&" : ""}document_id=${encodeURIComponent(c.expect)}`;
+  }
+  const how = /(?:^|&)category=(auto|wrong)(?=&|$)/.exec(query)?.[1];
+  if (how) {
+    const category = await categoryFor(c, how);
+    query = query.replace(/(^|&)category=(auto|wrong)(?=&|$)/, category ? `$1category=${category}` : "");
   }
   const url = `${base}/v1/answer?q=${encodeURIComponent(q)}&limit=5&debug=1&${query}`;
   for (let attempt = 0; ; attempt++) {
@@ -121,6 +159,7 @@ for (const [n, c] of cases.entries()) {
         abstained: body.confidence === "low",
         rewrite_cached: body.query_rewrite ? !!body.query_rewrite.cached : null,
         caps: body.confidence_caps ?? [],
+        category: body.category ? { id: body.category.id, outside: body.category.outside } : null,
         // verify=1: probability that the quoted window answers (for choosing thresholds offline).
         verify: body.rerank?.verify?.applied ? body.rerank.verify.answers : null,
         verify_refers: body.rerank?.verify?.applied ? body.rerank.verify.refers : null,
@@ -307,6 +346,19 @@ md.push("", "### Güven düşürme nedenleri (doğru / yanlış cevapta)", "", "
 for (const [variant, s] of Object.entries(summary)) {
   const caps = Object.entries(s.caps ?? {}).map(([cap, b]) => `${cap}: ${b.right} doğru / ${b.wrong} yanlış`).join("; ");
   md.push(`| ${variant} | ${caps || "–"} |`);
+}
+// category variants: how often the answer came from outside the given category.
+const categoryVariants = variants.filter((v) => /(?:^|&)category=/.test(v));
+if (categoryVariants.length) {
+  md.push("", "### Kategori (category=...)", "", "| Varyant | kategori verilen soru | cevap kategori dışında: doğru / yanlış | cevapsızlarda \"low\" |", "|---|---|---|---|");
+  for (const variant of categoryVariants) {
+    const vs = rows.map((r) => ({ v: r.variants[variant], r })).filter(({ v }) => v && !v.error);
+    const given = vs.filter(({ v }) => v.category);
+    const outside = given.filter(({ v }) => v.category.outside);
+    const right = outside.filter(({ v, r }) => !r.unanswerable && v.article1).length;
+    const un = vs.filter(({ r }) => r.unanswerable);
+    md.push(`| ${variant} | ${given.length}/${vs.length} | ${right} / ${outside.length - right} | ${un.filter(({ v }) => v.abstained).length}/${un.length} |`);
+  }
 }
 md.push("", "### Teşhis: kaçan sorular nerede kaçtı?", "", "| Varyant | doğru madde Clef'in adaylarında | kaçan: yasa adaylarda yok | kaçan: yasa var, madde yok | kaçan: madde vardı, seçilmedi | cevapsız sorularda \"low\" |", "|---|---|---|---|---|---|");
 for (const [variant, s] of Object.entries(summary)) {

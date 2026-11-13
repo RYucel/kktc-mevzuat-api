@@ -129,6 +129,10 @@ export interface SearchParams {
   children?: boolean;
   /** /v1/answer: articles named by the term dictionary join the candidates (default false; measuring). */
   terms?: boolean;
+  /** Subject category chosen by the user (categories.ts); absent means all statutes. */
+  category?: string;
+  /** soft (default): the category's statutes lead; hard: only the category's statutes. */
+  category_mode?: "soft" | "hard";
   /** /v1/answer: quoted text up to this many characters (whole article when shorter; default: 320-character snippet). */
   quote_chars?: number;
   /** /v1/answer: with quote_chars, let Clef choose the paragraph of a longer first article. */
@@ -256,6 +260,8 @@ export interface AnswerResponse {
   confidence: "high" | "medium" | "low";
   /** Why a "high" was lowered to "medium" (absent when nothing was capped). */
   confidence_caps?: ConfidenceCap[];
+  /** The subject category the question was asked under, and whether the answer is outside it. */
+  category?: { id: string; name: string; mode: "soft" | "hard"; outside: boolean };
   /** debug=1 with terms=1: dictionary terms found in the question. */
   terms_matched?: { term: string; document_id: string; ref: string; status: string }[];
   /** Present when an LLM rewrote the question for the search (never the answer). */
@@ -414,7 +420,8 @@ export interface StatsResponse {
  * regulation: a tüzük answered a question that did not ask for one;
  * rewrite_disagrees: the answer is from none of the statutes the LLM named;
  * partial_text: the statute's text is incomplete (partial download or scan);
- * foreign_jurisdiction: the question asks about another country (lowered to "low").
+ * foreign_jurisdiction: the question asks about another country (lowered to "low");
+ * outside_category: the answer is from a statute outside the category the user chose.
  */
 export type ConfidenceCap =
   | "regulation"
@@ -423,7 +430,8 @@ export type ConfidenceCap =
   | "partial_text"
   | "foreign_jurisdiction"
   | "unverified"
-  | "possibly_amended";
+  | "possibly_amended"
+  | "outside_category";
 
 export interface QueryRewriteInfo {
   terms: string[];

@@ -1,3 +1,4 @@
+import { CATEGORIES, CATEGORY_IDS } from "./categories.js";
 import {
   ApiError,
   answerQuestion,
@@ -77,6 +78,7 @@ const TOOLS = [
       type: "object",
       properties: {
         tur: { type: "string", enum: ["yasa", "tuzuk", "anayasa"] },
+        kategori: { type: "string", enum: CATEGORIES.map((c) => c.id), description: "Yalnız bu konunun yasa ve tüzükleri." },
         sayfa: { type: "integer", minimum: 1, maximum: 50 },
       },
     },
@@ -133,6 +135,14 @@ const TOOLS = [
         },
         prefer: { type: "string", enum: ["mevzuat", "ictihat"] },
         adet: { type: "integer", minimum: 1, maximum: 5, description: "Alıntı sayısı." },
+        kategori: {
+          type: "string",
+          enum: CATEGORIES.map((c) => c.id),
+          description:
+            "Sorunun konusu: " +
+            CATEGORIES.map((c) => `${c.id} (${c.name})`).join(", ") +
+            ". Konuyu biliyorsanız kategori verin; emin değilseniz vermeyin. Konunun yasaları öne alınır, diğerleri dışlanmaz.",
+        },
       },
       required: ["soru"],
     },
@@ -324,8 +334,15 @@ async function callTool(
     case "katalog": {
       const type = strArg(args, "tur");
       const page = Math.min(50, Math.max(1, intArg(args, "sayfa", 1) ?? 1));
-      const { total, items } = await statuteCatalog(store, type, page);
-      return textResult({ total, page, page_size: 200, items: items.map((i) => ({ id: i.id, ad: i.name, tur: i.type })) });
+      const category = mcpCategory(strArg(args, "kategori"));
+      const { total, items } = await statuteCatalog(store, type, page, 200, category);
+      return textResult({
+        total,
+        page,
+        page_size: 200,
+        ...(category ? { kategori: category } : {}),
+        items: items.map((i) => ({ id: i.id, ad: i.name, tur: i.type, ...(i.categories ? { kategoriler: i.categories } : {}) })),
+      });
     }
     case "sor": {
       const query = strArg(args, "soru") ?? strArg(args, "query") ?? "";
@@ -341,6 +358,7 @@ async function callTool(
             limit: Math.min(5, Math.max(1, intArg(args, "adet", 3) ?? 3)),
             offset: 0,
             ...belgeArg(args),
+            ...(mcpCategory(strArg(args, "kategori")) ? { category: mcpCategory(strArg(args, "kategori")) } : {}),
           },
           origin,
         ),
@@ -518,4 +536,12 @@ function isRequest(value: unknown): value is JsonRpcRequest {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
   return candidate.jsonrpc === "2.0" && typeof candidate.method === "string";
+}
+
+/** MCP kategori: an unknown id is an error (the schema lists the ids). */
+function mcpCategory(value: string | undefined): string | undefined {
+  const id = (value ?? "").trim().toLowerCase();
+  if (!id) return undefined;
+  if (!CATEGORY_IDS.has(id)) throw new ApiError(400, "invalid_category", `kategori şunlardan biri olmalıdır: ${[...CATEGORY_IDS].join(", ")}.`);
+  return id;
 }

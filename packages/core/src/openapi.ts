@@ -1,3 +1,4 @@
+import { CATEGORIES } from "./categories.js";
 export function openapiDocument(origin: string): Record<string, unknown> {
   const errorResponse = {
     description: "Hata",
@@ -254,6 +255,14 @@ export function openapiDocument(origin: string): Record<string, unknown> {
             },
             { name: "prefer", in: "query", schema: { type: "string", enum: ["mevzuat", "ictihat"] } },
             { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 5, default: 3 } },
+            {
+              name: "category",
+              in: "query",
+              description:
+                "Sorunun konusu (GET /v1/categories). Konunun yasaları öne alınır; cevap konunun dışından gelirse category.outside true olur ve güven 'high' olamaz. Emin değilseniz vermeyin.",
+              schema: { type: "string", enum: CATEGORIES.map((c) => c.id) },
+            },
+            { name: "category_mode", in: "query", schema: { type: "string", enum: ["soft", "hard"], default: "soft" } },
             {
               name: "rerank",
               in: "query",

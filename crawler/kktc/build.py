@@ -17,6 +17,7 @@ from .config import DB_PATH, DIST_DIR
 from .history import HISTORY_TABLES_SQL
 from .cards import display_title, statute_card
 from .parents import LawIndex, parent_law
+from .categories import assign as assign_categories, load_categories
 from .amendments import later_amendments
 from .terms import accepted, load_terms
 from .textproc import Chunk, chunk_document, clean_text, index_text, normalize_title
@@ -194,6 +195,10 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
     # Regulations name the law they are made under (OPUS-GOREVLER-4 item 8).
     laws = LawIndex((d["_id"], clean_text(d.get("title") or "")) for d in docs if (d.get("type") or "yasa") == "yasa")
     parents_found = parents_missing = 0
+    # Subject categories (OPUS-GOREVLER-4 item 19).
+    _category_ids, category_file = load_categories(CATEGORIES_DIR)
+    category_counts: Counter[str] = Counter()
+    category_sources: Counter[str] = Counter()
     # Amendment regulations dated after a regulation's text (OPUS-GOREVLER-4 item 11).
     later = later_amendments((d["_id"], d, _valid_date(d)) for d in docs if d.get("type") == "tuzuk")
 
@@ -224,6 +229,14 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
                 parents_found += 1
             elif "degisiklik" not in normalize_title(title):
                 parents_missing += 1
+        if (doc.get("type") or "yasa") in CARD_TYPES and status != "metadata":
+            cats, origin = assign_categories(
+                doc_id, doc.get("type") or "yasa", title, extra.get("parent_law"), category_file, aliases=(doc["_id"],)
+            )
+            extra["categories"] = cats
+            category_sources[origin] += 1
+            for cat in cats:
+                category_counts[f"{doc.get('type') or 'yasa'}:{cat}"] += 1
         date = _valid_date(doc)
         if doc.get("date") and not date:
             extra["source_date_raw"] = str(doc.get("date"))
@@ -266,6 +279,12 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
             chunk_rows.append((doc_id, ord_, chunk.kind, chunk.ref, text, len(text)))
             total_chunks += 1
 
+    if category_sources:
+        log.info("categories: %s; by origin %s", dict(sorted(category_counts.items())), dict(category_sources))
+        diger = sum(n for k, n in category_counts.items() if k.endswith(":diger"))
+        total = sum(category_sources.values())
+        if total and diger / total > 0.15:
+            log.warning("categories: %d of %d statutes are 'diger' (over 15%%); review categories/", diger, total)
     conn.executemany(
         """
         INSERT INTO documents (
@@ -633,6 +652,7 @@ def _insert(table: str, record: dict[str, Any]) -> str:
 
 
 TERMS_DIR = Path(__file__).resolve().parents[2] / "terms"
+CATEGORIES_DIR = Path(__file__).resolve().parents[2] / "categories"
 
 
 def _terms_fingerprint(conn: sqlite3.Connection) -> Optional[str]:
