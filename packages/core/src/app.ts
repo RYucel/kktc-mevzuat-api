@@ -20,7 +20,8 @@ import { DOC_TYPES, type SearchParams, type Store, TYPE_LABELS } from "./types.j
 import { llmsText } from "./llms.js";
 import { changesHtml, changesMarkdown, feedHtml, getDocumentChanges, listChanges } from "./changes.js";
 import { openapiDocument } from "./openapi.js";
-import { canonicalDocId, findStatutes, statuteCatalog } from "./titles.js";
+import { canonicalDocId, categoryCounts, documentCategories, findStatutes, statuteCatalog } from "./titles.js";
+import { CATEGORIES, CATEGORY_IDS } from "./categories.js";
 import { handleMcp } from "./mcp.js";
 import { recordFeedback } from "./feedback.js";
 import { SEMANTIC_DIMS, SEMANTIC_MODEL, type VectorUnit, type VectorWriter } from "./semantic.js";
@@ -51,6 +52,22 @@ function requestOrigin(c: { req: { url: string; header(name: string): string | u
   const proto = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim() || url.protocol.replace(":", "");
   const host = c.req.header("x-forwarded-host")?.split(",")[0]?.trim() || c.req.header("host") || url.host;
   return `${proto}://${host}`;
+}
+
+function categoryParam(value: string | undefined): string | undefined {
+  const id = (value ?? "").trim().toLowerCase();
+  if (!id) return undefined;
+  if (!CATEGORY_IDS.has(id)) {
+    throw new ApiError(400, "invalid_category", `category şunlardan biri olmalıdır: ${[...CATEGORY_IDS].join(", ")} (liste: /v1/categories).`);
+  }
+  return id;
+}
+
+function categoryModeParam(value: string | undefined): "soft" | "hard" | undefined {
+  const mode = (value ?? "").trim().toLowerCase();
+  if (!mode) return undefined;
+  if (mode !== "soft" && mode !== "hard") throw new ApiError(400, "invalid_category_mode", "category_mode soft veya hard olmalıdır.");
+  return mode;
 }
 
 function intParam(
@@ -243,6 +260,8 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       quote_chars: c.req.query("quote_chars") ? intParam(c.req.query("quote_chars"), "quote_chars", 320, 200, 2000) : undefined,
       quote_pick: ["1", "true", "yes"].includes((c.req.query("quote_pick") ?? "").toLowerCase()),
       terms: ["1", "true", "yes"].includes((c.req.query("terms") ?? "").toLowerCase()),
+      category: categoryParam(c.req.query("category") ?? c.req.query("kategori")),
+      category_mode: categoryModeParam(c.req.query("category_mode")),
       children: ["1", "true", "yes"].includes((c.req.query("children") ?? "").toLowerCase()),
       verify: ["1", "true", "yes"].includes((c.req.query("verify") ?? "").toLowerCase()),
       verify_high: floatParam(c.req.query("verify_high"), "verify_high", 0.5, 0, 1),
@@ -384,7 +403,22 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
     const type = c.req.query("type");
     if (type && !["yasa", "tuzuk", "anayasa"].includes(type)) throw new ApiError(400, "invalid_type", "type yasa, tuzuk veya anayasa olmalıdır.");
     const page = intParam(c.req.query("page"), "page", 1, 1, 50);
-    return c.json({ page, page_size: 200, ...(await statuteCatalog(store, type, page)) });
+    const category = categoryParam(c.req.query("category"));
+    return c.json({ page, page_size: 200, ...(category ? { category } : {}), ...(await statuteCatalog(store, type, page, 200, category)) });
+  });
+
+  // Subject categories for /v1/answer?category= (and a statute's categories with ?document_id=).
+  app.get("/v1/categories", async (c) => {
+    const documentId = c.req.query("document_id");
+    if (documentId) {
+      const id = canonicalDocId(documentId.trim());
+      return c.json({ document_id: id, categories: await documentCategories(store, id) });
+    }
+    const counts = await categoryCounts(store);
+    return c.json({
+      modes: { soft: "konunun yasaları öne alınır (varsayılan)", hard: "yalnız konunun yasaları (ölçüm için)" },
+      categories: CATEGORIES.map((cat) => ({ ...cat, statutes: counts.get(cat.id) ?? {} })),
+    });
   });
 
   app.get("/v1/stats", async (c) => {

@@ -1,0 +1,37 @@
+/**
+ * Subject categories (OPUS-GOREVLER-4 items 19-20). The list mirrors
+ * categories/categories.json (a test keeps them equal); statutes carry their
+ * categories in documents.extra_json.categories from the build.
+ */
+export interface Category {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export const CATEGORIES: readonly Category[] = [
+  { id: "aile", name: "Aile", description: "Evlenme, boşanma, nafaka, velayet, evlat edinme, vesayet, miras ve çocuğun korunması." },
+  { id: "ceza", name: "Ceza", description: "Suçlar ve cezalar, ceza yargılaması, polis, cezaevi, silah ve uyuşturucu." },
+  { id: "is-sosyal-guvenlik", name: "İş ve sosyal güvenlik", description: "İş ilişkisi, işçi ve işveren, sendika, sosyal sigorta, emeklilik ve ihtiyat sandığı." },
+  { id: "vergi", name: "Vergi ve harçlar", description: "Vergiler, harçlar, gümrük, pul, teşvikler ve kamu alacaklarının tahsili." },
+  { id: "ticaret-sirketler", name: "Ticaret ve şirketler", description: "Şirketler, bankacılık, sigorta, sözleşmeler, iflas, marka ve patent, mesleki birlikler ve odalar." },
+  { id: "tasinmaz-kira", name: "Taşınmaz ve kira", description: "Tapu, kadastro, taşınmaz edinme ve devri, kira, kat mülkiyeti, imar ve yapı." },
+  { id: "tuketici", name: "Tüketici", description: "Tüketicinin korunması, ürün güvenliği, gıda, fiyat, etiket ve reklam." },
+  { id: "idare-kamu-gorevlileri", name: "İdare ve kamu görevlileri", description: "Bakanlık ve dairelerin kuruluşu, kamu görevlileri, belediyeler, kamu ihalesi ve kamu maliyesi." },
+  { id: "trafik-ulasim", name: "Trafik ve ulaşım", description: "Karayolu trafiği, sürücüler ve araçlar, deniz ve hava ulaşımı, limanlar." },
+  { id: "saglik", name: "Sağlık", description: "Sağlık hizmetleri, hastaneler, sağlık meslekleri, ilaç ve bulaşıcı hastalıklar." },
+  { id: "egitim", name: "Eğitim", description: "Okullar, öğretmenler, üniversiteler, yükseköğretim ve mesleki eğitim." },
+  { id: "cevre-tarim-hayvan", name: "Çevre, tarım ve hayvan", description: "Çevre, su, orman, enerji ve maden, tarım, hayvancılık, av ve balıkçılık." },
+  { id: "yabancilar-yurttaslik", name: "Yabancılar ve yurttaşlık", description: "Yurttaşlık, ikamet ve çalışma izni, pasaport, nüfus kaydı, muhaceret." },
+  { id: "yargilama-icra", name: "Yargılama ve icra", description: "Mahkemeler, hukuk yargılaması, tanıklık ve delil, icra, avukatlık, tahkim, haksız fiil." },
+  { id: "secim-siyaset", name: "Anayasa, seçim ve siyaset", description: "Anayasa, seçimler, siyasi partiler, dernekler, temel haklar sözleşmeleri, basın ve yayın." },
+  { id: "diger", name: "Diğer", description: "Başka bir kategoriye girmeyen mevzuat." },
+];
+
+export const CATEGORY_IDS: ReadonlySet<string> = new Set(CATEGORIES.map((c) => c.id));
+
+export type CategoryMode = "soft" | "hard";
+
+export function categoryName(id: string): string {
+  return CATEGORIES.find((c) => c.id === id)?.name ?? id;
+}

@@ -15,6 +15,8 @@ export interface StatuteTitle {
   text_status?: string;
   /** Regulations: the law they are made under (crawler/kktc/parents.py). */
   parent?: string;
+  /** Subject categories (crawler/kktc/categories.py); empty for older builds. */
+  categories?: string[];
 }
 
 let cache: { at: number; titles: StatuteTitle[]; superseded: Set<string> } | null = null;
@@ -23,7 +25,7 @@ async function load(store: Store) {
   const now = Date.now();
   if (cache && now - cache.at < TTL_MS) return cache;
   const rows = await store.all(
-    `SELECT id, title, type, source, number, text_status, json_extract(extra_json, '$.display_title') AS display, json_extract(extra_json, '$.parent_law') AS parent FROM documents WHERE type IN (${LEGISLATION.map(() => "?").join(",")})`,
+    `SELECT id, title, type, source, number, text_status, json_extract(extra_json, '$.display_title') AS display, json_extract(extra_json, '$.parent_law') AS parent, json_extract(extra_json, '$.categories') AS categories FROM documents WHERE type IN (${LEGISLATION.map(() => "?").join(",")})`,
     LEGISLATION,
   );
   const titles = rows.map((row) => ({
@@ -35,6 +37,7 @@ async function load(store: Store) {
     number: row.number ? String(row.number) : null,
     text_status: String(row.text_status ?? ""),
     ...(row.parent ? { parent: String(row.parent) } : {}),
+    ...(row.categories ? { categories: parseCategories(row.categories) } : {}),
   }));
   cache = { at: now, titles, superseded: supersededCopies(titles) };
   return cache;
@@ -49,6 +52,42 @@ export async function regulationsOf(store: Store, lawId: string): Promise<Statut
   return titles.filter(
     (t) => t.parent === lawId && t.type === "tuzuk" && !isAmendment(t.title) && !superseded.has(t.id) && t.text_status !== "metadata",
   );
+}
+
+function parseCategories(value: unknown): string[] {
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Documents in a subject category (statutes only; empty before a build with categories). */
+export async function categoryDocuments(store: Store, category: string): Promise<Set<string>> {
+  const { titles } = await load(store);
+  return new Set(titles.filter((t) => t.categories?.includes(category)).map((t) => t.id));
+}
+
+/** A statute's categories (empty if unknown). */
+export async function documentCategories(store: Store, id: string): Promise<string[]> {
+  const { titles } = await load(store);
+  return titles.find((t) => t.id === id)?.categories ?? [];
+}
+
+/** Statutes per category (types counted separately), for GET /v1/categories. */
+export async function categoryCounts(store: Store): Promise<Map<string, Record<string, number>>> {
+  const { titles, superseded } = await load(store);
+  const counts = new Map<string, Record<string, number>>();
+  for (const t of titles) {
+    if (superseded.has(t.id) || isAmendment(t.title) || t.text_status === "metadata") continue;
+    for (const c of t.categories ?? []) {
+      const entry = counts.get(c) ?? {};
+      entry[t.type] = (entry[t.type] ?? 0) + 1;
+      counts.set(c, entry);
+    }
+  }
+  return counts;
 }
 
 /** The law a regulation is made under, with its readable name. */
@@ -161,6 +200,7 @@ export interface StatuteHit {
   regulations?: { id: string; name: string }[];
   /** Regulations: the law it is made under. */
   parent_law?: { id: string; name: string };
+  categories?: string[];
 }
 
 /** Statutes whose name, readable name or common name matches (yasa_bul / GET /v1/statutes). */
@@ -208,16 +248,37 @@ export async function findStatutes(store: Store, name: string, limit = 10): Prom
         text_status: t.text_status ?? "",
         ...(regulations.length ? { regulations } : {}),
         ...(parent ? { parent_law: { id: parent.id, name: parent.display || parent.title } } : {}),
+        ...(t.categories?.length ? { categories: t.categories } : {}),
       };
     });
 }
 
 /** Statutes with text, without amendments and superseded copies, by name (katalog / GET /v1/statutes). */
-export async function statuteCatalog(store: Store, type?: string, page = 1, pageSize = 200): Promise<{ total: number; items: StatuteHit[] }> {
+export async function statuteCatalog(
+  store: Store,
+  type?: string,
+  page = 1,
+  pageSize = 200,
+  category?: string,
+): Promise<{ total: number; items: StatuteHit[] }> {
   const { titles, superseded } = await load(store);
   const all = titles
-    .filter((t) => (!type || t.type === type) && t.text_status !== "metadata" && !superseded.has(t.id) && !isAmendment(t.title))
-    .map((t) => ({ id: t.id, name: t.display || t.title, title: t.title, type: t.type, text_status: t.text_status ?? "" }))
+    .filter(
+      (t) =>
+        (!type || t.type === type) &&
+        (!category || !!t.categories?.includes(category)) &&
+        t.text_status !== "metadata" &&
+        !superseded.has(t.id) &&
+        !isAmendment(t.title),
+    )
+    .map((t) => ({
+      id: t.id,
+      name: t.display || t.title,
+      title: t.title,
+      type: t.type,
+      text_status: t.text_status ?? "",
+      ...(t.categories?.length ? { categories: t.categories } : {}),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, "tr"));
   return { total: all.length, items: all.slice((page - 1) * pageSize, page * pageSize) };
 }

@@ -20,7 +20,8 @@ import { buildCitation } from "./citation.js";
 import { conceptMatch, type LegalConcept, matchConcepts } from "./legal-concepts.js";
 import { ANSWER_PASSAGES, CHILDREN_OPTIONS, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, TOC_OPTIONS, wantsRerank } from "./rerank.js";
 import { findTerms, TERM_HITS, type TermHit } from "./terms.js";
-import { canonicalDocId, displayNames, isAmendment, legislationTitles, parentLaw, regulationsOf, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
+import { categoryName } from "./categories.js";
+import { canonicalDocId, categoryDocuments, displayNames, documentCategories, isAmendment, legislationTitles, parentLaw, regulationsOf, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
 import { resolveLawsDetailed, RewriteLimitError } from "./rewrite.js";
 import { reciprocalRankFusion, type SemanticHit, wantsSemantic } from "./semantic.js";
 import {
@@ -403,6 +404,14 @@ export async function searchDocuments(
       (primaryOrder.get(String(b.row.id)) ?? 999)
     );
   };
+  // category: the user's subject (OPUS-GOREVLER-4 item 20). Empty before a
+  // build with categories, and then ignored.
+  const categoryIds = params.category ? await categoryDocuments(store, params.category) : null;
+  const categoryActive = !!categoryIds?.size;
+  const hardCategory = categoryActive && params.category_mode === "hard";
+  if (hardCategory) {
+    for (const id of [...byId.keys()]) if (!categoryIds!.has(id)) byId.delete(id);
+  }
   // doc_ids restricts the result to those statutes (concept rows may add others).
   if (params.doc_ids?.length) {
     const allowed = new Set(params.doc_ids);
@@ -440,6 +449,16 @@ export async function searchDocuments(
         .map((t) => ({ doc_id: t.doc_id, ref: t.ref, ord: located.get(`${t.doc_id}\u0000${t.ref}`) ?? -1, type: null, score: 1 }))
         .filter((h) => h.ord >= 0);
       hits = [...termHits, ...hits.filter((h) => !termHits.some((t) => t.doc_id === h.doc_id && t.ref === baseArticleRef(h.ref)))];
+    }
+    if (categoryActive) {
+      // hard: only the category's articles; soft: they move up (rank halved),
+      // so a wrong category cannot push the right article far down.
+      if (hardCategory) hits = hits.filter((h) => categoryIds!.has(h.doc_id));
+      else
+        hits = hits
+          .map((h, i) => ({ h, key: categoryIds!.has(h.doc_id) ? i / 2 : i }))
+          .sort((a, b) => a.key - b.key)
+          .map(({ h }) => h);
     }
     semanticHits = hits;
     params.semantic_sink?.push(...hits);
@@ -479,6 +498,15 @@ export async function searchDocuments(
       semanticInfo.hits = hits.length;
       semanticInfo.documents = semanticOrder.length;
     }
+  }
+  if (categoryActive && !hardCategory) {
+    // soft: the category's statutes lead the lexical/fused order too (canonical
+    // statutes keep their editorial 120).
+    deduped = deduped
+      .map((item) =>
+        item.score < 120 && categoryIds!.has(String(item.row.id)) ? { row: item.row, score: Number((item.score * 1.5 + 10).toFixed(3)) } : item,
+      )
+      .sort(byScore);
   }
   const conceptDocuments = new Set(conceptRows.map((row) => String(row.id))).size;
   const primaryDocuments = new Set(primaryRows.map((row) => String(row.id))).size;
@@ -1063,6 +1091,10 @@ export async function answerQuestion(
       rerank.verify = { applied: false, error: error instanceof RerankLimitError ? "daily_limit" : "unavailable" };
     }
   }
+  // The user chose a subject and the answer is from a statute outside it.
+  const chosenCategory = params.category ? await documentCategories(store, top?.document_id ?? "") : [];
+  const outsideCategory = !!(params.category && top && chosenCategory.length && !chosenCategory.includes(params.category));
+  if (outsideCategory && base === "high") caps.push("outside_category");
   let confidence = capConfidence(base, caps);
   if (verifiedLow && confidence !== "low") {
     caps.push("unverified");
@@ -1083,6 +1115,9 @@ export async function answerQuestion(
     citations: [...new Set(quotes.map((quote) => quote.citation))],
     confidence,
     ...(caps.length ? { confidence_caps: caps } : {}),
+    ...(params.category
+      ? { category: { id: params.category, name: categoryName(params.category), mode: params.category_mode ?? "soft", outside: outsideCategory } }
+      : {}),
     ...(rewriteSink[0] ? { query_rewrite: rewriteSink[0] } : {}),
     ...(rerank ? { rerank } : {}),
     ...(params.debug && params.terms ? { terms_matched: termSink.map((t) => ({ term: t.term, document_id: t.doc_id, ref: t.ref, status: t.status })) } : {}),
@@ -1565,6 +1600,7 @@ const CAP_LABELS: Record<ConfidenceCap, string> = {
   foreign_jurisdiction: "soru başka bir ülkenin hukukunu soruyor",
   unverified: "alıntının soruyu doğrudan cevapladığı doğrulanamadı",
   possibly_amended: "metinden sonra çıkan bir değişiklik bu maddeyi değiştirmiş olabilir",
+  outside_category: "seçtiğiniz konunun dışındaki bir yasadan",
 };
 
 export function answerMarkdown(response: AnswerResponse): string {
@@ -1584,6 +1620,8 @@ export function answerMarkdown(response: AnswerResponse): string {
           .join(", ")}. Resmî Gazete'den kontrol edin.`,
       );
     }
+    if (response.category?.outside)
+      lines.push(`- **Not:** Bu alıntı seçtiğiniz konunun (${response.category.name}) dışındaki bir yasadan; soruyu doğru konu altında sorduğunuzu kontrol edin.`);
     if (quote.parent_law) lines.push(`- **Dayanak yasa:** ${quote.parent_law.title} (\`${quote.parent_law.id}\`)`);
     lines.push(`- **Güncellik:** ${consolidationLabel(quote.consolidated_through) ?? "Metnin hangi değişikliklere kadar güncel olduğu kaynakta belirtilmiyor; Resmî Gazete'den kontrol edin."}`);
     lines.push(`- **Kaynak:** ${quote.source_url}`);

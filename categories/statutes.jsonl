@@ -1,0 +1,857 @@
+{"doc": "anayasa-1960-anayasasi", "categories": ["secim-siyaset"]}
+{"doc": "anayasa-kktc-anayasasi", "categories": ["secim-siyaset"]}
+{"doc": "anayasa-ktfd-anayasasi", "categories": ["secim-siyaset"]}
+{"doc": "anayasa-tcm-temel-kurallar", "categories": ["secim-siyaset"]}
+{"doc": "yasa-09-1976", "categories": ["yargilama-icra"]}
+{"doc": "yasa-1", "categories": ["yargilama-icra"]}
+{"doc": "yasa-1-1971", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-1-1977", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-1-1979", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-1-1992", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-1-1998", "categories": ["aile"]}
+{"doc": "yasa-1-2002", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-1-2008", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-1-2022", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-1-2024", "categories": ["ceza", "ticaret-sirketler"]}
+{"doc": "yasa-10-1961", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-10-1989", "categories": ["idare-kamu-gorevlileri", "cevre-tarim-hayvan"]}
+{"doc": "yasa-10-1990", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-10-2003", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-10-2021", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-10-2022", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-100", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-100-2007", "categories": ["ticaret-sirketler", "tuketici"]}
+{"doc": "yasa-101", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-102", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-104", "categories": ["tuketici"]}
+{"doc": "yasa-11-1960", "categories": ["is-sosyal-guvenlik", "saglik"]}
+{"doc": "yasa-11-1970", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-11-1978", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-11-1981", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-11-1990", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-11-1993", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-11-2003", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-11-2013", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-11-2018", "categories": ["secim-siyaset"]}
+{"doc": "yasa-119", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-12-1969", "categories": ["saglik"]}
+{"doc": "yasa-12-1983", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-12-1990", "categories": ["idare-kamu-gorevlileri", "egitim"]}
+{"doc": "yasa-12-2002", "categories": ["aile", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-12-2006", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-12-2013", "categories": ["ticaret-sirketler", "yargilama-icra"]}
+{"doc": "yasa-12-2019", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-13-1971", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-13-1976", "categories": ["saglik"]}
+{"doc": "yasa-13-1979", "categories": ["yargilama-icra"]}
+{"doc": "yasa-13-1981", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-13-1993", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-13-2000", "categories": ["secim-siyaset"]}
+{"doc": "yasa-13-2008", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-13-2025", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-13-2026", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-14-1970", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-14-1993", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-14-2010", "categories": ["tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-14-2011", "categories": ["egitim"]}
+{"doc": "yasa-14-2018", "categories": ["vergi", "tasinmaz-kira"]}
+{"doc": "yasa-14-2022", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-14-2023", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-15-1962", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-15-1979", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-15-1984", "categories": ["secim-siyaset"]}
+{"doc": "yasa-15-1985", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-15-1987", "categories": ["tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-15-1990", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-15-1993", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-15-2010", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-15-2011", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-15-2013", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-15-2020", "categories": ["vergi"]}
+{"doc": "yasa-15-2022", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-15-2023", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-16-1970", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-16-1974", "categories": ["aile"]}
+{"doc": "yasa-16-1976", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-16-1980", "categories": ["is-sosyal-guvenlik", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-16-1981", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-16-1987", "categories": ["vergi", "ticaret-sirketler"]}
+{"doc": "yasa-16-1993", "categories": ["is-sosyal-guvenlik", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-16-1995", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-16-2010", "categories": ["cevre-tarim-hayvan", "vergi"]}
+{"doc": "yasa-16-2011", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-16-2019", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-17-1973", "categories": ["vergi"]}
+{"doc": "yasa-17-1975", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-17-1977", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-17-1980", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-17-1981", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-17-1986", "categories": ["egitim"]}
+{"doc": "yasa-17-1993", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-17-2008", "categories": ["egitim"]}
+{"doc": "yasa-17-2010", "categories": ["diger"]}
+{"doc": "yasa-17-2011", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-17-2012", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-17-2016", "categories": ["idare-kamu-gorevlileri", "trafik-ulasim"]}
+{"doc": "yasa-17-2018", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-17-2023", "categories": ["secim-siyaset"]}
+{"doc": "yasa-17-2024", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-18-1978", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-18-1985", "categories": ["secim-siyaset"]}
+{"doc": "yasa-18-1986", "categories": ["egitim"]}
+{"doc": "yasa-18-1993", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-18-1998", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-18-1999", "categories": ["saglik"]}
+{"doc": "yasa-18-2003", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-18-2009", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-18-2011", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-18-2012", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-18-2020", "categories": ["vergi"]}
+{"doc": "yasa-18-2022", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-19", "categories": ["yargilama-icra"]}
+{"doc": "yasa-19-1963", "categories": ["vergi"]}
+{"doc": "yasa-19-1975", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-19-1977", "categories": ["diger"]}
+{"doc": "yasa-19-1978", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-19-1986", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-19-1988", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-19-1991", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-19-1993", "categories": ["is-sosyal-guvenlik", "cevre-tarim-hayvan"]}
+{"doc": "yasa-19-1998", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-19-2003", "categories": ["tasinmaz-kira", "cevre-tarim-hayvan"]}
+{"doc": "yasa-19-2011", "categories": ["egitim"]}
+{"doc": "yasa-19-2012", "categories": ["egitim"]}
+{"doc": "yasa-19-2020", "categories": ["vergi"]}
+{"doc": "yasa-2", "categories": ["yargilama-icra"]}
+{"doc": "yasa-2-1965", "categories": ["secim-siyaset"]}
+{"doc": "yasa-2-1975", "categories": ["aile", "yabancilar-yurttaslik"]}
+{"doc": "yasa-2-1977", "categories": ["diger"]}
+{"doc": "yasa-2-1980", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-2-1987", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-2-1992", "categories": ["saglik"]}
+{"doc": "yasa-2-1995", "categories": ["idare-kamu-gorevlileri", "secim-siyaset"]}
+{"doc": "yasa-2-2022", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-20", "categories": ["yargilama-icra"]}
+{"doc": "yasa-20-1988", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-20-1993", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-20-2011", "categories": ["is-sosyal-guvenlik", "saglik"]}
+{"doc": "yasa-20-2016", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-20-2018", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-20-2022", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-20-2023", "categories": ["saglik"]}
+{"doc": "yasa-20-81988", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-21-1962", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-21-1974", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-21-1975", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-21-1977", "categories": ["tuketici"]}
+{"doc": "yasa-21-1981", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-21-1985", "categories": ["aile", "tasinmaz-kira"]}
+{"doc": "yasa-21-1992", "categories": ["vergi", "ticaret-sirketler"]}
+{"doc": "yasa-21-1993", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-21-2000", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-21-2005", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-21-2011", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-21-2019", "categories": ["saglik", "cevre-tarim-hayvan"]}
+{"doc": "yasa-21-2022", "categories": ["secim-siyaset"]}
+{"doc": "yasa-21-2026", "categories": ["egitim"]}
+{"doc": "yasa-22", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-22-1975", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-22-1977", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-22-1978", "categories": ["vergi", "trafik-ulasim"]}
+{"doc": "yasa-22-1984", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-22-1988", "categories": ["yargilama-icra"]}
+{"doc": "yasa-22-1992", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-22-1993", "categories": ["aile", "is-sosyal-guvenlik"]}
+{"doc": "yasa-22-2003", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-22-2011", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-22-2012", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-22-2016", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-22-2021", "categories": ["aile"]}
+{"doc": "yasa-23-1962", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-23-1976", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-23-1987", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-23-1989", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-23-1990", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-23-2001", "categories": ["tuketici"]}
+{"doc": "yasa-23-2003", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-23-2010", "categories": ["secim-siyaset"]}
+{"doc": "yasa-23-2011", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-23-2012", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-23-2016", "categories": ["secim-siyaset"]}
+{"doc": "yasa-23-2021", "categories": ["saglik"]}
+{"doc": "yasa-24-1959", "categories": ["diger"]}
+{"doc": "yasa-24-1982", "categories": ["vergi"]}
+{"doc": "yasa-24-2011", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-24-2012", "categories": ["idare-kamu-gorevlileri", "ticaret-sirketler"]}
+{"doc": "yasa-24-2014", "categories": ["vergi"]}
+{"doc": "yasa-24-2022", "categories": ["egitim"]}
+{"doc": "yasa-25", "categories": ["cevre-tarim-hayvan", "ticaret-sirketler"]}
+{"doc": "yasa-25-1978", "categories": ["ticaret-sirketler", "yabancilar-yurttaslik"]}
+{"doc": "yasa-25-1985", "categories": ["egitim"]}
+{"doc": "yasa-25-1987", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-25-1990", "categories": ["ticaret-sirketler", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-25-1993", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-25-1998", "categories": ["diger"]}
+{"doc": "yasa-25-2003", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-25-2004", "categories": ["ceza"]}
+{"doc": "yasa-25-2005", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-25-2008", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-26", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-26-1977", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-26-1978", "categories": ["tuketici"]}
+{"doc": "yasa-26-1981", "categories": ["saglik", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-26-1983", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-26-1984", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-26-1990", "categories": ["ticaret-sirketler", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-26-1993", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-26-2000", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-26-2004", "categories": ["secim-siyaset"]}
+{"doc": "yasa-26-2026", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-264-2022", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-27-1977", "categories": ["vergi"]}
+{"doc": "yasa-27-1983", "categories": ["ticaret-sirketler", "tasinmaz-kira"]}
+{"doc": "yasa-27-1987", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-27-1991", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-27-1996", "categories": ["aile"]}
+{"doc": "yasa-27-2000", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-27-2003", "categories": ["vergi"]}
+{"doc": "yasa-27-2004", "categories": ["secim-siyaset"]}
+{"doc": "yasa-27-2010", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-27-2013", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-27-2017", "categories": ["saglik"]}
+{"doc": "yasa-28", "categories": ["cevre-tarim-hayvan", "ticaret-sirketler"]}
+{"doc": "yasa-28-1978", "categories": ["diger"]}
+{"doc": "yasa-28-1983", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-28-1984", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-28-1988", "categories": ["is-sosyal-guvenlik", "egitim"]}
+{"doc": "yasa-28-1990", "categories": ["ticaret-sirketler", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-28-2003", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-28-2004", "categories": ["ceza"]}
+{"doc": "yasa-28-2010", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-28-2016", "categories": ["ceza"]}
+{"doc": "yasa-29", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-29-1976", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-29-1983", "categories": ["ceza"]}
+{"doc": "yasa-29-1992", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-29-1993", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-29-1998", "categories": ["ticaret-sirketler", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-29-2004", "categories": ["secim-siyaset"]}
+{"doc": "yasa-29-2008", "categories": ["saglik"]}
+{"doc": "yasa-29-2009", "categories": ["egitim", "vergi"]}
+{"doc": "yasa-29-2010", "categories": ["diger"]}
+{"doc": "yasa-29-2012", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-29-2013", "categories": ["diger"]}
+{"doc": "yasa-29-2019", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-3", "categories": ["yargilama-icra"]}
+{"doc": "yasa-3-1972", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-3-1992", "categories": ["ceza"]}
+{"doc": "yasa-3-1998", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-3-2002", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-3-2017", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-3-2019", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-3-2021", "categories": ["saglik"]}
+{"doc": "yasa-3-2023", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-3-2026", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-30-1976", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-30-1996", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-30-1998", "categories": ["saglik"]}
+{"doc": "yasa-30-2002", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-30-2026", "categories": ["ticaret-sirketler", "vergi"]}
+{"doc": "yasa-31", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-31-1961", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-31-1990", "categories": ["vergi"]}
+{"doc": "yasa-31-1996", "categories": ["vergi"]}
+{"doc": "yasa-31-1998", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-31-2000", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-31-2009", "categories": ["ceza"]}
+{"doc": "yasa-31-2010", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-31-2014", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-31-2018", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-31-2020", "categories": ["ticaret-sirketler", "tuketici"]}
+{"doc": "yasa-32-1975", "categories": ["tasinmaz-kira", "yabancilar-yurttaslik"]}
+{"doc": "yasa-32-1983", "categories": ["tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-32-1989", "categories": ["ticaret-sirketler", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-32-1990", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-32-1992", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-32-2000", "categories": ["diger"]}
+{"doc": "yasa-32-2006", "categories": ["saglik"]}
+{"doc": "yasa-32-2007", "categories": ["secim-siyaset"]}
+{"doc": "yasa-32-2009", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-32-2014", "categories": ["ceza"]}
+{"doc": "yasa-32-2018", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-32-2019", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-32-2020", "categories": ["ceza"]}
+{"doc": "yasa-33-1975", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-33-1976", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-33-1977", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-33-1983", "categories": ["saglik"]}
+{"doc": "yasa-33-1993", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-33-1998", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-33-2017", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-33-2018", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-33-2019", "categories": ["ticaret-sirketler", "tuketici"]}
+{"doc": "yasa-33-2020", "categories": ["secim-siyaset"]}
+{"doc": "yasa-33-2025", "categories": ["ticaret-sirketler", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-33-2026", "categories": ["saglik"]}
+{"doc": "yasa-34-1970", "categories": ["vergi"]}
+{"doc": "yasa-34-1975", "categories": ["trafik-ulasim", "cevre-tarim-hayvan"]}
+{"doc": "yasa-34-1976", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-34-1981", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-34-1983", "categories": ["yargilama-icra"]}
+{"doc": "yasa-34-1993", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-34-2000", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-34-2002", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-34-2007", "categories": ["saglik", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-34-2010", "categories": ["vergi"]}
+{"doc": "yasa-34-2014", "categories": ["tuketici"]}
+{"doc": "yasa-34-2018", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-348", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-35-1963", "categories": ["ceza", "secim-siyaset"]}
+{"doc": "yasa-35-1970", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-35-1985", "categories": ["yargilama-icra"]}
+{"doc": "yasa-35-1986", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-35-2000", "categories": ["is-sosyal-guvenlik", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-35-2008", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-35-2010", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-35-2017", "categories": ["saglik"]}
+{"doc": "yasa-35-2020", "categories": ["is-sosyal-guvenlik", "egitim"]}
+{"doc": "yasa-35-2025", "categories": ["idare-kamu-gorevlileri", "aile"]}
+{"doc": "yasa-36", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-36-1986", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-36-2002", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-36-2009", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-36-2014", "categories": ["vergi", "tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-36-2026", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-37", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-37-1975", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-37-1983", "categories": ["vergi"]}
+{"doc": "yasa-37-1987", "categories": ["saglik"]}
+{"doc": "yasa-37-1998", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-37-2001", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-37-2008", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-37-2012", "categories": ["saglik"]}
+{"doc": "yasa-37-2026", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-38", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-38-1996", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-38-1997", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-38-2005", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-38-2007", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-38-2009", "categories": ["idare-kamu-gorevlileri", "egitim"]}
+{"doc": "yasa-38-2010", "categories": ["secim-siyaset"]}
+{"doc": "yasa-38-2017", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-38-2018", "categories": ["saglik"]}
+{"doc": "yasa-38-2020", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-38-2023", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-39", "categories": ["yargilama-icra"]}
+{"doc": "yasa-39-1962", "categories": ["secim-siyaset"]}
+{"doc": "yasa-39-1975", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-39-1987", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-39-1988", "categories": ["idare-kamu-gorevlileri", "cevre-tarim-hayvan"]}
+{"doc": "yasa-39-1997", "categories": ["secim-siyaset"]}
+{"doc": "yasa-39-2003", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-39-2004", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-39-2007", "categories": ["vergi"]}
+{"doc": "yasa-39-2009", "categories": ["vergi"]}
+{"doc": "yasa-39-2012", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-39-2017", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-39-2020", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-39-2022", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-39-2025", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-4", "categories": ["yargilama-icra"]}
+{"doc": "yasa-4-1962", "categories": ["aile", "vergi"]}
+{"doc": "yasa-4-1969", "categories": ["yargilama-icra"]}
+{"doc": "yasa-4-1972", "categories": ["ceza"]}
+{"doc": "yasa-4-1977", "categories": ["saglik", "cevre-tarim-hayvan"]}
+{"doc": "yasa-4-1988", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-4-1995", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-4-2013", "categories": ["secim-siyaset", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-4-2019", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-4-2022", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-40-1982", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-40-1990", "categories": ["idare-kamu-gorevlileri", "cevre-tarim-hayvan"]}
+{"doc": "yasa-40-1996", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-40-2003", "categories": ["tuketici"]}
+{"doc": "yasa-40-2016", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-40-2017", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-40-2020", "categories": ["egitim"]}
+{"doc": "yasa-40-2022", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-41", "categories": ["diger"]}
+{"doc": "yasa-41-1976", "categories": ["vergi"]}
+{"doc": "yasa-41-1977", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-41-1989", "categories": ["idare-kamu-gorevlileri", "trafik-ulasim"]}
+{"doc": "yasa-41-1996", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-41-2001", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-41-2006", "categories": ["idare-kamu-gorevlileri", "egitim"]}
+{"doc": "yasa-41-2008-doc", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-41-2009", "categories": ["egitim"]}
+{"doc": "yasa-41-2011", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-41-2012", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-41-2014", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-41-2019", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-41-2022", "categories": ["secim-siyaset"]}
+{"doc": "yasa-42-1992", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-42-1996", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-42-2002", "categories": ["diger"]}
+{"doc": "yasa-42-2009", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-42-2012", "categories": ["yargilama-icra"]}
+{"doc": "yasa-42-2014", "categories": ["tuketici"]}
+{"doc": "yasa-42-2018", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-42-2020", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-42-2025", "categories": ["tasinmaz-kira", "yabancilar-yurttaslik"]}
+{"doc": "yasa-43", "categories": ["secim-siyaset"]}
+{"doc": "yasa-43-1988", "categories": ["yargilama-icra"]}
+{"doc": "yasa-43-1989", "categories": ["tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-43-1991", "categories": ["ceza", "trafik-ulasim"]}
+{"doc": "yasa-43-1992", "categories": ["vergi", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-43-1998", "categories": ["tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-43-2004", "categories": ["is-sosyal-guvenlik", "yabancilar-yurttaslik"]}
+{"doc": "yasa-43-2009", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-43-2012", "categories": ["yargilama-icra"]}
+{"doc": "yasa-43-2018", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-43-2020", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-43-2025", "categories": ["saglik"]}
+{"doc": "yasa-44", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-44-1993", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-44-1995", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-44-1996", "categories": ["vergi"]}
+{"doc": "yasa-44-2000", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-44-2001", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-44-2007", "categories": ["is-sosyal-guvenlik", "secim-siyaset"]}
+{"doc": "yasa-44-2008", "categories": ["tuketici"]}
+{"doc": "yasa-44-2024", "categories": ["secim-siyaset"]}
+{"doc": "yasa-45", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-45-1963", "categories": ["ticaret-sirketler", "trafik-ulasim"]}
+{"doc": "yasa-45-1983", "categories": ["egitim", "aile"]}
+{"doc": "yasa-45-1987", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-45-1988", "categories": ["ceza", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-45-1989", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-45-1992", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-45-2001", "categories": ["diger"]}
+{"doc": "yasa-45-2011", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-45-2018", "categories": ["saglik"]}
+{"doc": "yasa-45-2024", "categories": ["secim-siyaset"]}
+{"doc": "yasa-45-2025", "categories": ["tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-46-1963", "categories": ["ticaret-sirketler", "trafik-ulasim"]}
+{"doc": "yasa-46-1977", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-46-1982", "categories": ["vergi", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-46-1984", "categories": ["secim-siyaset"]}
+{"doc": "yasa-46-1988", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-46-1997", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-46-1998", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-46-2008", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-46-2016", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-46-2019", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-47", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-47-1963", "categories": ["vergi", "ticaret-sirketler", "trafik-ulasim"]}
+{"doc": "yasa-47-1987", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-47-1988", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-47-1992", "categories": ["vergi"]}
+{"doc": "yasa-47-1997", "categories": ["diger"]}
+{"doc": "yasa-47-1999", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-47-2000", "categories": ["vergi"]}
+{"doc": "yasa-47-2010", "categories": ["is-sosyal-guvenlik", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-47-2011", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-47-2014", "categories": ["secim-siyaset"]}
+{"doc": "yasa-48-1977", "categories": ["vergi"]}
+{"doc": "yasa-48-1988", "categories": ["idare-kamu-gorevlileri", "cevre-tarim-hayvan"]}
+{"doc": "yasa-48-2009", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-49", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-49-1984", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-49-1988", "categories": ["vergi"]}
+{"doc": "yasa-49-1993", "categories": ["egitim"]}
+{"doc": "yasa-49-2014", "categories": ["secim-siyaset"]}
+{"doc": "yasa-49-2015", "categories": ["secim-siyaset"]}
+{"doc": "yasa-49-2024", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-5", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-5-1976", "categories": ["secim-siyaset"]}
+{"doc": "yasa-5-1979", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-5-1991", "categories": ["egitim"]}
+{"doc": "yasa-5-1996", "categories": ["aile"]}
+{"doc": "yasa-5-2013", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-5-2017", "categories": ["saglik", "cevre-tarim-hayvan"]}
+{"doc": "yasa-5-2018", "categories": ["is-sosyal-guvenlik", "vergi"]}
+{"doc": "yasa-5-2021", "categories": ["tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-5-2022", "categories": ["egitim"]}
+{"doc": "yasa-50", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-50-1983", "categories": ["secim-siyaset"]}
+{"doc": "yasa-50-1989", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-50-1993", "categories": ["egitim"]}
+{"doc": "yasa-50-1995", "categories": ["vergi", "tasinmaz-kira"]}
+{"doc": "yasa-50-2000", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-50-2008", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-50-2009", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-50-2011", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-50-2025", "categories": ["ceza"]}
+{"doc": "yasa-51-1984", "categories": ["ceza", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-51-1993", "categories": ["egitim"]}
+{"doc": "yasa-51-1995", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-51-2006", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-51-2009", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-51-2011", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-51-2015", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-51-2020", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-51-2023", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-51-2024", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-52", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-52-1987", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-52-1999", "categories": ["ceza"]}
+{"doc": "yasa-52-2008", "categories": ["tasinmaz-kira", "yabancilar-yurttaslik"]}
+{"doc": "yasa-52-2009", "categories": ["vergi", "tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-52-2011", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-52-2017", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-53-1977", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-53-1982", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-53-1983", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-53-1989", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-53-1992", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-53-1993", "categories": ["tasinmaz-kira", "cevre-tarim-hayvan"]}
+{"doc": "yasa-53-2009", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-53-2024", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-54-1992", "categories": ["saglik"]}
+{"doc": "yasa-54-2009", "categories": ["vergi", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-54-2015", "categories": ["saglik"]}
+{"doc": "yasa-54-2024", "categories": ["yargilama-icra"]}
+{"doc": "yasa-54-2025", "categories": ["ticaret-sirketler", "tasinmaz-kira"]}
+{"doc": "yasa-55", "categories": ["ceza"]}
+{"doc": "yasa-55-1989", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-55-1995", "categories": ["egitim"]}
+{"doc": "yasa-55-2002", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-55-2007", "categories": ["vergi", "ticaret-sirketler"]}
+{"doc": "yasa-55-2009", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-55-2024", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-56", "categories": ["idare-kamu-gorevlileri", "tasinmaz-kira"]}
+{"doc": "yasa-56-1983", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-56-1987", "categories": ["is-sosyal-guvenlik", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-56-1993", "categories": ["idare-kamu-gorevlileri", "egitim"]}
+{"doc": "yasa-56-2000", "categories": ["diger"]}
+{"doc": "yasa-56-2014", "categories": ["tuketici", "saglik"]}
+{"doc": "yasa-57-1962", "categories": ["yargilama-icra"]}
+{"doc": "yasa-57-1977", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-57-1987", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-57-1989", "categories": ["idare-kamu-gorevlileri", "saglik"]}
+{"doc": "yasa-57-1991", "categories": ["saglik"]}
+{"doc": "yasa-57-1999", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-57-2014", "categories": ["saglik"]}
+{"doc": "yasa-57-2026", "categories": ["ceza", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-58-1987", "categories": ["idare-kamu-gorevlileri", "saglik"]}
+{"doc": "yasa-58-1989", "categories": ["is-sosyal-guvenlik", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-58-1999", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-58-2006", "categories": ["ticaret-sirketler", "tasinmaz-kira"]}
+{"doc": "yasa-58-2011", "categories": ["aile"]}
+{"doc": "yasa-58-2014", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-58-2017", "categories": ["vergi"]}
+{"doc": "yasa-58-2023", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-59-1989", "categories": ["idare-kamu-gorevlileri", "cevre-tarim-hayvan"]}
+{"doc": "yasa-59-1999", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-59-2000", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-59-2011", "categories": ["aile"]}
+{"doc": "yasa-59-2018", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-59-2018-pdf", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-6-1961", "categories": ["secim-siyaset"]}
+{"doc": "yasa-6-1969", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-6-1976", "categories": ["is-sosyal-guvenlik", "trafik-ulasim"]}
+{"doc": "yasa-6-1979", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-6-1987", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-6-1988", "categories": ["idare-kamu-gorevlileri", "yabancilar-yurttaslik"]}
+{"doc": "yasa-6-1991", "categories": ["saglik"]}
+{"doc": "yasa-6-1996", "categories": ["aile"]}
+{"doc": "yasa-6-2002", "categories": ["egitim"]}
+{"doc": "yasa-6-2009", "categories": ["is-sosyal-guvenlik", "saglik"]}
+{"doc": "yasa-6-2012", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-6-2023", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-6-2025", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-60-1989", "categories": ["idare-kamu-gorevlileri", "cevre-tarim-hayvan"]}
+{"doc": "yasa-60-1990", "categories": ["idare-kamu-gorevlileri", "yargilama-icra"]}
+{"doc": "yasa-60-1994", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-60-1999", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-60-2000", "categories": ["egitim"]}
+{"doc": "yasa-60-2003", "categories": ["idare-kamu-gorevlileri", "egitim"]}
+{"doc": "yasa-60-2010", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-60-2014", "categories": ["vergi"]}
+{"doc": "yasa-60-2017", "categories": ["tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-60-2026", "categories": ["idare-kamu-gorevlileri", "saglik"]}
+{"doc": "yasa-61", "categories": ["cevre-tarim-hayvan", "ceza"]}
+{"doc": "yasa-61-1988", "categories": ["idare-kamu-gorevlileri", "yabancilar-yurttaslik"]}
+{"doc": "yasa-61-1999", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-61-2007", "categories": ["vergi"]}
+{"doc": "yasa-61-2014", "categories": ["aile", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-61-2026", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-62", "categories": ["yargilama-icra", "ticaret-sirketler"]}
+{"doc": "yasa-62-1988", "categories": ["idare-kamu-gorevlileri", "cevre-tarim-hayvan"]}
+{"doc": "yasa-62-1999", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-62-2002", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-62-2007", "categories": ["vergi"]}
+{"doc": "yasa-62-2017", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-62-2024", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-62-2026", "categories": ["vergi", "ticaret-sirketler"]}
+{"doc": "yasa-63", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-63-1988", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-63-1993", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-63-1994", "categories": ["idare-kamu-gorevlileri", "saglik", "egitim"]}
+{"doc": "yasa-63-1999", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-63-2005", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-63-2006", "categories": ["is-sosyal-guvenlik", "yabancilar-yurttaslik"]}
+{"doc": "yasa-63-2007", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-64-1987", "categories": ["saglik", "cevre-tarim-hayvan"]}
+{"doc": "yasa-64-1993", "categories": ["is-sosyal-guvenlik", "saglik"]}
+{"doc": "yasa-64-1994", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-64-1999", "categories": ["trafik-ulasim", "egitim"]}
+{"doc": "yasa-65-1987", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-65-1988", "categories": ["vergi", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-65-1994", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-65-2005", "categories": ["egitim"]}
+{"doc": "yasa-65-2007", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-66-1989", "categories": ["ticaret-sirketler", "yabancilar-yurttaslik"]}
+{"doc": "yasa-66-1999", "categories": ["vergi", "ticaret-sirketler"]}
+{"doc": "yasa-67-1999", "categories": ["egitim"]}
+{"doc": "yasa-67-2005", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-68-1989", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-68-2026", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-69-1989", "categories": ["idare-kamu-gorevlileri", "egitim"]}
+{"doc": "yasa-69-2002", "categories": ["ticaret-sirketler", "yabancilar-yurttaslik"]}
+{"doc": "yasa-69-2017", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-7", "categories": ["yargilama-icra"]}
+{"doc": "yasa-7-1974", "categories": ["is-sosyal-guvenlik", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-7-1979", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-7-1980", "categories": ["tasinmaz-kira", "yabancilar-yurttaslik"]}
+{"doc": "yasa-7-2000", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-7-2001", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-7-2004", "categories": ["secim-siyaset"]}
+{"doc": "yasa-7-2005", "categories": ["idare-kamu-gorevlileri", "vergi"]}
+{"doc": "yasa-7-2008", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-7-2010", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-7-2012", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-7-2013", "categories": ["saglik"]}
+{"doc": "yasa-7-2020", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-71", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-71-1989", "categories": ["saglik"]}
+{"doc": "yasa-71-2007", "categories": ["vergi", "ticaret-sirketler"]}
+{"doc": "yasa-72-1989", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-72-1991", "categories": ["idare-kamu-gorevlileri", "yargilama-icra"]}
+{"doc": "yasa-73-1991", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-73-2007", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-74", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-75", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-76-2023", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-79-1991", "categories": ["tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-8-1971", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-8-1996", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-8-2009", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-8-2012", "categories": ["saglik"]}
+{"doc": "yasa-8-2013", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-8-2018", "categories": ["ceza"]}
+{"doc": "yasa-8-2022", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-80", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-80-2007", "categories": ["vergi"]}
+{"doc": "yasa-82-1991", "categories": ["idare-kamu-gorevlileri", "saglik"]}
+{"doc": "yasa-83-2007", "categories": ["vergi", "trafik-ulasim"]}
+{"doc": "yasa-84", "categories": ["yargilama-icra"]}
+{"doc": "yasa-86", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-86-1991", "categories": ["saglik"]}
+{"doc": "yasa-88-2009", "categories": ["tuketici", "saglik"]}
+{"doc": "yasa-89", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-89-2007", "categories": ["tuketici"]}
+{"doc": "yasa-9", "categories": ["yargilama-icra"]}
+{"doc": "yasa-9-1969", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-9-1976", "categories": ["yargilama-icra"]}
+{"doc": "yasa-9-1987", "categories": ["idare-kamu-gorevlileri", "trafik-ulasim"]}
+{"doc": "yasa-9-1998", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-9-2018", "categories": ["trafik-ulasim", "vergi"]}
+{"doc": "yasa-9-2022", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-9-2023", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-91-2007", "categories": ["is-sosyal-guvenlik", "aile"]}
+{"doc": "yasa-92-2007", "categories": ["aile", "is-sosyal-guvenlik"]}
+{"doc": "yasa-92-2009", "categories": ["vergi"]}
+{"doc": "yasa-93", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-93-2007", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-94-2007", "categories": ["ticaret-sirketler", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-96", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-97", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-98", "categories": ["diger"]}
+{"doc": "yasa-f-157-doc", "categories": ["aile", "ceza"]}
+{"doc": "yasa-fasil-10", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-100", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-101", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-105", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-fasil-107", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-fasil-110", "categories": ["egitim", "saglik", "yabancilar-yurttaslik"]}
+{"doc": "yasa-fasil-113", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-114", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-115", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-116", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-12", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-122", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-123", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-126", "categories": ["vergi", "tuketici"]}
+{"doc": "yasa-fasil-127", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-128", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-130", "categories": ["vergi", "ticaret-sirketler"]}
+{"doc": "yasa-fasil-131", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-132", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-138", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-139", "categories": ["ticaret-sirketler", "tasinmaz-kira", "saglik"]}
+{"doc": "yasa-fasil-141", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-144", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-145", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-148", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-149", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-15", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-152", "categories": ["ceza"]}
+{"doc": "yasa-fasil-153", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-154", "categories": ["ceza"]}
+{"doc": "yasa-fasil-155", "categories": ["ceza"]}
+{"doc": "yasa-fasil-156", "categories": ["ceza", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-157", "categories": ["aile", "ceza"]}
+{"doc": "yasa-fasil-158", "categories": ["ceza"]}
+{"doc": "yasa-fasil-159", "categories": ["ceza"]}
+{"doc": "yasa-fasil-160", "categories": ["ceza"]}
+{"doc": "yasa-fasil-161", "categories": ["ceza"]}
+{"doc": "yasa-fasil-162", "categories": ["ceza"]}
+{"doc": "yasa-fasil-163", "categories": ["ceza", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-164", "categories": ["ceza", "secim-siyaset"]}
+{"doc": "yasa-fasil-165", "categories": ["ceza"]}
+{"doc": "yasa-fasil-170", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-171", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-175-a", "categories": ["tuketici"]}
+{"doc": "yasa-fasil-18", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-184", "categories": ["is-sosyal-guvenlik", "trafik-ulasim"]}
+{"doc": "yasa-fasil-189", "categories": ["aile", "yargilama-icra"]}
+{"doc": "yasa-fasil-19", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-190", "categories": ["aile", "yargilama-icra"]}
+{"doc": "yasa-fasil-191", "categories": ["aile", "yargilama-icra"]}
+{"doc": "yasa-fasil-192", "categories": ["aile", "yargilama-icra"]}
+{"doc": "yasa-fasil-193", "categories": ["aile"]}
+{"doc": "yasa-fasil-195", "categories": ["aile"]}
+{"doc": "yasa-fasil-196", "categories": ["ceza"]}
+{"doc": "yasa-fasil-2", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-208", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-209", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-213", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-218", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-fasil-219", "categories": ["vergi", "tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-223", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-fasil-224", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-fasil-225", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-fasil-229", "categories": ["tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-232", "categories": ["tasinmaz-kira"]}
+{"doc": "yasa-fasil-236", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-fasil-238", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-fasil-24", "categories": ["cevre-tarim-hayvan", "tuketici"]}
+{"doc": "yasa-fasil-245", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-246", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-247", "categories": ["idare-kamu-gorevlileri", "saglik"]}
+{"doc": "yasa-fasil-251", "categories": ["saglik"]}
+{"doc": "yasa-fasil-252", "categories": ["saglik"]}
+{"doc": "yasa-fasil-254", "categories": ["saglik"]}
+{"doc": "yasa-fasil-256", "categories": ["saglik"]}
+{"doc": "yasa-fasil-257", "categories": ["saglik"]}
+{"doc": "yasa-fasil-258", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-259", "categories": ["saglik"]}
+{"doc": "yasa-fasil-26", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-261", "categories": ["tuketici", "saglik"]}
+{"doc": "yasa-fasil-262", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-263", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-264", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-265", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-266", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-267", "categories": ["ticaret-sirketler", "tuketici"]}
+{"doc": "yasa-fasil-268", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-27", "categories": ["cevre-tarim-hayvan", "ticaret-sirketler"]}
+{"doc": "yasa-fasil-270", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-271", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-274", "categories": ["aile"]}
+{"doc": "yasa-fasil-276", "categories": ["aile", "yabancilar-yurttaslik"]}
+{"doc": "yasa-fasil-277", "categories": ["aile"]}
+{"doc": "yasa-fasil-279", "categories": ["aile"]}
+{"doc": "yasa-fasil-28", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-280", "categories": ["aile"]}
+{"doc": "yasa-fasil-282", "categories": ["ceza"]}
+{"doc": "yasa-fasil-284", "categories": ["saglik", "ceza"]}
+{"doc": "yasa-fasil-286", "categories": ["ceza"]}
+{"doc": "yasa-fasil-287", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-288", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-289", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-290", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-fasil-291", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-292", "categories": ["ticaret-sirketler", "trafik-ulasim"]}
+{"doc": "yasa-fasil-293", "categories": ["ticaret-sirketler", "trafik-ulasim"]}
+{"doc": "yasa-fasil-294", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-295", "categories": ["vergi", "saglik"]}
+{"doc": "yasa-fasil-297", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-298", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-299", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-3", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-300", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-301", "categories": ["trafik-ulasim", "yabancilar-yurttaslik"]}
+{"doc": "yasa-fasil-302", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-303", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-304", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-305", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-307", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-310", "categories": ["tasinmaz-kira", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-32", "categories": ["secim-siyaset", "ceza"]}
+{"doc": "yasa-fasil-320", "categories": ["vergi"]}
+{"doc": "yasa-fasil-325", "categories": ["vergi"]}
+{"doc": "yasa-fasil-327", "categories": ["vergi", "tasinmaz-kira"]}
+{"doc": "yasa-fasil-33", "categories": ["diger"]}
+{"doc": "yasa-fasil-331", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-333", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-334", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-335", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-336", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-337", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-338", "categories": ["aile", "yargilama-icra"]}
+{"doc": "yasa-fasil-340", "categories": ["diger"]}
+{"doc": "yasa-fasil-341", "categories": ["idare-kamu-gorevlileri", "cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-342", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-343", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-344", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-345", "categories": ["cevre-tarim-hayvan", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-346", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-349", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-350", "categories": ["cevre-tarim-hayvan", "idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-351", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-352", "categories": ["aile"]}
+{"doc": "yasa-fasil-37", "categories": ["ticaret-sirketler", "cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-4", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-40", "categories": ["aile"]}
+{"doc": "yasa-fasil-41", "categories": ["diger"]}
+{"doc": "yasa-fasil-43", "categories": ["secim-siyaset"]}
+{"doc": "yasa-fasil-44", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-46", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-5", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-50", "categories": ["tuketici"]}
+{"doc": "yasa-fasil-52", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-54", "categories": ["ceza"]}
+{"doc": "yasa-fasil-55", "categories": ["ceza"]}
+{"doc": "yasa-fasil-56", "categories": ["idare-kamu-gorevlileri", "tasinmaz-kira"]}
+{"doc": "yasa-fasil-57", "categories": ["ceza"]}
+{"doc": "yasa-fasil-59", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-6", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-60", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-61", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-62", "categories": ["yargilama-icra", "ticaret-sirketler"]}
+{"doc": "yasa-fasil-63", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-64", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-66", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-69", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-71", "categories": ["is-sosyal-guvenlik"]}
+{"doc": "yasa-fasil-74", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-75", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-76", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-78", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-79", "categories": ["secim-siyaset"]}
+{"doc": "yasa-fasil-81", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-82", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-83", "categories": ["trafik-ulasim"]}
+{"doc": "yasa-fasil-85", "categories": ["yabancilar-yurttaslik"]}
+{"doc": "yasa-fasil-87", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-88", "categories": ["ticaret-sirketler"]}
+{"doc": "yasa-fasil-9", "categories": ["yargilama-icra"]}
+{"doc": "yasa-fasil-91", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-92", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-94", "categories": ["cevre-tarim-hayvan"]}
+{"doc": "yasa-fasil-95", "categories": ["idare-kamu-gorevlileri"]}
+{"doc": "yasa-fasil-96", "categories": ["tasinmaz-kira", "trafik-ulasim"]}
+{"doc": "yasa-fasil-98", "categories": ["diger"]}
+{"doc": "yasa-fasil1", "categories": ["yargilama-icra"]}

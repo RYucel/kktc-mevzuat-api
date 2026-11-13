@@ -94,6 +94,12 @@ GET /v1/answer?q=mal%20paylaşımında%20eşlere%20düşen%20en%20az%20oran&form
   verir; `sor`'a `belge`, `/v1/answer`'a `document_id` olarak geçin. Ölçümde (11 Kasım) yasa doğru verildiğinde
   doğru madde ilk sırada %83 (verilmediğinde %69). `katalog` / `GET /v1/statutes?type=yasa&page=1` metni olan
   yasaların listesini verir.
+- **Konuyu biliyorsanız kategori verin.** `sor`'a `kategori`, `/v1/answer`'a `category` (liste: `GET /v1/categories`:
+  aile, ceza, is-sosyal-guvenlik, vergi, ticaret-sirketler, tasinmaz-kira, tuketici, idare-kamu-gorevlileri,
+  trafik-ulasim, saglik, egitim, cevre-tarim-hayvan, yabancilar-yurttaslik, yargilama-icra, secim-siyaset, diger).
+  Konunun yasaları öne alınır, diğerleri dışlanmaz; cevap konunun dışından gelirse `category.outside: true` olur,
+  güven "high" olamaz ve Markdown'da not çıkar. Emin değilseniz vermeyin. `katalog`'a `kategori`,
+  `GET /v1/statutes?category=` aynı süzgeci uygular. Arayüz yapılırsa menünün bir seçeneği "emin değilim" olmalı.
 
 ## Arama ipuçları
 
