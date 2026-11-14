@@ -465,7 +465,14 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
         throw new ApiError(400, "invalid_unit", "Her öğede id (≤64 bayt) ve text gerekir.");
       }
     }
-    return c.json({ upserted: await writer.upsert(units) });
+    try {
+      return c.json({ upserted: await writer.upsert(units) });
+    } catch (error) {
+      // Admin only: the sync job needs the cause (Workers AI allocation, Vectorize) to decide.
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("vectors upsert failed:", message);
+      throw new ApiError(502, "vector_upsert_failed", message.slice(0, 400));
+    }
   });
 
   app.post("/admin/vectors/delete", async (c) => {
