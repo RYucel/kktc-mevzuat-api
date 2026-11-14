@@ -102,6 +102,8 @@ export interface SearchParams {
   agree?: boolean;
   /** Internal: receives the vector hits of this search (answer focus step). */
   semantic_sink?: { doc_id: string; ref: string | null }[];
+  /** /v1/answer: passages Clef sees in its first step (5-20, default 10; measuring). */
+  candidates?: number;
   /** Internal (retrieval measurement): vector hits to fetch (default 30, at most 50). */
   semantic_top_k?: number;
   /** /v1/answer: rewrite the question into legal terms and statute names with an LLM (default true). */

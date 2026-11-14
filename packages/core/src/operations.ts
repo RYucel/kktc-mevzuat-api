@@ -770,6 +770,11 @@ export async function answerQuestion(
     : reranker
       ? Math.min(3, Math.max(1, params.passages ?? ANSWER_PASSAGES))
       : 1;
+  // Passages Clef sees in the first step (candidates=, 5-20; default 10).
+  // 14 Nov retrieval measurement: the right statute is in the top 10
+  // documents for 145/153 questions but in the top 4 (what 10 passages at 3
+  // per statute reach) for 118.
+  const stageOne = Math.min(20, Math.max(5, params.candidates ?? RERANK_CANDIDATES));
   const semanticSink: { doc_id: string; ref: string | null }[] = [];
   const rewriteSink: QueryRewriteInfo[] = [];
   const termSink: NonNullable<SearchParams["term_sink"]> = [];
@@ -785,7 +790,7 @@ export async function answerQuestion(
       statute_first: statuteFirst,
       skip_amendments: params.dedupe !== false && !/degisiklik/.test(foldTr(params.q)),
       prefer: params.prefer ?? "mevzuat",
-      limit: singleDoc ? 1 : lawPick ? lawPickCount + 10 : reranker ? Math.max(limit, Math.ceil(RERANK_CANDIDATES / passages)) : limit,
+      limit: singleDoc ? 1 : lawPick ? lawPickCount + 10 : reranker ? Math.max(limit, Math.ceil(stageOne / passages)) : limit,
       passages,
       ...(singleDoc ? { exclude_title: true } : {}),
     },
@@ -888,7 +893,7 @@ export async function answerQuestion(
       };
     }
   } else if (reranker && candidates.length > 1) {
-    candidates = candidates.slice(0, RERANK_CANDIDATES);
+    candidates = candidates.slice(0, stageOne);
     try {
       const result = await reranker.rerank(
         params.q,
