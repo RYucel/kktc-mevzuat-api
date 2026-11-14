@@ -261,7 +261,6 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       rewrite_prompt: (["v1", "v2"] as const).find((v) => v === (c.req.query("rewrite_prompt") ?? "").toLowerCase()),
       strong_laws: ["1", "true", "yes"].includes((c.req.query("strong") ?? "").toLowerCase()),
       rewrite_laws: !["0", "false", "no"].includes((c.req.query("laws") ?? "").toLowerCase()),
-      concept_agree: ["1", "true", "yes"].includes((c.req.query("concept_agree") ?? "").toLowerCase()),
       doc_ids: documentParam(c.req.query("document_id")),
       lawpick: ["1", "true", "yes"].includes((c.req.query("lawpick") ?? "").toLowerCase()),
       amended: !["0", "false", "no"].includes((c.req.query("amended") ?? "").toLowerCase()),
