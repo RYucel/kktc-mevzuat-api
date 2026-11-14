@@ -447,8 +447,8 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
   };
 
   app.get("/admin/vectors/info", (c) => {
-    requireAdmin(c.req.header("authorization"));
-    return c.json({ model: SEMANTIC_MODEL, dimensions: SEMANTIC_DIMS });
+    const writer = requireAdmin(c.req.header("authorization"));
+    return c.json({ model: SEMANTIC_MODEL, dimensions: writer.dims ?? SEMANTIC_DIMS });
   });
 
   app.post("/admin/vectors/upsert", async (c) => {

@@ -20,6 +20,13 @@ binding = "AI"
 binding = "VECTORS"
 index_name = "kktc-mevzuat-maddeler"
 
+# Trial index (OPUS-GOREVLER-5 item 5): 128 dimensions, units with document
+# context; admin requests with ?index=next only. Created by
+# scripts/ensure-vector-index.sh before each deploy.
+[[vectorize]]
+binding = "VECTORS_NEXT"
+index_name = "kktc-mevzuat-maddeler-128"
+
 # Per-client limit (cf-connecting-ip): 30 requests a minute, enough for a
 # person or an assistant, not for a bot draining the D1 quota. Approximate and
 # per Cloudflare location. /health, /admin/* and requests carrying the admin

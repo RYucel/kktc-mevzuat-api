@@ -22,6 +22,9 @@ on:
       budget_tokens:
         description: "Bu çalıştırmada gömülecek en fazla token"
         default: "7000000"
+      next_budget_tokens:
+        description: "Deneme dizini (128 boyut, bağlamlı) için en fazla token; 0 = atla"
+        default: "3000000"
 
 permissions:
   contents: write
@@ -43,6 +46,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       BASE: ${{ vars.WORKER_URL || 'https://kktc-mevzuat-api.stevevaius.workers.dev' }}
       BUDGET: ${{ inputs.budget_tokens || '7000000' }}
+      NEXT_BUDGET: ${{ inputs.next_budget_tokens || '3000000' }}
       PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
@@ -72,6 +76,11 @@ jobs:
           if grep -qx vectors.json <<<"$assets"; then
             gh release download history --pattern vectors.json --dir data --clobber
           fi
+          for f in vector-units-next.jsonl.gz vectors-next.json; do
+            if grep -qx "$f" <<<"$assets"; then
+              gh release download history --pattern "$f" --dir data --clobber
+            fi
+          done
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Check the Worker's vector endpoints
@@ -96,9 +105,29 @@ jobs:
         working-directory: crawler
         run: python -m kktc vectors sync --base "$BASE" --budget-tokens "$BUDGET"
 
+      # Trial index: only when its units exist and the Worker has the binding.
+      - name: Sync trial index
+        id: next
+        if: ${{ steps.worker.outputs.ready == 'true' && env.NEXT_BUDGET != '0' && hashFiles('data/vector-units-next.jsonl.gz') != '' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          ADMIN=$(cd crawler && python -m kktc vectors admin-token)
+          echo "::add-mask::$ADMIN"
+          code=$(curl -s -o /tmp/next.json -w '%{http_code}' -H "Authorization: Bearer $ADMIN" "$BASE/admin/vectors/info?index=next")
+          if [[ "$code" != "200" ]]; then
+            echo "::notice::Deneme dizini bağlı değil (HTTP $code)."
+            exit 0
+          fi
+          cat /tmp/next.json; echo
+          cd crawler && python -m kktc vectors sync --base "$BASE" --budget-tokens "$NEXT_BUDGET" \
+            --units ../data/vector-units-next.jsonl.gz --manifest ../data/vectors-next.json --dims 128 --index next
+
       - name: Save manifest
         if: ${{ always() && steps.worker.outputs.ready == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
           [[ -f data/vectors.json ]] && gh release upload history data/vectors.json --clobber
+          [[ -f data/vectors-next.json ]] && gh release upload history data/vectors-next.json --clobber || true

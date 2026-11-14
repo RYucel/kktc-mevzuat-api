@@ -233,7 +233,7 @@ def cmd_vectors(args: argparse.Namespace) -> None:
     from . import vectors
 
     if args.action == "export":
-        stats = vectors.export_units(Path(args.db), Path(args.units))
+        stats = vectors.export_units(Path(args.db), Path(args.units), fmt=args.format, dims=args.dims)
         print(json.dumps(stats, ensure_ascii=False, indent=2))
         return
     if args.action == "admin-token":
@@ -248,13 +248,14 @@ def cmd_vectors(args: argparse.Namespace) -> None:
     if not token or not args.base:
         raise SystemExit("--base and VECTOR_ADMIN_TOKEN (or CLOUDFLARE_API_TOKEN) are required")
     manifest_path = Path(args.manifest)
-    manifest = vectors.load_manifest(manifest_path)
+    manifest = vectors.load_manifest(manifest_path, dims=args.dims)
     summary = vectors.sync(
         vectors.load_units(Path(args.units)),
         manifest,
         vectors.http_poster(args.base, token),
         budget_tokens=args.budget_tokens,
         save=lambda m: vectors.save_manifest(manifest_path, m),
+        index=args.index,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
@@ -333,6 +334,9 @@ def main(argv: list[str] | None = None) -> None:
     vec.add_argument("--units", default=str(DATA_DIR / "vector-units.jsonl.gz"))
     vec.add_argument("--manifest", default=str(DATA_DIR / "vectors.json"))
     vec.add_argument("--base", default="", help="Worker URL, e.g. https://kktc-mevzuat-api.example.workers.dev")
+    vec.add_argument("--format", type=int, default=1, choices=[1, 2], help="unit text format (2: with document context)")
+    vec.add_argument("--dims", type=int, default=192, help="vector dimensions of the target index")
+    vec.add_argument("--index", default="", choices=["", "next"], help="'next': the second index under trial")
     vec.add_argument(
         "--budget-tokens",
         type=int,

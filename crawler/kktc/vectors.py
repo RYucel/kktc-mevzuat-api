@@ -62,7 +62,20 @@ def is_amendment(title: str) -> bool:
     return "degisiklik" in fold_tr(title or "")
 
 
-def build_units(db_path: Path) -> list[dict[str, Any]]:
+# Unit text formats. 1: "<title> — <ref>\n<article>". 2 (OPUS-GOREVLER-5
+# item 5): the statute's readable name, a line of document context (what the
+# statute regulates, from its card; a regulation's parent law), then the
+# article. Neighbouring statutes (KDV / KDV İadesi, İş / Basın İş) share
+# vocabulary; the context keeps an article tied to its statute.
+CONTEXT_CHARS = 200
+NEXT_DIMS = 128
+
+
+def max_vectors(dims: int) -> int:
+    return int(5_000_000 / dims * 0.95)
+
+
+def build_units(db_path: Path, fmt: int = 1) -> list[dict[str, Any]]:
     """One unit per article (parts joined), preamble, or loose paragraph.
 
     ``ord`` is the D1 ordinal of the unit's first chunk; the Worker uses
@@ -72,7 +85,10 @@ def build_units(db_path: Path) -> list[dict[str, Any]]:
     conn.row_factory = sqlite3.Row
     rows_ = list(
         conn.execute(
-            f"SELECT id, type, title, source, year, json_extract(extra_json, '$.duplicate_of') AS duplicate_of FROM documents WHERE type IN ({','.join('?' * len(LEGISLATION))}) "
+            f"SELECT id, type, title, source, year, json_extract(extra_json, '$.duplicate_of') AS duplicate_of, "
+            "json_extract(extra_json, '$.display_title') AS display, json_extract(extra_json, '$.card') AS card, "
+            "json_extract(extra_json, '$.parent_law') AS parent "
+            f"FROM documents WHERE type IN ({','.join('?' * len(LEGISLATION))}) "
             "AND text_status IN ('full', 'partial')",
             LEGISLATION,
         )
@@ -89,6 +105,17 @@ def build_units(db_path: Path) -> list[dict[str, Any]]:
         and not row["duplicate_of"]
         and not (row["source"] != "gov" and (row["type"], title_key(row["title"])) in official)
     }
+    names = {r["id"]: (r["display"] or r["title"]) for r in rows_}
+
+    def context(doc: Any) -> str:
+        parts = []
+        card = re.sub(r"\s+", " ", doc["card"] or "").strip()
+        if card:
+            parts.append(card[:CONTEXT_CHARS].rsplit(" ", 1)[0] if len(card) > CONTEXT_CHARS else card)
+        if doc["type"] == "tuzuk" and doc["parent"] and doc["parent"] in names:
+            parts.append(f"Dayanak yasa: {names[doc['parent']]}")
+        return " | ".join(parts)
+
     units: list[dict[str, Any]] = []
     current: Optional[dict[str, Any]] = None
 
@@ -96,8 +123,14 @@ def build_units(db_path: Path) -> list[dict[str, Any]]:
         nonlocal current
         if current:
             doc = docs[current["doc_id"]]
-            label = f"{doc['title']} — {current['ref']}" if current["ref"] else doc["title"]
-            text = f"{label}\n{' '.join(current['parts'])}"[:MAX_UNIT_CHARS].strip()
+            if fmt == 2:
+                name = doc["display"] or doc["title"]
+                label = f"{name} — {current['ref']}" if current["ref"] else name
+                ctx = context(doc)
+                head = f"{label}\n{ctx}" if ctx else label
+            else:
+                head = f"{doc['title']} — {current['ref']}" if current["ref"] else doc["title"]
+            text = f"{head}\n{' '.join(current['parts'])}"[:MAX_UNIT_CHARS].strip()
             units.append(
                 {
                     "id": _unit_id(current["doc_id"], current["ord"], text),
@@ -150,8 +183,8 @@ def prioritise(units: list[dict[str, Any]], limit: int = MAX_VECTORS) -> list[di
     return ordered[:limit]
 
 
-def export_units(db_path: Path, out_path: Path) -> dict[str, Any]:
-    units = prioritise(build_units(db_path))
+def export_units(db_path: Path, out_path: Path, fmt: int = 1, dims: int = DIMS) -> dict[str, Any]:
+    units = prioritise(build_units(db_path, fmt), max_vectors(dims))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(out_path, "wt", encoding="utf-8") as handle:
         for unit in units:
@@ -161,6 +194,8 @@ def export_units(db_path: Path, out_path: Path) -> dict[str, Any]:
         "chars": sum(len(u["text"]) for u in units),
         "est_tokens": sum(estimate_tokens(u["text"]) for u in units),
         "by_type": {t: sum(1 for u in units if u["type"] == t) for t in LEGISLATION},
+        "format": fmt,
+        "dims": dims,
     }
     log.info("vectors: exported %s", stats)
     return stats
@@ -171,14 +206,14 @@ def load_units(path: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in handle if line.strip()]
 
 
-def load_manifest(path: Path) -> dict[str, Any]:
+def load_manifest(path: Path, dims: int = DIMS) -> dict[str, Any]:
     if path.exists():
         data = json.loads(path.read_text(encoding="utf-8"))
-        if data.get("model") == MODEL and data.get("dims") == DIMS:
+        if data.get("model") == MODEL and data.get("dims") == dims:
             return data
         log.warning("vectors: manifest is for %s/%s; starting over", data.get("model"), data.get("dims"))
-        return {"model": MODEL, "dims": DIMS, "ids": {}, "stale_model_ids": list(data.get("ids", {}))}
-    return {"model": MODEL, "dims": DIMS, "ids": {}}
+        return {"model": MODEL, "dims": dims, "ids": {}, "stale_model_ids": list(data.get("ids", {}))}
+    return {"model": MODEL, "dims": dims, "ids": {}}
 
 
 def save_manifest(path: Path, manifest: dict[str, Any]) -> None:
@@ -228,15 +263,18 @@ def sync(
     budget_tokens: int,
     batch_size: int = 32,
     save: Callable[[dict[str, Any]], None] = lambda manifest: None,
+    index: str = "",
 ) -> dict[str, Any]:
     """Delete vectors that are gone, then embed new units within the budget."""
+    # index="next": the second index (128 dimensions, format 2) under trial.
+    query = f"?index={index}" if index else ""
     wanted = {u["id"]: u for u in units}
     have: dict[str, Any] = manifest.setdefault("ids", {})
     stale = [i for i in have if i not in wanted] + list(manifest.pop("stale_model_ids", []))
     deleted = 0
     for start in range(0, len(stale), 100):
         batch = stale[start : start + 100]
-        post("/admin/vectors/delete", {"ids": batch})
+        post(f"/admin/vectors/delete{query}", {"ids": batch})
         for vector_id in batch:
             have.pop(vector_id, None)
         deleted += len(batch)
@@ -254,7 +292,7 @@ def sync(
             break
         try:
             post(
-                "/admin/vectors/upsert",
+                f"/admin/vectors/upsert{query}",
                 {"units": [{k: u[k] for k in ("id", "text", "doc_id", "ord", "ref", "type")} for u in batch]},
             )
         except BudgetExhausted as exc:

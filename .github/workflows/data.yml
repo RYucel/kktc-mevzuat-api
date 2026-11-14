@@ -147,7 +147,10 @@ jobs:
       # the fresh database so chunk ordinals match D1.
       - name: Export vector units
         working-directory: crawler
-        run: python -m kktc vectors export
+        run: |
+          python -m kktc vectors export
+          # Trial index (OPUS-GOREVLER-5 item 5): units with document context, 128 dimensions.
+          python -m kktc vectors export --format 2 --dims 128 --units ../data/vector-units-next.jsonl.gz
 
       - name: Save version history
         shell: bash
@@ -158,6 +161,7 @@ jobs:
               --notes "Mevzuat sürüm geçmişi. Veri yenileme iş akışı her çalıştırmada history.db dosyasını günceller; history-prev.db bir önceki kopyadır. Elle silmeyin."
           fi
           files=(data/history.db data/vector-units.jsonl.gz)
+          [[ -f data/vector-units-next.jsonl.gz ]] && files+=(data/vector-units-next.jsonl.gz)
           [[ -f data/history-prev.db ]] && files+=(data/history-prev.db)
           gh release upload history "${files[@]}" --clobber
 
@@ -261,6 +265,10 @@ jobs:
           path.write_text(text, encoding="utf-8")
           PY
           fi
+
+      - name: Ensure trial vector index
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        run: scripts/ensure-vector-index.sh kktc-mevzuat-maddeler-128 128 VECTORS_NEXT
 
       - name: Deploy Worker
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}

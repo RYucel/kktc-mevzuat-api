@@ -166,3 +166,20 @@ def test_prioritise_prefers_newer_regulations() -> None:
         for i, y in enumerate([1980, 2024, None, 2015])
     ]
     assert [u["year"] for u in vectors.prioritise(units, limit=2)] == [2024, 2015]
+
+
+def test_format_2_carries_the_statute_context(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    old = {u["ref"]: u for u in vectors.build_units(db)}
+    new = {u["ref"]: u for u in vectors.build_units(db, fmt=2)}
+    assert old.keys() == new.keys()
+    first, second = old["Madde 2"]["text"], new["Madde 2"]["text"]
+    assert second.splitlines()[0].endswith("— Madde 2")
+    # Same article text at the end; a context line is added when the build has a card.
+    assert second.endswith(first.split("\n", 1)[1][-50:])
+    assert old["Madde 2"]["id"] != new["Madde 2"]["id"] or first == second
+
+
+def test_max_vectors_by_dimensions() -> None:
+    assert vectors.max_vectors(192) == 24739
+    assert vectors.max_vectors(128) == 37109

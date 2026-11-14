@@ -43,6 +43,8 @@ export interface VectorUnit {
 export interface VectorWriter {
   upsert(units: VectorUnit[]): Promise<number>;
   remove(ids: string[]): Promise<number>;
+  /** Dimensions of the index written (default SEMANTIC_DIMS). */
+  readonly dims?: number;
 }
 
 export function queryText(question: string): string {
