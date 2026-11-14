@@ -54,6 +54,14 @@ function requestOrigin(c: { req: { url: string; header(name: string): string | u
   return `${proto}://${host}`;
 }
 
+/** 1/true/yes → true, 0/false/no → false, absent → undefined (the operation's default). */
+function optionalFlag(value: string | undefined): boolean | undefined {
+  const v = (value ?? "").trim().toLowerCase();
+  if (["1", "true", "yes"].includes(v)) return true;
+  if (["0", "false", "no"].includes(v)) return false;
+  return undefined;
+}
+
 function categoryParam(value: string | undefined): string | undefined {
   const id = (value ?? "").trim().toLowerCase();
   if (!id) return undefined;
@@ -258,11 +266,11 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       lawpick: ["1", "true", "yes"].includes((c.req.query("lawpick") ?? "").toLowerCase()),
       amended: !["0", "false", "no"].includes((c.req.query("amended") ?? "").toLowerCase()),
       quote_chars: c.req.query("quote_chars") ? intParam(c.req.query("quote_chars"), "quote_chars", 320, 200, 2000) : undefined,
-      quote_pick: ["1", "true", "yes"].includes((c.req.query("quote_pick") ?? "").toLowerCase()),
+      quote_pick: optionalFlag(c.req.query("quote_pick")),
       terms: ["1", "true", "yes"].includes((c.req.query("terms") ?? "").toLowerCase()),
       category: categoryParam(c.req.query("category") ?? c.req.query("kategori")),
       category_mode: categoryModeParam(c.req.query("category_mode")),
-      children: ["1", "true", "yes"].includes((c.req.query("children") ?? "").toLowerCase()),
+      children: optionalFlag(c.req.query("children")),
       verify: ["1", "true", "yes"].includes((c.req.query("verify") ?? "").toLowerCase()),
       verify_high: floatParam(c.req.query("verify_high"), "verify_high", 0.5, 0, 1),
       verify_low: floatParam(c.req.query("verify_low"), "verify_low", 0.15, 0, 1),
