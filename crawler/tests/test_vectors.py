@@ -183,3 +183,19 @@ def test_format_2_carries_the_statute_context(tmp_path: Path) -> None:
 def test_max_vectors_by_dimensions() -> None:
     assert vectors.max_vectors(192) == 24739
     assert vectors.max_vectors(128) == 37109
+
+
+def test_sync_splits_a_batch_that_is_too_big() -> None:
+    units = [{"id": f"u{i}", "text": "x" * 900, "doc_id": "d", "ord": i, "ref": f"Madde {i}", "type": "yasa"} for i in range(6)]
+    calls = []
+
+    def post(path, payload):
+        n = len(payload.get("units", []))
+        calls.append(n)
+        if n > 2:
+            raise RuntimeError("/admin/vectors/upsert failed: HTTP 502: 3030: input too big")
+        return {"upserted": n}
+
+    summary = vectors.sync(units, {"ids": {}}, post, budget_tokens=10**6)
+    assert summary["upserted"] == 6 and summary["remaining"] == 0
+    assert max(n for n in calls if n <= 2) <= 2
