@@ -164,6 +164,23 @@ for (const [n, c] of cases.entries()) {
         verify: body.rerank?.verify?.applied ? body.rerank.verify.answers : null,
         verify_refers: body.rerank?.verify?.applied ? body.rerank.verify.refers : null,
         verify_before: body.rerank?.verify?.applied ? body.rerank.verify.before : null,
+        // see_also: a regulation under the quoted law was nearly as likely (what reg_cap=1 would cap).
+        reg_close: top?.see_also ? top.see_also.probability >= (top.probability ?? 0) / 2 : false,
+        // Signals for a confidence calibrator (OPUS-GOREVLER-5 item 9); none needs an extra call.
+        signals: top
+          ? {
+              p1: body.rerank?.top_probability ?? top.probability ?? 0,
+              none: body.rerank?.none_probability ?? 0,
+              p2: quotes[1]?.probability ?? 0,
+              focus: body.rerank?.focus?.applied ? (body.rerank.focus.top_probability ?? 0) : null,
+              pick: body.rerank?.quote_pick ? body.rerank.quote_pick.probability : null,
+              rewrite_disagrees: (body.confidence_caps ?? []).includes("rewrite_disagrees") ? 1 : 0,
+              regulation: /^tuzuk-/.test(top.document_id ?? "") ? 1 : 0,
+              partial: top.text_status && top.text_status !== "full" ? 1 : 0,
+              number_asked: /\b(kaç|ne kadar|yüzde|oran|süre)/i.test(c.q) ? 1 : 0,
+              number_in_quote: /\d/.test(top.text ?? "") ? 1 : 0,
+            }
+          : null,
         // lawpick: was the expected statute among the statutes shown, and chosen first?
         // terms=1: a dictionary term found in the question named the right article.
         term_article: Array.isArray(body.terms_matched) ? body.terms_matched.some((t) => isArticle(t, c)) : null,
@@ -289,6 +306,105 @@ if (Object.values(summary).some((s) => s.must_known)) {
     md.push(`| ${variant} | ${pct(s.article1, s.n)} (${wilson(s.article1, s.n)}) | ${s.must_known ? `${s.quote_has_answer}/${s.must_known} (${wilson(s.quote_has_answer, s.must_known)})` : "–"} | ${s.must_known ? `${s.quote3_has_answer}/${s.must_known}` : "–"} | ${s.must_known ? s.article_without_answer : "–"} |`);
   }
 }
+// reg_cap=1 simulated on any run (OPUS-GOREVLER-5 item 10): which "high"
+// answers it would lower, right and wrong.
+{
+  const lines = [];
+  for (const variant of variants) {
+    const hs = rows.map((r) => ({ v: r.variants[variant], r })).filter(({ v }) => v && !v.error && v.confidence === "high" && v.reg_close);
+    if (!hs.length) continue;
+    const wrongs = hs.filter(({ v, r }) => r.unanswerable || !v.article1).length;
+    lines.push(`| ${variant} | ${hs.length - wrongs} | ${wrongs} |`);
+  }
+  if (lines.length) md.push("", "### Tüzük yakın ikinciyse (reg_cap=1 benzetimi): \"high\"tan düşecek cevaplar", "", "| Varyant | doğru | yanlış |", "|---|---|---|", ...lines);
+}
+
+// Confidence calibrator (OPUS-GOREVLER-5 item 9): logistic regression on the
+// signals above, 5-fold cross-validated. Each fold picks, on its four other
+// folds, the lowest score whose "high" precision is >= 95%; the held-out
+// fold is then labelled with it. Reported against today's rule.
+function calibrate(points) {
+  const names = ["p1", "none", "margin", "focus", "has_focus", "pick", "has_pick", "rewrite_disagrees", "regulation", "partial", "num_match"];
+  const featurize = (s) => [
+    s.p1, s.none, s.p1 - s.p2, s.focus ?? 0, s.focus === null ? 0 : 1, s.pick ?? 0, s.pick === null ? 0 : 1,
+    s.rewrite_disagrees, s.regulation, s.partial, s.number_asked ? s.number_in_quote : 1,
+  ];
+  const X = points.map((p) => featurize(p.s));
+  const y = points.map((p) => (p.right ? 1 : 0));
+  const fit = (idx) => {
+    const d = names.length;
+    const mean = Array(d).fill(0), sd = Array(d).fill(0);
+    for (const i of idx) X[i].forEach((v, j) => (mean[j] += v / idx.length));
+    for (const i of idx) X[i].forEach((v, j) => (sd[j] += (v - mean[j]) ** 2 / idx.length));
+    sd.forEach((v, j) => (sd[j] = Math.sqrt(v) || 1));
+    const w = Array(d + 1).fill(0);
+    for (let epoch = 0; epoch < 400; epoch++) {
+      const g = Array(d + 1).fill(0);
+      for (const i of idx) {
+        const z = X[i].reduce((a, v, j) => a + w[j] * ((v - mean[j]) / sd[j]), w[d]);
+        const err = 1 / (1 + Math.exp(-z)) - y[i];
+        X[i].forEach((v, j) => (g[j] += err * ((v - mean[j]) / sd[j])));
+        g[d] += err;
+      }
+      for (let j = 0; j <= d; j++) w[j] -= 0.1 * (g[j] / idx.length + (j < d ? 0.01 * w[j] : 0));
+    }
+    return (x) => 1 / (1 + Math.exp(-x.reduce((a, v, j) => a + w[j] * ((v - mean[j]) / sd[j]), w[d])));
+  };
+  const threshold = (scored) => {
+    // Lowest score keeping precision >= 0.95 among those at or above it.
+    const sorted = [...scored].sort((a, b) => b.score - a.score);
+    let right = 0, best = 1.01;
+    sorted.forEach((p, k) => {
+      right += p.right ? 1 : 0;
+      if (right / (k + 1) >= 0.95) best = p.score;
+    });
+    return best;
+  };
+  const folds = points.map((_, i) => i % 5);
+  let high = 0, wrong = 0;
+  const oof = [];
+  for (let f = 0; f < 5; f++) {
+    const train = points.map((_, i) => i).filter((i) => folds[i] !== f);
+    const model = fit(train);
+    const t = threshold(train.map((i) => ({ score: model(X[i]), right: !!y[i] })));
+    for (const i of points.map((_, i) => i).filter((i) => folds[i] === f)) {
+      const score = model(X[i]);
+      oof.push({ score, right: !!y[i] });
+      if (score >= t) {
+        high++;
+        if (!y[i]) wrong++;
+      }
+    }
+  }
+  const curve = [0.2, 0.3, 0.4, 0.5].map((cov) => {
+    const top = [...oof].sort((a, b) => b.score - a.score).slice(0, Math.round(cov * oof.length));
+    return { coverage: cov, n: top.length, wrong: top.filter((p) => !p.right).length };
+  });
+  return { high, wrong, curve };
+}
+for (const variant of variants) {
+  const points = rows
+    .map((r) => ({ v: r.variants[variant], unanswerable: r.unanswerable }))
+    .filter(({ v }) => v && !v.error && v.signals)
+    .map(({ v, unanswerable }) => ({ s: v.signals, right: !unanswerable && v.article1, high: v.confidence === "high" }));
+  if (points.length < 60) continue;
+  const today = points.filter((p) => p.high);
+  const cal = calibrate(points);
+  md.push(
+    "",
+    `### Güven kalibratörü (${variant}; 5 katlı çapraz doğrulama, hedef "high" isabeti ≥ %95)`,
+    "",
+    "| | high | high ama yanlış |",
+    "|---|---|---|",
+    `| bugünkü kural | ${today.length} | ${today.filter((p) => !p.right).length} |`,
+    `| kalibratör | ${cal.high} | ${cal.wrong} |`,
+    "",
+    "| kapsam (en yüksek skorlu cevapların payı) | cevap | yanlış |",
+    "|---|---|---|",
+    ...cal.curve.map((c) => `| %${Math.round(c.coverage * 100)} | ${c.n} | ${c.wrong} |`),
+  );
+}
+
 // verify=1: which threshold on "does the quote answer?" keeps "high" honest.
 // 5-fold cross-validation over the questions: each fold's threshold is chosen
 // on the other four (fewest wrong "high", then most right "high"), so the

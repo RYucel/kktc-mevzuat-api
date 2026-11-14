@@ -102,6 +102,8 @@ export interface SearchParams {
   agree?: boolean;
   /** Internal: receives the vector hits of this search (answer focus step). */
   semantic_sink?: { doc_id: string; ref: string | null }[];
+  /** /v1/answer: cap "high" when a regulation under the quoted law was nearly as likely (default false; measuring). */
+  reg_cap?: boolean;
   /** /v1/answer: passages Clef sees in its first step (5-20, default 10; measuring). */
   candidates?: number;
   /** Internal (retrieval measurement): vector hits to fetch (default 30, at most 50). */
@@ -246,6 +248,8 @@ export interface AnswerQuote {
    * (regulations; those naming other articles only are left out).
    */
   amended_after?: { id: string; date: string; articles: string[] }[];
+  /** The law was quoted; the best article of a regulation made under it (children). */
+  see_also?: { document_id: string; title: string; ref: string | null; url: string; probability: number };
   /** Query content words found in the quoted passage. */
   coverage: { found: number; total: number };
   score: number;
@@ -432,7 +436,8 @@ export type ConfidenceCap =
   | "foreign_jurisdiction"
   | "unverified"
   | "possibly_amended"
-  | "outside_category";
+  | "outside_category"
+  | "regulation_exists";
 
 export interface QueryRewriteInfo {
   terms: string[];
