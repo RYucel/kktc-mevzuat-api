@@ -55,6 +55,11 @@ jobs:
           path.write_text(text, encoding="utf-8")
           PY
 
+      # The trial index (OPUS-GOREVLER-5 item 5) must exist before a deploy that binds it.
+      - name: Ensure trial vector index
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        run: scripts/ensure-vector-index.sh kktc-mevzuat-maddeler-128 128 VECTORS_NEXT
+
       - name: Deploy Worker
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         run: npm --workspace apps/worker run deploy

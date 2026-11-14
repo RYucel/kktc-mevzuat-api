@@ -10,6 +10,7 @@ import {
   DEFAULT_REWRITE_PROMPT,
   REWRITE_PROMPTS,
   RewriteLimitError,
+  SEMANTIC_DIMS,
   SEMANTIC_MODEL,
   type SemanticHit,
   timingSafeEqual,
@@ -34,6 +35,11 @@ export interface Env {
   AI?: Ai;
   /** Vectorize index of legislation articles (see .github/workflows/vectors.yml). */
   VECTORS?: Vectorize;
+  /**
+   * Second index under trial (OPUS-GOREVLER-5 item 5): 128 dimensions, units
+   * with document context. Used only for admin requests with ?index=next.
+   */
+  VECTORS_NEXT?: Vectorize;
   /** Bearer token for /admin/vectors/*; set by the vectors workflow. */
   VECTOR_ADMIN_TOKEN?: string;
   /** "off" disables Clef answer reranking. */
@@ -366,25 +372,29 @@ class D1Store implements Store {
   }
 }
 
-async function embed(ai: Ai, texts: string[]): Promise<number[][]> {
+/** Dimensions of the trial index (VECTORS_NEXT). */
+const NEXT_DIMS = 128;
+
+async function embed(ai: Ai, texts: string[], dims = SEMANTIC_DIMS): Promise<number[][]> {
   const output = (await ai.run(SEMANTIC_MODEL as Parameters<Ai["run"]>[0], { text: texts } as never)) as {
     data?: number[][];
   };
   if (!output?.data || output.data.length !== texts.length) {
     throw new Error("Workers AI returned no embeddings.");
   }
-  return output.data.map((vector) => truncateEmbedding(vector));
+  return output.data.map((vector) => truncateEmbedding(vector, dims));
 }
 
 class VectorizeSemantic implements SemanticIndex, VectorWriter {
   constructor(
     private readonly ai: Ai,
     private readonly index: Vectorize,
+    readonly dims: number = SEMANTIC_DIMS,
   ) {}
 
   async query(text: string, options: { topK: number; type?: string }): Promise<SemanticHit[]> {
     // The API rejects longer questions; this keeps any other caller bounded too.
-    const [vector] = await embed(this.ai, [queryText(text.slice(0, 1000))]);
+    const [vector] = await embed(this.ai, [queryText(text.slice(0, 1000))], this.dims);
     const result = await this.index.query(vector, {
       topK: Math.min(options.topK, 50),
       returnMetadata: "all",
@@ -403,7 +413,7 @@ class VectorizeSemantic implements SemanticIndex, VectorWriter {
   }
 
   async upsert(units: VectorUnit[]): Promise<number> {
-    const vectors = await embed(this.ai, units.map((unit) => unit.text));
+    const vectors = await embed(this.ai, units.map((unit) => unit.text), this.dims);
     await this.index.upsert(
       units.map((unit, i) => ({
         id: unit.id,
@@ -446,7 +456,17 @@ export default {
         );
       }
     }
-    const semantic = env.AI && env.VECTORS ? new VectorizeSemantic(env.AI, env.VECTORS) : undefined;
+    // ?index=next (admin only): the trial index, for its sync and for measuring it.
+    const nextIndex = new URL(request.url).searchParams.get("index") === "next" && bearerIsAdmin(request, env);
+    const semantic = !env.AI
+      ? undefined
+      : nextIndex
+        ? env.VECTORS_NEXT
+          ? new VectorizeSemantic(env.AI, env.VECTORS_NEXT, NEXT_DIMS)
+          : undefined
+        : env.VECTORS
+          ? new VectorizeSemantic(env.AI, env.VECTORS)
+          : undefined;
     const decide = env.AI
       ? (model: string, input: Record<string, unknown>) =>
           env.AI!.run(`@cf/cloudflare/${model}` as Parameters<Ai["run"]>[0], input as never)
