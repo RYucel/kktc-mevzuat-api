@@ -1,0 +1,49 @@
+name: Measure retrieval
+
+# First-stage retrieval on the live Worker (/admin/retrieve): how often the
+# right statute and article reach Clef. No Clef call; one query embedding per
+# question. Run after every retrieval change (OPUS-GOREVLER-5 item 1).
+
+on:
+  workflow_dispatch:
+    inputs:
+      variants:
+        description: "/admin/retrieve varyantları (virgülle; boş = canlı ayarlar)"
+        default: ""
+      sets:
+        description: "Soru setleri: questions, holdout (holdout yalnızca karar verildikten sonra)"
+        default: "questions"
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BASE: ${{ vars.WORKER_URL || 'https://kktc-mevzuat-api.stevevaius.workers.dev' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      # Exempts this job from the Worker's per-client rate limit.
+      - name: Derive admin token
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        run: |
+          ADMIN=$(python3 -c "import hashlib,os;print(hashlib.sha256((os.environ['CLOUDFLARE_API_TOKEN']+':kktc-vectors').encode()).hexdigest())")
+          echo "::add-mask::$ADMIN"
+          echo "ADMIN_TOKEN=$ADMIN" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Measure
+        env:
+          VARIANTS: ${{ inputs.variants }}
+          SETS: ${{ inputs.sets }}
+        run: node scripts/eval-retrieval.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-retrieval
+          path: eval-retrieval.json
+          if-no-files-found: ignore

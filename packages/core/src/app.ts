@@ -4,6 +4,7 @@ import {
   ApiError,
   answerMarkdown,
   answerQuestion,
+  retrieveDebug,
   rewriteQuestion,
   apiMeta,
   articleMarkdown,
@@ -473,6 +474,25 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       throw new ApiError(400, "invalid_ids", "ids 1-1000 öğe olmalıdır.");
     }
     return c.json({ deleted: await writer.remove(ids) });
+  });
+
+  // Retrieval measurement (scripts/eval-retrieval.mjs): first-stage candidates
+  // per channel, no Clef call. Admin only (it runs several searches per call).
+  app.get("/admin/retrieve", async (c) => {
+    const header = c.req.header("authorization");
+    if (!adminToken || !header || !timingSafeEqual(header, `Bearer ${adminToken}`)) {
+      throw new ApiError(401, "unauthorized", "Yetkisiz.");
+    }
+    const q = (c.req.query("q") ?? "").trim();
+    if (!q) throw new ApiError(400, "missing_query", "q zorunludur.");
+    const doc = c.req.query("doc") || undefined;
+    return c.json(
+      await retrieveDebug(store, q, requestOrigin(c), {
+        doc,
+        category: categoryParam(c.req.query("category")),
+        category_mode: categoryModeParam(c.req.query("category_mode")),
+      }),
+    );
   });
 
   // Clef decision-model passthrough for the measurement workflow

@@ -434,7 +434,7 @@ export async function searchDocuments(
   ) {
     let hits: SemanticHit[] = [];
     try {
-      hits = await store.semantic.query(semanticText, { topK: SEMANTIC_TOP_K, type: params.type });
+      hits = await store.semantic.query(semanticText, { topK: Math.min(50, params.semantic_top_k ?? SEMANTIC_TOP_K), type: params.type });
     } catch (error) {
       // The index is optional (e.g. not filled yet); lexical search still works.
       console.warn("semantic search unavailable:", error instanceof Error ? error.message : error);
@@ -1957,4 +1957,67 @@ async function inDocArticles(
     result.set(docId, list);
   }
   return result;
+}
+
+/**
+ * Retrieval measurement (OPUS-GOREVLER-5 item 1): what the first stage finds,
+ * per channel, with no Clef call. The rewrite is the answer flow's (cached).
+ * `doc`: also the article order inside that statute, as the focus step builds it.
+ */
+export async function retrieveDebug(
+  store: Store,
+  q: string,
+  origin: string,
+  options: { doc?: string; category?: string; category_mode?: "soft" | "hard" } = {},
+): Promise<{
+  docs: { id: string; type: string; refs: string[] }[];
+  lexical_docs: string[];
+  semantic: { doc_id: string; ref: string | null }[];
+  rewrite: { documents: string[]; terms: string[] } | null;
+  law_articles?: string[];
+}> {
+  const statuteFirst = !asksRegulation(q);
+  const semanticSink: { doc_id: string; ref: string | null }[] = [];
+  const rewriteSink: QueryRewriteInfo[] = [];
+  const base: SearchParams = {
+    q,
+    mode: "auto",
+    prefer: "mevzuat",
+    statute_first: statuteFirst,
+    skip_amendments: !/degisiklik/.test(foldTr(q)),
+    passages: 3,
+    limit: 30,
+    offset: 0,
+    ...(options.category ? { category: options.category, category_mode: options.category_mode ?? "soft" } : {}),
+  };
+  const [fused, lexical] = await Promise.all([
+    searchDocuments(
+      store,
+      { ...base, rewrite: !!store.rerank, rewrite_sink: rewriteSink, semantic_sink: semanticSink, semantic_top_k: 50 },
+      origin,
+    ),
+    searchDocuments(store, { ...base, semantic: false, rewrite: false }, origin),
+  ]);
+  const refsOf = (r: SearchResult) =>
+    [r.matched_kind !== "title" ? r.matched_ref : null, ...(r.other_passages ?? []).map((o) => o.ref)].filter(
+      (x): x is string => !!x,
+    );
+  const out: Awaited<ReturnType<typeof retrieveDebug>> = {
+    docs: fused.results.map((r) => ({ id: r.id, type: r.type, refs: refsOf(r) })),
+    lexical_docs: lexical.results.map((r) => r.id),
+    semantic: semanticSink.map((h) => ({ doc_id: h.doc_id, ref: h.ref })),
+    rewrite: rewriteSink[0] && !rewriteSink[0].error ? { documents: rewriteSink[0].documents, terms: rewriteSink[0].terms } : null,
+  };
+  if (options.doc) {
+    const law = canonicalDocId(options.doc);
+    const hints = semanticSink.filter((h) => h.doc_id === law);
+    const inLaw = await searchDocuments(
+      store,
+      { q, mode: "auto", doc_ids: [law], exclude_title: true, semantic_hits: hints, passages: 12, limit: 1, offset: 0 },
+      origin,
+    );
+    const r = inLaw.results.find((x) => x.id === law);
+    out.law_articles = r ? refsOf(r) : [];
+  }
+  return out;
 }
