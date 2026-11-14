@@ -72,19 +72,21 @@ def build_units(db_path: Path) -> list[dict[str, Any]]:
     conn.row_factory = sqlite3.Row
     rows_ = list(
         conn.execute(
-            f"SELECT id, type, title, source, year FROM documents WHERE type IN ({','.join('?' * len(LEGISLATION))}) "
+            f"SELECT id, type, title, source, year, json_extract(extra_json, '$.duplicate_of') AS duplicate_of FROM documents WHERE type IN ({','.join('?' * len(LEGISLATION))}) "
             "AND text_status IN ('full', 'partial')",
             LEGISLATION,
         )
     )
     # Documents the answers never quote (packages/core/src/titles.ts) take no
     # vector space: amendment instruments and mahkemeler copies of statutes
-    # we also hold consolidated from mevzuat.gov.ct.tr.
+    # we also hold consolidated from mevzuat.gov.ct.tr, and copies of the same
+    # statute under another id (extra_json.duplicate_of, crawler/kktc/duplicates.py).
     official = {(r["type"], title_key(r["title"])) for r in rows_ if r["source"] == "gov"}
     docs = {
         row["id"]: row
         for row in rows_
         if not is_amendment(row["title"])
+        and not row["duplicate_of"]
         and not (row["source"] != "gov" and (row["type"], title_key(row["title"])) in official)
     }
     units: list[dict[str, Any]] = []
