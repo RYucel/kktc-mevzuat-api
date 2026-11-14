@@ -145,8 +145,6 @@ export interface SearchParams {
   verify_low?: number;
   /** /v1/answer: statutes shown in the statute-choice step (default 20, 5-30). */
   lawpick_n?: number;
-  /** /v1/answer: "high" needs the answer from a concept's canonical statute when the question matches one (default false; measuring). */
-  concept_agree?: boolean;
   /** /v1/answer: use the statute names of the rewrite at all (default true; laws=0 keeps only its terms). */
   rewrite_laws?: boolean;
   /** /v1/answer: only statute names that match a title in full boost the search and gate "high". */
@@ -426,7 +424,6 @@ export interface StatsResponse {
 export type ConfidenceCap =
   | "regulation"
   | "rewrite_disagrees"
-  | "concept_disagrees"
   | "partial_text"
   | "foreign_jurisdiction"
   | "unverified"
