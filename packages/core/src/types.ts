@@ -102,6 +102,8 @@ export interface SearchParams {
   agree?: boolean;
   /** Internal: receives the vector hits of this search (answer focus step). */
   semantic_sink?: { doc_id: string; ref: string | null }[];
+  /** Internal (retrieval measurement): vector hits to fetch (default 30, at most 50). */
+  semantic_top_k?: number;
   /** /v1/answer: rewrite the question into legal terms and statute names with an LLM (default true). */
   rewrite?: boolean;
   /** /v1/answer: rewrite prompt version ("v1" default, "v2"). */
