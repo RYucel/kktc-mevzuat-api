@@ -43,3 +43,11 @@ test("canonicalDocId drops leading zeros only", async () => {
   assert.equal(canonicalDocId("yasa-10-2000"), "yasa-10-2000");
   assert.equal(canonicalDocId("yasa-fasil-154"), "yasa-fasil-154");
 });
+
+test("a copy marked duplicate_of by the build is superseded", () => {
+  const titles = [
+    { id: "yasa-8-2009", title: "8/2009 SAYILI AV VE AVLA İLGİLİ YABAN HAYATINI DÜZENLEME YASASI", type: "yasa", source: "gov" },
+    { id: "yasa-18-2009", title: "Av ve Avla İlgili Yaban Hayatını Düzenleme Yasası", type: "yasa", source: "mahkemeler", duplicate_of: "yasa-8-2009" },
+  ];
+  assert.deepEqual([...supersededCopies(titles)], ["yasa-18-2009"]);
+});

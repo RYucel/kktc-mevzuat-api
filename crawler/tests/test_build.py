@@ -45,3 +45,20 @@ def test_canonical_id_drops_leading_zeros():
     assert make_doc_id("yasa", "9/1976", "") == "yasa-9-1976"
     assert canonical_id("yasa-10-2000") == "yasa-10-2000"
     assert canonical_id("tuzuk-0-2020") == "tuzuk-0-2020"
+
+
+def test_duplicates_found_by_text_not_title():
+    from kktc.duplicates import find_duplicates
+
+    body = " ".join(f"madde {i} bu yasa uyarınca av ruhsatı alan kişi yirmi bir yaşını doldurmuş olmalıdır ve sınavı geçmelidir {i}" for i in range(80))
+    other = " ".join(f"madde {i} sözleşme yapma ehliyeti on sekiz yaşını dolduran kişilere aittir {i * 7}" for i in range(80))
+    docs = [
+        ("yasa-8-2009", "yasa", "8/2009 SAYILI AV VE AVLA İLGİLİ YABAN HAYATINI DÜZENLEME YASASI", "gov", body),
+        ("yasa-18-2009", "yasa", "Av ve Avla İlgili Yaban Hayatını Düzenleme Yasası", "mahkemeler", body + " ek"),
+        ("yasa-fasil-149", "yasa", "Sözleşmeler Yasası", "gov", other),
+        ("tuzuk-av", "tuzuk", "Av Tüzüğü", "gov", body),
+    ]
+    found = find_duplicates(docs)
+    assert set(found) == {"yasa-18-2009"}
+    kept, sim = found["yasa-18-2009"]
+    assert kept == "yasa-8-2009" and sim >= 0.9

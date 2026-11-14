@@ -494,6 +494,18 @@ def normalize_margin_notes(text: str) -> str:
     return "\n".join(out)
 
 
+# Article numbers printed without a full stop, the heading on the same line
+# (İş Yasası from m.44 on, as stored on 2026-11-14):
+#   "Yıllık Ücretli İzin Hakkının 44 (1) Yıllık ..."  "Çalışılmış Gibi 45 Aşağıda ..."
+#   "46 (1) Yıllık ücretli izin ..."
+# Without a heading the body must open with "(1)": a bare number at the start
+# of a line is otherwise too common in prose. Lowest priority, and only kept
+# when it continues the article sequence.
+_NODOT_NUM_RE = re.compile(
+    r"(?m)^[ \t]*(?P<title>[A-ZÇĞİÖŞÜ][^\n\d]{1,80}?[ \t]+)?(?P<num>\d{1,3})(?P<suf>[A-Z])?[ \t]+(?P<rest>\(1\)[ \t]*\S[^\n]*|[A-ZÇĞİÖŞÜ][a-zçğıöşü][^\n]*)$"
+)
+
+
 def _article_candidates(text: str) -> list[dict]:
     """Collect possible article starts from the three layouts seen in KKTC law PDFs.
 
@@ -602,6 +614,16 @@ def _article_candidates(text: str) -> list[dict]:
         if title and not _looks_like_title(title):
             title = ""
         add(m.start() if title else m.start("margin"), int(m.group("num")), m.group("suf") or "", title, 2)
+
+    for m in _NODOT_NUM_RE.finditer(text):
+        title = (m.group("title") or "").strip()
+        rest = m.group("rest") or ""
+        if title:
+            if not _looks_like_title(title):
+                continue
+        elif not rest.startswith("(1)"):
+            continue
+        add(m.start(), int(m.group("num")), m.group("suf") or "", title, 3)
 
     for m in _BARE_NUM_RE.finditer(text):
         line_start = m.start()

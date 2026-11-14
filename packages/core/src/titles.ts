@@ -17,6 +17,8 @@ export interface StatuteTitle {
   parent?: string;
   /** Subject categories (crawler/kktc/categories.py); empty for older builds. */
   categories?: string[];
+  /** The same statute is held under this other id (crawler/kktc/duplicates.py). */
+  duplicate_of?: string;
 }
 
 let cache: { at: number; titles: StatuteTitle[]; superseded: Set<string> } | null = null;
@@ -25,7 +27,7 @@ async function load(store: Store) {
   const now = Date.now();
   if (cache && now - cache.at < TTL_MS) return cache;
   const rows = await store.all(
-    `SELECT id, title, type, source, number, text_status, json_extract(extra_json, '$.display_title') AS display, json_extract(extra_json, '$.parent_law') AS parent, json_extract(extra_json, '$.categories') AS categories FROM documents WHERE type IN (${LEGISLATION.map(() => "?").join(",")})`,
+    `SELECT id, title, type, source, number, text_status, json_extract(extra_json, '$.display_title') AS display, json_extract(extra_json, '$.parent_law') AS parent, json_extract(extra_json, '$.categories') AS categories, json_extract(extra_json, '$.duplicate_of') AS duplicate_of FROM documents WHERE type IN (${LEGISLATION.map(() => "?").join(",")})`,
     LEGISLATION,
   );
   const titles = rows.map((row) => ({
@@ -38,6 +40,7 @@ async function load(store: Store) {
     text_status: String(row.text_status ?? ""),
     ...(row.parent ? { parent: String(row.parent) } : {}),
     ...(row.categories ? { categories: parseCategories(row.categories) } : {}),
+    ...(row.duplicate_of ? { duplicate_of: String(row.duplicate_of) } : {}),
   }));
   cache = { at: now, titles, superseded: supersededCopies(titles) };
   return cache;
@@ -145,13 +148,16 @@ export function isAmendment(title: string): boolean {
  * mevzuat.gov.ct.tr we also hold (same type and title). The mahkemeler copy is
  * the text as first published, without later amendments, and its article
  * numbers can differ: on 2026-11-10 "tuzuk-869 Madde 4" was quoted for the
- * consolidated regulation's Madde 9.
+ * consolidated regulation's Madde 9. Also copies the build found by text
+ * under another title (duplicate_of).
  */
 export function supersededCopies(titles: StatuteTitle[]): Set<string> {
   const official = new Set(titles.filter((t) => t.source === "gov").map((t) => `${t.type}|${titleKey(t.title)}`));
   return new Set(
     titles
-      .filter((t) => t.source !== "gov" && !isAmendment(t.title) && official.has(`${t.type}|${titleKey(t.title)}`))
+      .filter(
+        (t) => !!t.duplicate_of || (t.source !== "gov" && !isAmendment(t.title) && official.has(`${t.type}|${titleKey(t.title)}`)),
+      )
       .map((t) => t.id),
   );
 }

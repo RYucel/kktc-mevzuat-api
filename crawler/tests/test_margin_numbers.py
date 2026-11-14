@@ -77,3 +77,38 @@ Amaç 3. Bu Yasanın amacı örnektir.
     articles = _articles(text)
     assert articles["Madde 2"].count("11/1985") == 1
     assert articles["Madde 3"].startswith("Amaç 3.")
+
+
+# 22/1992 İş Yasası as stored on 2026-11-14: from m.44 on the numbers carry no
+# full stop, and every later article was quoted as "Madde 43".
+IS_YASASI = """İzin
+43. (1) Bu Yasa kapsamındaki işyerlerinde çalışan işçilere yıllık ücretli izin verilir:
+(A) Hizmet süresi altı aydan beş yıla kadar olanlara yılda on dört iş günü;
+(3) Yıllık ücretli izin hakkından vazgeçilemez.
+
+Yıllık Ücretli İzin Hakkının 44 (1) Yıllık ücretli izine hak kazanmak için gerekli süre hesaplanır.
+Hesaplan-ması
+(2) Bir yıllık süre içinde bu Yasanın 45’inci maddesinde sayılan haller dışındaki nedenlerle.
+
+Çalışılmış Gibi 45 Aşağıda öngörülen süreler çalışılmış süre olarak sayılır:
+Sayılan Süreler (1) İşçinin uğradığı kaza günleri;
+
+Yıllık Ücretli İzin Uygulaması
+46 (1) Yıllık ücretli izin işveren tarafından bölünemez.
+(2) Yıllık ücretli izin günlerinin hesaplanmasında 12 gün sayılmaz.
+
+İşyerinin Değişmesi 47 İşyerinin el değiştirmesi izin haklarını kaldırmaz.
+"""
+
+
+def test_article_numbers_without_full_stop():
+    text = "Kısa İsim 1. Bu Yasa İş Yasası olarak isimlendirilir.\n\n" + "\n\n".join(
+        f"Başlık {i}\n{i}. (1) Metin {i} burada yer alır." for i in range(2, 43)
+    ) + "\n\n" + IS_YASASI
+    arts = _articles(text)
+    assert "yıllık ücretli izin verilir" in arts["Madde 43"]
+    assert "Madde 44" in arts and "hak kazanmak" in arts["Madde 44"]
+    assert "Aşağıda öngörülen" in arts["Madde 45"]
+    assert "bölünemez" in arts["Madde 46"]
+    assert "el değiştirmesi" in arts["Madde 47"]
+    assert "Madde 12" in arts and "Metin 12" in arts["Madde 12"]

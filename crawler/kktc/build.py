@@ -18,6 +18,7 @@ from .history import HISTORY_TABLES_SQL
 from .cards import display_title, statute_card
 from .parents import LawIndex, parent_law
 from .categories import assign as assign_categories, load_categories
+from .duplicates import find_duplicates
 from .amendments import later_amendments
 from .terms import accepted, load_terms
 from .textproc import Chunk, chunk_document, clean_text, index_text, normalize_title
@@ -195,6 +196,15 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
     # Regulations name the law they are made under (OPUS-GOREVLER-4 item 8).
     laws = LawIndex((d["_id"], clean_text(d.get("title") or "")) for d in docs if (d.get("type") or "yasa") == "yasa")
     parents_found = parents_missing = 0
+    # The same statute under two ids (OPUS-GOREVLER-5 item 2): the copy is kept
+    # but marked, so answers and the vector index use only the kept one.
+    duplicates = find_duplicates(
+        (d["_id"], d.get("type") or "yasa", clean_text(d.get("title") or ""), d.get("source") or "gov", clean_text(d.get("content") or ""))
+        for d in docs
+        if (d.get("type") or "yasa") in CARD_TYPES and "degisiklik" not in normalize_title(clean_text(d.get("title") or ""))
+    )
+    for dup, (kept, sim) in sorted(duplicates.items()):
+        log.info("duplicate: %s -> %s (%.2f)", dup, kept, sim)
     # Subject categories (OPUS-GOREVLER-4 item 19).
     _category_ids, category_file = load_categories(CATEGORIES_DIR)
     category_counts: Counter[str] = Counter()
@@ -220,6 +230,8 @@ def build_database(docs: list[dict[str, Any]], db_path: Path = DB_PATH) -> dict[
             card = statute_card(chunks)
             if card:
                 extra["card"] = card
+        if doc["_id"] in duplicates:
+            extra["duplicate_of"] = duplicates[doc["_id"]][0]
         if doc["_id"] in later:
             extra["amended_after"] = later[doc["_id"]][:20]
         if doc.get("type") == "tuzuk" and content:
