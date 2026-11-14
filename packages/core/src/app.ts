@@ -275,6 +275,7 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       verify_high: floatParam(c.req.query("verify_high"), "verify_high", 0.5, 0, 1),
       verify_low: floatParam(c.req.query("verify_low"), "verify_low", 0.15, 0, 1),
       toc: ["1", "true", "yes"].includes((c.req.query("toc") ?? "").toLowerCase()),
+      reg_cap: ["1", "true", "yes"].includes((c.req.query("reg_cap") ?? "").toLowerCase()),
       candidates: c.req.query("candidates") ? intParam(c.req.query("candidates"), "candidates", 10, 5, 20) : undefined,
       lawpick_n: c.req.query("lawpick_n") ? intParam(c.req.query("lawpick_n"), "lawpick_n", 20, 5, 30) : undefined,
       focus_two: ["1", "true", "yes"].includes((c.req.query("focus2") ?? "").toLowerCase()),

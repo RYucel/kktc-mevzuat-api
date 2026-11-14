@@ -775,6 +775,8 @@ export async function answerQuestion(
   // documents for 145/153 questions but in the top 4 (what 10 passages at 3
   // per statute reach) for 118.
   const stageOne = Math.min(20, Math.max(5, params.candidates ?? RERANK_CANDIDATES));
+  // children: the regulation offered beside the chosen law (for see_also).
+  let offeredRegulation: string | null = null;
   const semanticSink: { doc_id: string; ref: string | null }[] = [];
   const rewriteSink: QueryRewriteInfo[] = [];
   const termSink: NonNullable<SearchParams["term_sink"]> = [];
@@ -968,6 +970,7 @@ export async function answerQuestion(
       if (params.children && !both && first.type === "yasa") {
         const child = await chooseRegulation(store, reranker, params, origin, first, rerank);
         if (child) {
+          offeredRegulation = child.regulation.id;
           const lead = Math.ceil(focusCount * 0.6);
           targets = child.leads
             ? [
@@ -1053,6 +1056,26 @@ export async function answerQuestion(
     });
   }
 
+  // The law was quoted while a regulation made under it was a close second
+  // (OPUS-GOREVLER-5 item 10): four of the ten confident wrong answers on
+  // 14 Nov quoted the law for a detail its regulation settles.
+  let regulationClose = false;
+  if (quotes[0] && offeredRegulation && quotes[0].document_id !== offeredRegulation && probabilities) {
+    const i = candidates.findIndex((c) => c.result.id === offeredRegulation && !!c.ref);
+    const p = i >= 0 ? (probabilities[i] ?? 0) : 0;
+    if (i >= 0 && p > 0.05) {
+      const reg = candidates[i];
+      quotes[0].see_also = {
+        document_id: reg.result.id,
+        title: names.get(reg.result.id) ?? reg.result.title,
+        ref: reg.ref,
+        url: reg.url,
+        probability: round3(p),
+      };
+      regulationClose = p >= (probabilities[0] ?? 0) / 2;
+    }
+  }
+
   // Confidence describes the quoted passage, not the ranking score (canonical
   // laws carry a fixed editorial score that says nothing about the passage).
   const top = quotes[0];
@@ -1080,6 +1103,8 @@ export async function answerQuestion(
     // on 2026-11-10 four of the six confident wrong answers were exactly this
     // (Kira (Denetim) -> İskan Yasası, KDV -> KDV İadesi, Hayvan Refahı -> Ceza).
     if (params.agree !== false && params.rewrite_laws !== false && rerank?.applied && rewriteDisagrees(rewriteSink[0], top.document_id, params.strong_laws === true)) caps.push("rewrite_disagrees");
+    // reg_cap=1 (measuring): a regulation under the quoted law was nearly as likely.
+    if (params.reg_cap === true && regulationClose) caps.push("regulation_exists");
     // A later amendment may have changed the quoted article (regulations; OPUS-GOREVLER-4 item 11).
     if (params.amended !== false && top.amended_after?.length) caps.push("possibly_amended");
     // Part of the statute is missing: another article (or a later paragraph) may change the answer.
@@ -1611,6 +1636,7 @@ const CAP_LABELS: Record<ConfidenceCap, string> = {
   unverified: "alıntının soruyu doğrudan cevapladığı doğrulanamadı",
   possibly_amended: "metinden sonra çıkan bir değişiklik bu maddeyi değiştirmiş olabilir",
   outside_category: "seçtiğiniz konunun dışındaki bir yasadan",
+  regulation_exists: "ayrıntı bu yasaya dayanan tüzükte olabilir",
 };
 
 export function answerMarkdown(response: AnswerResponse): string {
@@ -1632,6 +1658,8 @@ export function answerMarkdown(response: AnswerResponse): string {
     }
     if (response.category?.outside)
       lines.push(`- **Not:** Bu alıntı seçtiğiniz konunun (${response.category.name}) dışındaki bir yasadan; soruyu doğru konu altında sorduğunuzu kontrol edin.`);
+    if (quote.see_also)
+      lines.push(`- **Ayrıntı için:** ${quote.see_also.title}${quote.see_also.ref ? `, ${quote.see_also.ref}` : ""} — ${quote.see_also.url}`);
     if (quote.parent_law) lines.push(`- **Dayanak yasa:** ${quote.parent_law.title} (\`${quote.parent_law.id}\`)`);
     lines.push(`- **Güncellik:** ${consolidationLabel(quote.consolidated_through) ?? "Metnin hangi değişikliklere kadar güncel olduğu kaynakta belirtilmiyor; Resmî Gazete'den kontrol edin."}`);
     lines.push(`- **Kaynak:** ${quote.source_url}`);
