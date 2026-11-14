@@ -95,6 +95,9 @@ for (const [n, c] of cases.entries()) {
         // article is either shown there or in the statute's focus list.
         pool: !!docRank && docRank <= STAGE1_DOCS && (stage1Article || (!!lawRank && lawRank <= FOCUS)),
         rewrite_named: r.rewrite ? r.rewrite.documents.some((id) => isDoc(id, c)) : null,
+        // Reach with more statutes in the first step (candidates=, passages=):
+        // the statute among the first K and its article in its focus list.
+        pool_k: Object.fromEntries([5, 8, 10].map((k) => [k, !!docRank && docRank <= k && !!lawRank && lawRank <= FOCUS])),
       };
       row.variants[variant] = result;
       marks.push(result.pool ? "P" : docRank && docRank <= 10 ? "d" : "·");
@@ -131,6 +134,9 @@ for (const variant of variants) {
     sem50: count((x) => within(x.semantic_article_rank, 50)),
     law12: count((x) => within(x.law_article_rank, 12)),
     rewrite: count((x) => x.rewrite_named === true),
+    pool5: count((x) => x.pool_k?.[5]),
+    pool8: count((x) => x.pool_k?.[8]),
+    pool10: count((x) => x.pool_k?.[10]),
     only_lex: count((x) => within(x.lexical_doc_rank, 10) && !within(x.semantic_doc_rank, 10)),
     only_sem: count((x) => !within(x.lexical_doc_rank, 10) && within(x.semantic_doc_rank, 10)),
   };
@@ -139,8 +145,11 @@ for (const variant of variants) {
     `| ${variant || "(canlı)"} | **${s.pool}/${s.n}** | ${s.doc1} | ${s.doc4} | ${s.doc10} | ${s.doc30} | ${s.lex10} | ${s.semdoc10} | ${s.sem10} | ${s.sem30} | ${s.sem50} | ${s.law12} | ${s.rewrite} |`,
   );
 }
-md.push("", "| Varyant | yasayı yalnız FTS buldu (@10) | yalnız vektör buldu (@10) |", "|---|---|---|");
-for (const variant of variants) md.push(`| ${variant || "(canlı)"} | ${summary[variant].only_lex} | ${summary[variant].only_sem} |`);
+md.push("", "| Varyant | yasayı yalnız FTS buldu (@10) | yalnız vektör buldu (@10) | erişim: ilk 5 yasa | ilk 8 | ilk 10 |", "|---|---|---|---|---|---|");
+for (const variant of variants) {
+  const s = summary[variant];
+  md.push(`| ${variant || "(canlı)"} | ${s.only_lex} | ${s.only_sem} | ${s.pool5} | ${s.pool8} | ${s.pool10} |`);
+}
 
 // Misses of the first variant: where the statute stood in each channel.
 const first = variants[0];
