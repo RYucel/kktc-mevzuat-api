@@ -223,6 +223,10 @@ def save_manifest(path: Path, manifest: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+# Estimated tokens per upsert request (Workers AI rejects large inputs).
+BATCH_TOKENS = 8000
+
+
 class BudgetExhausted(RuntimeError):
     pass
 
@@ -246,7 +250,7 @@ def http_poster(base: str, token: str, timeout: float = 120.0) -> Post:
             # Workers AI daily allocation (free tier) or rate limit: stop for today.
             if response.status_code == 429 or re.search(r"neuron|quota|limit", body, re.I):
                 raise BudgetExhausted(f"HTTP {response.status_code}: {body}")
-            if response.status_code in (401, 403, 404, 501):
+            if response.status_code in (401, 403, 404, 501) or "too big" in body:
                 raise RuntimeError(f"HTTP {response.status_code} on {path}: {body}")
             last = f"HTTP {response.status_code}: {body}"
             time.sleep(2 ** attempt)
@@ -284,17 +288,38 @@ def sync(
     spent = 0
     upserted = 0
     stopped: Optional[str] = None
-    for start in range(0, len(todo), batch_size):
-        batch = todo[start : start + batch_size]
+    payload = lambda batch: {"units": [{k: u[k] for k in ("id", "text", "doc_id", "ord", "ref", "type")} for u in batch]}
+
+    def send(batch: list[dict[str, Any]]) -> None:
+        # Workers AI rejects a request whose total input is too large
+        # ("3030: input too big", 14 Nov 2026, after long articles changed);
+        # split the batch and send the halves.
+        try:
+            post(f"/admin/vectors/upsert{query}", payload(batch))
+        except RuntimeError as exc:
+            if "too big" not in str(exc) or isinstance(exc, BudgetExhausted):
+                raise
+            if len(batch) == 1:
+                log.warning("vectors: %s %s too big for one request; skipped", batch[0]["doc_id"], batch[0]["ref"])
+                return
+            half = len(batch) // 2
+            send(batch[:half])
+            send(batch[half:])
+
+    # Batches of at most batch_size units and BATCH_TOKENS estimated tokens.
+    batches: list[list[dict[str, Any]]] = []
+    for unit in todo:
+        cost = estimate_tokens(unit["text"])
+        if not batches or len(batches[-1]) >= batch_size or sum(estimate_tokens(u["text"]) for u in batches[-1]) + cost > BATCH_TOKENS:
+            batches.append([])
+        batches[-1].append(unit)
+    for n, batch in enumerate(batches):
         cost = sum(estimate_tokens(u["text"]) for u in batch)
         if spent + cost > budget_tokens:
             stopped = "budget"
             break
         try:
-            post(
-                f"/admin/vectors/upsert{query}",
-                {"units": [{k: u[k] for k in ("id", "text", "doc_id", "ord", "ref", "type")} for u in batch]},
-            )
+            send(batch)
         except BudgetExhausted as exc:
             stopped = f"workers-ai: {exc}"
             break
@@ -302,7 +327,7 @@ def sync(
         upserted += len(batch)
         for unit in batch:
             have[unit["id"]] = [unit["doc_id"], unit["ord"]]
-        if (start // batch_size) % 20 == 0:
+        if n % 20 == 0:
             save(manifest)
     save(manifest)
     remaining = len([u for u in units if u["id"] not in have])
