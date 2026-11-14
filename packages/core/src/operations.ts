@@ -732,11 +732,26 @@ export async function searchDocuments(
  * Extractive answer: retrieval-only. It returns the best passages verbatim
  * with citations; it never generates or paraphrases legal text.
  */
+/**
+ * Defaults measured on 14 Nov 2026 (153 questions): a 900-character window
+ * with Clef choosing the paragraph put the answer in the quote for 86 of 97
+ * right articles (was 54); children=1 raised regulation answers from 11 to
+ * 17 of 30. Callers may still turn each off (quote_chars=200..., quote_pick=0,
+ * children=0).
+ */
+export const ANSWER_DEFAULTS = { quote_chars: 900, quote_pick: true, children: true } as const;
+
 export async function answerQuestion(
   store: Store,
-  params: SearchParams,
+  requested: SearchParams,
   origin: string,
 ): Promise<AnswerResponse> {
+  const params: SearchParams = {
+    ...requested,
+    quote_chars: requested.quote_chars ?? ANSWER_DEFAULTS.quote_chars,
+    quote_pick: requested.quote_pick ?? ANSWER_DEFAULTS.quote_pick,
+    children: requested.children ?? ANSWER_DEFAULTS.children,
+  };
   const limit = Math.min(5, Math.max(1, params.limit));
   const reranker = params.rerank !== false && wantsRerank(params.q, params.mode) ? store.rerank : undefined;
   // With reranking, Clef sees RERANK_CANDIDATES passages: either the best
@@ -819,7 +834,6 @@ export async function answerQuestion(
   let rerank: AnswerResponse["rerank"];
   let lawTwo = false;
   // children=1: a regulation of the chosen law that joined the focus step.
-  let childOfLaw: string | null = null;
   if (lawPick && reranker && candidates.length + statuteOnly.length > 1) {
     // One entry per statute in search order, regulations last (at most 8 unless asked for).
     const asks = asksRegulation(params.q);
@@ -949,7 +963,6 @@ export async function answerQuestion(
       if (params.children && !both && first.type === "yasa") {
         const child = await chooseRegulation(store, reranker, params, origin, first, rerank);
         if (child) {
-          childOfLaw = child.regulation.id;
           const lead = Math.ceil(focusCount * 0.6);
           targets = child.leads
             ? [
@@ -1054,7 +1067,10 @@ export async function answerQuestion(
   if (base === "high" && top) {
     // A regulation quoted for a general question: the parent law may say otherwise or more.
     // Not when the regulation was offered as one made under the chosen law (children=1).
-    if (statuteFirst && top && candidates[0]?.result.type === "tuzuk" && candidates[0].result.id !== childOfLaw) caps.push("regulation");
+    // Also when the regulation was offered as one made under the chosen law
+    // (children): on 14 Nov that exemption let a regulation answer a question
+    // about the law itself with "high" (deniz/katı atık).
+    if (statuteFirst && top && candidates[0]?.result.type === "tuzuk") caps.push("regulation");
     // The LLM named the statutes it expects to answer, and Clef chose another one:
     // on 2026-11-10 four of the six confident wrong answers were exactly this
     // (Kira (Denetim) -> İskan Yasası, KDV -> KDV İadesi, Hayvan Refahı -> Ceza).
