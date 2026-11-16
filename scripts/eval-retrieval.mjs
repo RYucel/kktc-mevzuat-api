@@ -67,7 +67,7 @@ async function retrieve(c, variant) {
   }
 }
 
-const STAGE1_DOCS = 4; // ceil(RERANK_CANDIDATES / passages) = ceil(10 / 3)
+const STAGE1_DOCS = 8; // ceil(ANSWER_CANDIDATES / passages) = ceil(16 / 2); 4 before 2026-11-16
 const FOCUS = 12; // articles of the chosen statute in the focus step
 
 const rows = [];

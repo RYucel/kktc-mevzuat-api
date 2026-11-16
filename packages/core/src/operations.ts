@@ -18,7 +18,7 @@ import {
 } from "./sql.js";
 import { buildCitation } from "./citation.js";
 import { conceptMatch, type LegalConcept, matchConcepts } from "./legal-concepts.js";
-import { ANSWER_PASSAGES, CHILDREN_OPTIONS, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, TOC_OPTIONS, wantsRerank } from "./rerank.js";
+import { ANSWER_CANDIDATES, ANSWER_PASSAGES, CHILDREN_OPTIONS, LAW_PICK_OPTIONS, RERANK_CANDIDATES, RerankLimitError, TOC_OPTIONS, wantsRerank } from "./rerank.js";
 import { findTerms, TERM_HITS, type TermHit } from "./terms.js";
 import { categoryName } from "./categories.js";
 import { canonicalDocId, categoryDocuments, displayNames, documentCategories, isAmendment, legislationTitles, parentLaw, regulationsOf, STATUTE_ALIASES, supersededStatutes } from "./titles.js";
@@ -770,11 +770,11 @@ export async function answerQuestion(
     : reranker
       ? Math.min(3, Math.max(1, params.passages ?? ANSWER_PASSAGES))
       : 1;
-  // Passages Clef sees in the first step (candidates=, 5-20; default 10).
-  // 14 Nov retrieval measurement: the right statute is in the top 10
-  // documents for 145/153 questions but in the top 4 (what 10 passages at 3
-  // per statute reach) for 118.
-  const stageOne = Math.min(20, Math.max(5, params.candidates ?? RERANK_CANDIDATES));
+  // Passages Clef sees in the first step (candidates=, 5-20; default 16 at
+  // 2 per statute, i.e. 8 statutes). 14 Nov retrieval measurement: the right
+  // statute is in the top 10 documents for 145/153 questions but in the
+  // top 4 (10 passages at 3 per statute) for 118.
+  const stageOne = Math.min(20, Math.max(5, params.candidates ?? ANSWER_CANDIDATES));
   // children: the regulation offered beside the chosen law (for see_also).
   let offeredRegulation: string | null = null;
   const semanticSink: { doc_id: string; ref: string | null }[] = [];

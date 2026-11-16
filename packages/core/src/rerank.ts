@@ -19,6 +19,15 @@ export const RERANK_MODEL = "clef-flash";
 /** Candidates sent to Clef (the measured setting). */
 export const RERANK_CANDIDATES = 10;
 /**
+ * Passages Clef sees in the first step of /v1/answer. Measured 2026-11-16 on
+ * 153 questions (scripts/eval-answer.mjs): 16 passages at 2 per statute
+ * (8 statutes) against 10 at 3 (4 statutes): right article first 66.0% vs
+ * 61.2%, "high" but wrong 10 vs 11, "statute not among candidates" misses
+ * 14 vs 28, Clef 17.7 vs 15.1 neurons per question. 15 at 3 gave 62.1%;
+ * 10 at 1 gave 52.9% (15 Nov).
+ */
+export const ANSWER_CANDIDATES = 16;
+/**
  * Articles per document offered to Clef. Measured 2026-11-05 on 35
  * natural-language questions (scripts/eval-answer.mjs, live /v1/answer):
  *   passages=1: right article first 20.0%, in top 5 22.9%, "high" right 7/17
@@ -26,7 +35,7 @@ export const RERANK_CANDIDATES = 10;
  *   passages=3: 45.7%, 51.4%, 15/18 (all six "low" answers were wrong)
  * Right statute first stayed at 60% for all three; 3 costs ~0.2 s more.
  */
-export const ANSWER_PASSAGES = 3;
+export const ANSWER_PASSAGES = 2; // with ANSWER_CANDIDATES (2026-11-16); 3 before
 const PASSAGE_CHARS = 420;
 
 /** The runtime's daily Clef budget is used up; answers fall back to search order. */
