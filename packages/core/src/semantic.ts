@@ -75,11 +75,12 @@ export function wantsSemantic(query: string, mode: string | undefined): boolean 
 }
 
 /** Reciprocal rank fusion of ranked id lists. */
-export function reciprocalRankFusion(lists: string[][], k = 60): Map<string, number> {
+export function reciprocalRankFusion(lists: string[][], k = 60, weights: number[] = []): Map<string, number> {
   const scores = new Map<string, number>();
-  for (const list of lists) {
+  for (const [n, list] of lists.entries()) {
+    const w = weights[n] ?? 1;
     list.forEach((id, index) => {
-      scores.set(id, (scores.get(id) ?? 0) + 1 / (k + index + 1));
+      scores.set(id, (scores.get(id) ?? 0) + w / (k + index + 1));
     });
   }
   return scores;

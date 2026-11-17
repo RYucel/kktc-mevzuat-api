@@ -276,7 +276,9 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       verify_low: floatParam(c.req.query("verify_low"), "verify_low", 0.15, 0, 1),
       toc: ["1", "true", "yes"].includes((c.req.query("toc") ?? "").toLowerCase()),
       reg_cap: ["1", "true", "yes"].includes((c.req.query("reg_cap") ?? "").toLowerCase()),
-      candidates: c.req.query("candidates") ? intParam(c.req.query("candidates"), "candidates", 10, 5, 20) : undefined,
+      candidates: c.req.query("candidates") ? intParam(c.req.query("candidates"), "candidates", 16, 5, 20) : undefined,
+      semantic_top_k: c.req.query("semantic_top_k") ? intParam(c.req.query("semantic_top_k"), "semantic_top_k", 30, 5, 50) : undefined,
+      semantic_weight: c.req.query("semantic_weight") ? floatParam(c.req.query("semantic_weight"), "semantic_weight", 1, 0.25, 4) : undefined,
       lawpick_n: c.req.query("lawpick_n") ? intParam(c.req.query("lawpick_n"), "lawpick_n", 20, 5, 30) : undefined,
       focus_two: ["1", "true", "yes"].includes((c.req.query("focus2") ?? "").toLowerCase()),
       window: !["0", "false", "no"].includes((c.req.query("window") ?? "").toLowerCase()),
@@ -500,6 +502,8 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
         doc,
         category: categoryParam(c.req.query("category")),
         category_mode: categoryModeParam(c.req.query("category_mode")),
+        semantic_top_k: c.req.query("semantic_top_k") ? intParam(c.req.query("semantic_top_k"), "semantic_top_k", 30, 5, 50) : undefined,
+        semantic_weight: c.req.query("semantic_weight") ? floatParam(c.req.query("semantic_weight"), "semantic_weight", 1, 0.25, 4) : undefined,
       }),
     );
   });

@@ -433,8 +433,14 @@ export async function searchDocuments(
     wantsSemantic(params.q, requestedMode)
   ) {
     let hits: SemanticHit[] = [];
+    // Fused: the first fuseK hits. semantic_probe_k (retrieval measurement)
+    // fetches more for semantic_sink without changing the fused order.
+    const fuseK = Math.min(50, Math.max(1, params.semantic_top_k ?? SEMANTIC_TOP_K));
+    const probeK = Math.max(fuseK, Math.min(50, params.semantic_probe_k ?? 0));
+    let probeHits: SemanticHit[] = [];
     try {
-      hits = await store.semantic.query(semanticText, { topK: Math.min(50, params.semantic_top_k ?? SEMANTIC_TOP_K), type: params.type });
+      probeHits = await store.semantic.query(semanticText, { topK: probeK, type: params.type });
+      hits = probeHits.slice(0, fuseK);
     } catch (error) {
       // The index is optional (e.g. not filled yet); lexical search still works.
       console.warn("semantic search unavailable:", error instanceof Error ? error.message : error);
@@ -461,7 +467,7 @@ export async function searchDocuments(
           .map(({ h }) => h);
     }
     semanticHits = hits;
-    params.semantic_sink?.push(...hits);
+    params.semantic_sink?.push(...(probeK > fuseK ? probeHits : hits));
     const bestHit = new Map<string, SemanticHit>();
     for (const hit of hits) if (!bestHit.has(hit.doc_id)) bestHit.set(hit.doc_id, hit);
     if (bestHit.size) {
@@ -485,7 +491,7 @@ export async function searchDocuments(
       }
       const lexicalOrder = deduped.map(({ row }) => String(row.id));
       const semanticOrder = [...bestHit.keys()].filter((id) => byId.has(id));
-      const fused = reciprocalRankFusion([lexicalOrder, semanticOrder]);
+      const fused = reciprocalRankFusion([lexicalOrder, semanticOrder], 60, [1, params.semantic_weight ?? 1]);
       const primaryIdSet = new Set(primaryRows.map((row) => String(row.id)));
       deduped = [...byId.values()]
         .map(({ row }) => {
@@ -2001,7 +2007,13 @@ export async function retrieveDebug(
   store: Store,
   q: string,
   origin: string,
-  options: { doc?: string; category?: string; category_mode?: "soft" | "hard" } = {},
+  options: {
+    doc?: string;
+    category?: string;
+    category_mode?: "soft" | "hard";
+    semantic_top_k?: number;
+    semantic_weight?: number;
+  } = {},
 ): Promise<{
   docs: { id: string; type: string; refs: string[] }[];
   lexical_docs: string[];
@@ -2026,7 +2038,16 @@ export async function retrieveDebug(
   const [fused, lexical] = await Promise.all([
     searchDocuments(
       store,
-      { ...base, rewrite: !!store.rerank, rewrite_sink: rewriteSink, semantic_sink: semanticSink, semantic_top_k: 50 },
+      {
+        ...base,
+        rewrite: !!store.rerank,
+        rewrite_sink: rewriteSink,
+        semantic_sink: semanticSink,
+        // The fused order as live answers see it; 50 vector hits for the vector metrics.
+        semantic_top_k: options.semantic_top_k,
+        semantic_probe_k: 50,
+        semantic_weight: options.semantic_weight,
+      },
       origin,
     ),
     searchDocuments(store, { ...base, semantic: false, rewrite: false }, origin),
