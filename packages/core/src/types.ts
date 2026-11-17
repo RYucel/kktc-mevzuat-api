@@ -106,8 +106,12 @@ export interface SearchParams {
   reg_cap?: boolean;
   /** /v1/answer: passages Clef sees in its first step (5-20, default 10; measuring). */
   candidates?: number;
-  /** Internal (retrieval measurement): vector hits to fetch (default 30, at most 50). */
+  /** Vector hits fused with the lexical order (default 30, at most 50; measuring). */
   semantic_top_k?: number;
+  /** Internal (retrieval measurement): vector hits to fetch for semantic_sink, beyond those fused (at most 50). */
+  semantic_probe_k?: number;
+  /** Weight of the vector channel in rank fusion (lexical 1; default 1; measuring). */
+  semantic_weight?: number;
   /** /v1/answer: rewrite the question into legal terms and statute names with an LLM (default true). */
   rewrite?: boolean;
   /** /v1/answer: rewrite prompt version ("v1" default, "v2"). */
