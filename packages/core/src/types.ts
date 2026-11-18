@@ -110,7 +110,7 @@ export interface SearchParams {
   semantic_top_k?: number;
   /** Internal (retrieval measurement): vector hits to fetch for semantic_sink, beyond those fused (at most 50). */
   semantic_probe_k?: number;
-  /** Weight of the vector channel in rank fusion (lexical 1; default 1; measuring). */
+  /** Weight of the vector channel in rank fusion (lexical 1; default 1.5). */
   semantic_weight?: number;
   /** /v1/answer: rewrite the question into legal terms and statute names with an LLM (default true). */
   rewrite?: boolean;

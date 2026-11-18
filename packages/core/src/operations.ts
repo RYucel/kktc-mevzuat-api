@@ -120,6 +120,14 @@ const LEGISLATION_TYPES = new Set([
 const MATCHED_TEXT_LIMIT = 8000;
 const CONCEPT_BOOST = 8;
 const SEMANTIC_TOP_K = 30;
+/**
+ * Weight of the vector channel in rank fusion (lexical 1). 17 Nov
+ * eval-retrieval, 153 questions: fused statute @1 72 -> 80, @4 119 -> 120,
+ * Clef reach (first 8 statutes) 132 -> 133; weight 2 dropped @1 to 46.
+ * 18 Nov eval-answer: right article @1 65.3% -> 66.7%, "high" but wrong
+ * 10 -> 7 (Clef 17.4 neurons per question, unchanged).
+ */
+const SEMANTIC_WEIGHT = 1.5;
 /** Articles per document at most (the public API allows 3; the answer focus step more). */
 const MAX_PASSAGES = 20;
 /**
@@ -491,7 +499,7 @@ export async function searchDocuments(
       }
       const lexicalOrder = deduped.map(({ row }) => String(row.id));
       const semanticOrder = [...bestHit.keys()].filter((id) => byId.has(id));
-      const fused = reciprocalRankFusion([lexicalOrder, semanticOrder], 60, [1, params.semantic_weight ?? 1]);
+      const fused = reciprocalRankFusion([lexicalOrder, semanticOrder], 60, [1, params.semantic_weight ?? SEMANTIC_WEIGHT]);
       const primaryIdSet = new Set(primaryRows.map((row) => String(row.id)));
       deduped = [...byId.values()]
         .map(({ row }) => {
