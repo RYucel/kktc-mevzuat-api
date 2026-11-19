@@ -446,6 +446,14 @@ export async function searchDocuments(
     const fuseK = Math.min(50, Math.max(1, params.semantic_top_k ?? SEMANTIC_TOP_K));
     const probeK = Math.max(fuseK, Math.min(50, params.semantic_probe_k ?? 0));
     let probeHits: SemanticHit[] = [];
+    // questions=1: the synthetic-question vectors, queried alongside.
+    const questionQuery =
+      store.questions && params.questions
+        ? store.questions.query(semanticText, { topK: fuseK, type: params.type }).catch((error) => {
+            console.warn("question vectors unavailable:", error instanceof Error ? error.message : error);
+            return [] as SemanticHit[];
+          })
+        : Promise.resolve([] as SemanticHit[]);
     try {
       probeHits = await store.semantic.query(semanticText, { topK: probeK, type: params.type });
       hits = probeHits.slice(0, fuseK);
@@ -474,10 +482,19 @@ export async function searchDocuments(
           .sort((a, b) => a.key - b.key)
           .map(({ h }) => h);
     }
-    semanticHits = hits;
+    let questionHits = await questionQuery;
+    if (hardCategory) questionHits = questionHits.filter((h) => categoryIds!.has(h.doc_id));
+    params.questions_sink?.push(...questionHits);
+    const articleKey = (h: SemanticHit) => `${h.doc_id}\u0000${baseArticleRef(h.ref) ?? h.ref}`;
+    const seenArticles = new Set(hits.map(articleKey));
+    // Article hits for the focus step: the article vectors first, then question-only finds.
+    semanticHits = [...hits, ...questionHits.filter((h) => !seenArticles.has(articleKey(h)))];
     params.semantic_sink?.push(...(probeK > fuseK ? probeHits : hits));
     const bestHit = new Map<string, SemanticHit>();
     for (const hit of hits) if (!bestHit.has(hit.doc_id)) bestHit.set(hit.doc_id, hit);
+    const bestQuestion = new Map<string, SemanticHit>();
+    for (const hit of questionHits) if (!bestQuestion.has(hit.doc_id)) bestQuestion.set(hit.doc_id, hit);
+    for (const [docId, hit] of bestQuestion) if (!bestHit.has(docId)) bestHit.set(docId, hit);
     if (bestHit.size) {
       // Rows for documents the lexical channel missed, or only matched by title.
       const needed = [...bestHit.values()].filter((hit) => {
@@ -498,8 +515,13 @@ export async function searchDocuments(
         }
       }
       const lexicalOrder = deduped.map(({ row }) => String(row.id));
-      const semanticOrder = [...bestHit.keys()].filter((id) => byId.has(id));
-      const fused = reciprocalRankFusion([lexicalOrder, semanticOrder], 60, [1, params.semantic_weight ?? SEMANTIC_WEIGHT]);
+      const semanticOrder = [...new Set(hits.map((h) => h.doc_id))].filter((id) => byId.has(id));
+      const questionOrder = [...bestQuestion.keys()].filter((id) => byId.has(id));
+      const fused = reciprocalRankFusion(
+        [lexicalOrder, semanticOrder, questionOrder],
+        60,
+        [1, params.semantic_weight ?? SEMANTIC_WEIGHT, params.questions_weight ?? 1],
+      );
       const primaryIdSet = new Set(primaryRows.map((row) => String(row.id)));
       deduped = [...byId.values()]
         .map(({ row }) => {
@@ -2021,8 +2043,11 @@ export async function retrieveDebug(
     category_mode?: "soft" | "hard";
     semantic_top_k?: number;
     semantic_weight?: number;
+    questions?: boolean;
+    questions_weight?: number;
   } = {},
 ): Promise<{
+  questions?: { doc_id: string; ref: string | null }[];
   docs: { id: string; type: string; refs: string[] }[];
   lexical_docs: string[];
   semantic: { doc_id: string; ref: string | null }[];
@@ -2043,6 +2068,7 @@ export async function retrieveDebug(
     offset: 0,
     ...(options.category ? { category: options.category, category_mode: options.category_mode ?? "soft" } : {}),
   };
+  const questionsSink: { doc_id: string; ref: string | null }[] = [];
   const [fused, lexical] = await Promise.all([
     searchDocuments(
       store,
@@ -2055,6 +2081,9 @@ export async function retrieveDebug(
         semantic_top_k: options.semantic_top_k,
         semantic_probe_k: 50,
         semantic_weight: options.semantic_weight,
+        questions: options.questions,
+        questions_weight: options.questions_weight,
+        questions_sink: questionsSink,
       },
       origin,
     ),
@@ -2068,6 +2097,7 @@ export async function retrieveDebug(
     docs: fused.results.map((r) => ({ id: r.id, type: r.type, refs: refsOf(r) })),
     lexical_docs: lexical.results.map((r) => r.id),
     semantic: semanticSink.map((h) => ({ doc_id: h.doc_id, ref: h.ref })),
+    ...(options.questions ? { questions: questionsSink.map((h) => ({ doc_id: h.doc_id, ref: h.ref })) } : {}),
     rewrite: rewriteSink[0] && !rewriteSink[0].error ? { documents: rewriteSink[0].documents, terms: rewriteSink[0].terms } : null,
   };
   if (options.doc) {

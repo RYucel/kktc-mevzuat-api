@@ -322,6 +322,7 @@ class D1Store implements Store {
     readonly semantic?: SemanticIndex,
     readonly rerank?: Reranker,
     readonly rewriter?: QueryRewriter,
+    readonly questions?: SemanticIndex,
   ) {}
 
   async all(sql: string, binds: unknown[] = []): Promise<StoreRow[]> {
@@ -378,26 +379,41 @@ class D1Store implements Store {
 /** Dimensions of the trial index (VECTORS_NEXT). */
 const NEXT_DIMS = 128;
 
-async function embed(ai: Ai, texts: string[], dims = SEMANTIC_DIMS): Promise<number[][]> {
+async function embedFull(ai: Ai, texts: string[]): Promise<number[][]> {
   const output = (await ai.run(SEMANTIC_MODEL as Parameters<Ai["run"]>[0], { text: texts } as never)) as {
     data?: number[][];
   };
   if (!output?.data || output.data.length !== texts.length) {
     throw new Error("Workers AI returned no embeddings.");
   }
-  return output.data.map((vector) => truncateEmbedding(vector, dims));
+  return output.data;
 }
+
+async function embed(ai: Ai, texts: string[], dims = SEMANTIC_DIMS): Promise<number[][]> {
+  return (await embedFull(ai, texts)).map((vector) => truncateEmbedding(vector, dims));
+}
+
+/** One query embedding per request, shared by the article and question indexes (both cut from it). */
+type QueryEmbeddings = Map<string, Promise<number[]>>;
 
 class VectorizeSemantic implements SemanticIndex, VectorWriter {
   constructor(
     private readonly ai: Ai,
     private readonly index: Vectorize,
     readonly dims: number = SEMANTIC_DIMS,
+    private readonly shared: QueryEmbeddings = new Map(),
   ) {}
 
   async query(text: string, options: { topK: number; type?: string }): Promise<SemanticHit[]> {
     // The API rejects longer questions; this keeps any other caller bounded too.
-    const [vector] = await embed(this.ai, [queryText(text.slice(0, 1000))], this.dims);
+    const input = queryText(text.slice(0, 1000));
+    let full = this.shared.get(input);
+    if (!full) {
+      full = embedFull(this.ai, [input]).then(([v]) => v);
+      this.shared.set(input, full);
+      full.catch(() => this.shared.delete(input));
+    }
+    const vector = truncateEmbedding(await full, this.dims);
     const result = await this.index.query(vector, {
       topK: Math.min(options.topK, 50),
       returnMetadata: "all",
@@ -470,6 +486,7 @@ export default {
     }
     // ?index=next (admin only): the trial index, for its sync and for measuring it.
     const nextIndex = new URL(request.url).searchParams.get("index") === "next" && bearerIsAdmin(request, env);
+    const shared: QueryEmbeddings = new Map();
     const semantic = !env.AI
       ? undefined
       : nextIndex
@@ -477,8 +494,11 @@ export default {
           ? new VectorizeSemantic(env.AI, env.VECTORS_NEXT, NEXT_DIMS)
           : undefined
         : env.VECTORS
-          ? new VectorizeSemantic(env.AI, env.VECTORS)
+          ? new VectorizeSemantic(env.AI, env.VECTORS, SEMANTIC_DIMS, shared)
           : undefined;
+    // The trial index now holds one vector per article made of its synthetic
+    // questions (OPUS-GOREVLER-5 item 6); searched only with questions=1.
+    const questions = env.AI && env.VECTORS_NEXT && !nextIndex ? new VectorizeSemantic(env.AI, env.VECTORS_NEXT, NEXT_DIMS, shared) : undefined;
     const decide = env.AI
       ? (model: string, input: Record<string, unknown>) =>
           env.AI!.run(`@cf/cloudflare/${model}` as Parameters<Ai["run"]>[0], input as never)
@@ -501,7 +521,7 @@ export default {
       env.AI && env.REWRITE !== "off" && rewriteLimit > 0
         ? llmRewriter(env.AI, env.DB, env.REWRITE_MODEL ?? DEFAULT_REWRITE_MODEL, rewriteLimit, admin ? "llm-admin" : "llm")
         : undefined;
-    const store = new D1Store(env.DB, semantic, rerank, rewriter);
+    const store = new D1Store(env.DB, semantic, rerank, rewriter, questions);
     const app = createApp({
       store,
       runtime: semantic ? "cloudflare-d1+vectorize" : "cloudflare-d1",

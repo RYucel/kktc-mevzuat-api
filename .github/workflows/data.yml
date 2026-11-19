@@ -155,8 +155,7 @@ jobs:
             q="--questions ../data/questions.jsonl.gz"
           fi
           python -m kktc vectors export $q
-          # Trial index (OPUS-GOREVLER-5 item 5): units with document context, 128 dimensions.
-          python -m kktc vectors export --format 2 --dims 128 --units ../data/vector-units-next.jsonl.gz
+          # The second index (128 dims) holds the questions alone; vectors.yml builds its units.
 
       - name: Save version history
         shell: bash
