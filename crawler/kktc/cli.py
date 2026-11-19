@@ -233,7 +233,10 @@ def cmd_vectors(args: argparse.Namespace) -> None:
     from . import vectors
 
     if args.action == "export":
-        stats = vectors.export_units(Path(args.db), Path(args.units), fmt=args.format, dims=args.dims)
+        stats = vectors.export_units(
+            Path(args.db), Path(args.units), fmt=args.format, dims=args.dims,
+            questions_path=Path(args.questions) if args.questions else None,
+        )
         print(json.dumps(stats, ensure_ascii=False, indent=2))
         return
     if args.action == "admin-token":
@@ -337,6 +340,7 @@ def main(argv: list[str] | None = None) -> None:
     vec.add_argument("--format", type=int, default=1, choices=[1, 2], help="unit text format (2: with document context)")
     vec.add_argument("--dims", type=int, default=192, help="vector dimensions of the target index")
     vec.add_argument("--index", default="", choices=["", "next"], help="'next': the second index under trial")
+    vec.add_argument("--questions", default="", help="questions.jsonl.gz (synthetic questions appended to units, format 1)")
     vec.add_argument(
         "--budget-tokens",
         type=int,

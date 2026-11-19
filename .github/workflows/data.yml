@@ -148,7 +148,13 @@ jobs:
       - name: Export vector units
         working-directory: crawler
         run: |
-          python -m kktc vectors export
+          # Synthetic citizen questions per article (questions.yml), appended to the units.
+          q=""
+          if gh release view history --json assets --jq '.assets[].name' 2>/dev/null | grep -qx questions.jsonl.gz; then
+            gh release download history --pattern questions.jsonl.gz --dir ../data --clobber
+            q="--questions ../data/questions.jsonl.gz"
+          fi
+          python -m kktc vectors export $q
           # Trial index (OPUS-GOREVLER-5 item 5): units with document context, 128 dimensions.
           python -m kktc vectors export --format 2 --dims 128 --units ../data/vector-units-next.jsonl.gz
 
