@@ -15,6 +15,15 @@ on:
       concurrency:
         description: "Paralel çağrı"
         default: "2"
+      model:
+        description: "Model: 20b, qwen3, gemma3"
+        default: "20b"
+      sample:
+        description: "1 = 16 örnek madde, kaydetmeden (model karşılaştırması)"
+        default: "0"
+      fresh:
+        description: "1 = önceki soruları yok say, baştan üret"
+        default: "0"
 
 permissions:
   contents: write
@@ -55,7 +64,10 @@ jobs:
         env:
           LIMIT: ${{ inputs.limit }}
           CONCURRENCY: ${{ inputs.concurrency }}
+          MODEL: ${{ inputs.model }}
+          SAMPLE: ${{ inputs.sample }}
+          FRESH: ${{ inputs.fresh }}
         run: node scripts/gen-questions.mjs
       - name: Save questions
-        if: ${{ always() && hashFiles('data/questions.jsonl.gz') != '' }}
+        if: ${{ always() && inputs.sample != '1' && hashFiles('data/questions.jsonl.gz') != '' }}
         run: gh release upload history data/questions.jsonl.gz --clobber
