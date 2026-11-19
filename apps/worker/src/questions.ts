@@ -32,11 +32,11 @@ const COUNTER_DAY = "total";
 const COUNTER_KEY = "questions-cn"; // hundredths of a neuron
 
 export const QUESTIONS_PROMPT = [
-  "Sana numaralı KKTC mevzuat maddeleri verilecek.",
-  "Her madde için, maddenin cevapladığı en fazla 3 ayrı konuyu bul ve her biri için sıradan bir vatandaşın günlük dille soracağı tek cümlelik bir soru yaz.",
-  "Kurallar: madde numarası, yasa adı veya 'bu madde', 'bu yasa' gibi ifadeler kullanma; hukuk terimi yerine halkın kullandığı kelimeleri seç; soru maddede cevabı olan bir şeyi sormalı.",
+  "Sana harflerle işaretli KKTC mevzuat maddeleri verilecek ([A], [B], ...).",
+  "Her madde için, maddenin cevapladığı en fazla 3 ayrı konuyu bul ve her biri için sıradan bir vatandaşın günlük dille soracağı kısa, tek cümlelik bir soru yaz.",
+  "Kurallar: madde numarası, yasa adı veya 'bu madde', 'bu yasa' gibi ifadeler kullanma; hukuk terimi yerine halkın kullandığı kelimeleri seç; soru maddede cevabı olan bir şeyi sormalı; doğal ve dilbilgisi doğru Türkçe yaz.",
   "Madde yalnızca tanım, kısa isim, yürürlük, yürütme ya da kaldırma hükmüyse o madde için hiçbir şey yazma.",
-  "Çıktı biçimi: her satıra bir soru, başında maddenin numarası ve iki nokta (örnek biçim: '2: ... ?'). Başka hiçbir şey yazma.",
+  "Çıktı biçimi: her satıra bir soru; satır maddenin harfi ve iki nokta ile başlar (örnek: 'B: ... ?'). Madde numarası yazma, başka hiçbir şey yazma.",
 ].join("\n");
 
 export interface QuestionItem {
@@ -82,14 +82,37 @@ async function addSpent(db: D1Database, centi: number): Promise<number> {
   return n;
 }
 
-/** Lines "2: ...?" -> questions per article number (1-based); references to the text itself are dropped. */
+const LETTERS = "ABCDEFGH";
+
+/**
+ * Lines "B: ...?" -> questions per article (in input order). The model
+ * sometimes labels with the article's own number instead ("15: ..."), so
+ * labels that are not our letters are assigned by order of appearance: a new
+ * label, or a blank line after questions, starts the next article.
+ * Questions that refer to the text itself or to a statute number are dropped.
+ */
 export function parseQuestions(text: string, count: number): string[][] {
   const out: string[][] = Array.from({ length: count }, () => []);
+  let group = -1;
+  let label: string | null = null;
+  let gap = false;
   for (const raw of text.split(/\r?\n/)) {
-    const m = /^\s*[[(]?(\d+)[\]).:-]+\s*(.+)$/.exec(raw);
+    if (!raw.trim()) {
+      if (label !== null) gap = true;
+      continue;
+    }
+    const m = /^\s*[-*•]?\s*[[(]?([A-Ha-h]|\d+)[\]).:-]+\s*(.+)$/.exec(raw);
     if (!m) continue;
-    const i = Number(m[1]) - 1;
-    let q = m[2].replace(/^[-*•\s]+/, "").replace(/\s+/g, " ").trim();
+    const tag = m[1].toUpperCase();
+    let i: number;
+    if (LETTERS.includes(tag)) i = LETTERS.indexOf(tag);
+    else {
+      if (tag !== label || gap) group += 1;
+      i = group;
+    }
+    label = tag;
+    gap = false;
+    const q = m[2].replace(/\s+/g, " ").trim();
     if (i < 0 || i >= count || !q.endsWith("?") || q.length < 15 || q.length > 200) continue;
     if (/\b(bu|işbu|söz konusu)\s+(madde|yasa|tüzük|fıkra)|\bmadde\s*\d|\d+\/\d{4}|\bfasıl\s*\d/iu.test(q)) continue;
     if (out[i].length < 3 && !out[i].includes(q)) out[i].push(q);
@@ -110,7 +133,7 @@ export async function handleQuestions(request: Request, env: { AI?: Ai; DB: D1Da
   if (!items.length || items.length > ARTICLES_PER_CALL) {
     return json({ error: "invalid_items", message: `1-${ARTICLES_PER_CALL} items` }, 400);
   }
-  const input = items.map((x, i) => `[${i + 1}]\n${x.text.slice(0, ARTICLE_CHARS)}`).join("\n\n");
+  const input = items.map((x, i) => `[${LETTERS[i]}]\n${x.text.slice(0, ARTICLE_CHARS)}`).join("\n\n");
   // Reserve the worst case first, so concurrent calls can never pass the cap.
   const reserve = Math.ceil(neuronsOf(model, { input: Math.ceil((input.length + QUESTIONS_PROMPT.length) / 2), output: MAX_OUTPUT_TOKENS }) * 100);
   const after = await addSpent(env.DB, reserve);
