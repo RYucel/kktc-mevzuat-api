@@ -10,7 +10,9 @@
 //
 // Env: BASE, ADMIN_TOKEN, UNITS (data/vector-units.jsonl.gz),
 // OUT (data/questions.jsonl.gz), LIMIT (articles this run, 0 = all),
-// CONCURRENCY (parallel calls, default 2).
+// CONCURRENCY (parallel calls, default 2), MODEL (20b, qwen3, gemma3),
+// SAMPLE=1: 16 articles spread over the list, printed and not saved (to
+// compare models).
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -23,6 +25,8 @@ const outPath = process.env.OUT ?? "data/questions.jsonl.gz";
 const limit = Number(process.env.LIMIT ?? 0);
 const concurrency = Math.max(1, Number(process.env.CONCURRENCY ?? 2));
 const PER_CALL = 4;
+const model = process.env.MODEL || undefined;
+const sampleMode = process.env.SAMPLE === "1";
 const SUFFIX = "\nSık sorulanlar:";
 
 const readJsonl = (path) =>
@@ -51,12 +55,15 @@ const units = readJsonl(unitsPath).filter(wanted);
 units.sort((a, b) => (a.source !== "gov") - (b.source !== "gov") || a.doc_id.localeCompare(b.doc_id) || Number(a.ord) - Number(b.ord));
 
 const done = new Map();
-if (existsSync(outPath)) for (const row of readJsonl(outPath)) done.set(row.key, row);
+// FRESH=1: start over (a new model or prompt), replacing the file at the end.
+if (existsSync(outPath) && process.env.FRESH !== "1") for (const row of readJsonl(outPath)) done.set(row.key, row);
 const todo = units.filter((u) => !done.has(keyOf(u)));
-const batch = limit > 0 ? todo.slice(0, limit) : todo;
+const step = Math.floor(units.length / 16);
+const batch = sampleMode ? units.filter((_, i) => i % step === 7).slice(0, 16) : limit > 0 ? todo.slice(0, limit) : todo;
 console.log(`articles wanted ${units.length}, done before ${units.length - todo.length}, this run ${batch.length}`);
 
 const save = () => {
+  if (sampleMode) return;
   const lines = [...done.values()].map((row) => JSON.stringify(row)).join("\n");
   writeFileSync(outPath, gzipSync(Buffer.from(lines + "\n", "utf8")));
 };
@@ -76,7 +83,7 @@ async function call(group) {
     const response = await fetch(`${base}/admin/questions`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ items }),
+      body: JSON.stringify({ items, model, debug: sampleMode }),
     });
     const body = await response.json().catch(() => ({}));
     if (response.ok) return body;
@@ -102,6 +109,11 @@ async function worker() {
     calls += 1;
     neurons += body.neurons;
     spent = body.spent;
+    if (sampleMode) {
+      for (const [i, r] of body.results.entries()) console.log(`${group[i].doc_id} ${group[i].ref}: ${r.questions.join(" | ") || "(boş)"}`);
+      if (body.results.some((r) => !r.questions.length)) console.log(`  ham çıktı: ${JSON.stringify(body.raw ?? "").slice(0, 600)}`);
+      console.log(`  tokens ${JSON.stringify(body.tokens)}, ${body.neurons} neurons`);
+    }
     for (const [i, r] of body.results.entries()) {
       const u = group[i];
       done.set(r.id, { key: r.id, doc_id: u.doc_id, ref: u.ref, questions: r.questions });

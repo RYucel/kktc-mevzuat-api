@@ -11,12 +11,20 @@
  * neurons, about $2.64 at $0.011 per 1K) the endpoint refuses with 429.
  */
 
-export const QUESTIONS_MODEL = "@cf/openai/gpt-oss-20b";
+/**
+ * Models to choose from ($ per M input / output tokens, Workers AI pricing
+ * page 19 Nov 2026). The 19 Nov pilot with gpt-oss-20b gave odd Turkish and
+ * empty answers for whole batches, so the choice is measured on samples first.
+ */
+export const QUESTION_MODELS = {
+  "20b": { id: "@cf/openai/gpt-oss-20b", input: 0.2, output: 0.3, api: "responses" },
+  qwen3: { id: "@cf/qwen/qwen3-30b-a3b-fp8", input: 0.051, output: 0.335, api: "chat" },
+  gemma3: { id: "@cf/google/gemma-3-12b-it", input: 0.345, output: 0.556, api: "chat" },
+} as const;
+export type QuestionModel = keyof typeof QUESTION_MODELS;
+export const DEFAULT_QUESTION_MODEL: QuestionModel = "20b";
 /** Steve's limit on 19 Nov 2026 was $3 in all; 240K neurons leave room for the day's normal traffic. */
 export const DEFAULT_QUESTIONS_NEURON_CAP = 240_000;
-/** gpt-oss-20b: $0.20 per M input tokens, $0.30 per M output tokens; $0.011 per 1K neurons. */
-const NEURONS_PER_INPUT_TOKEN = 0.2 / 0.011 / 1000;
-const NEURONS_PER_OUTPUT_TOKEN = 0.3 / 0.011 / 1000;
 export const ARTICLES_PER_CALL = 4;
 const ARTICLE_CHARS = 1200;
 const MAX_OUTPUT_TOKENS = 900;
@@ -45,8 +53,9 @@ function usageTokens(output: unknown, inputChars: number): { input: number; outp
   return { input: Math.ceil(inputChars / 2), output: MAX_OUTPUT_TOKENS, estimated: true };
 }
 
-const neuronsOf = (t: { input: number; output: number }) =>
-  t.input * NEURONS_PER_INPUT_TOKEN + t.output * NEURONS_PER_OUTPUT_TOKEN;
+/** $0.011 per 1K neurons. */
+const neuronsOf = (model: QuestionModel, t: { input: number; output: number }) =>
+  (t.input * QUESTION_MODELS[model].input + t.output * QUESTION_MODELS[model].output) / 0.011 / 1000;
 
 /** Adds `centi` (may be negative) to the job counter and returns the new total. */
 async function addSpent(db: D1Database, centi: number): Promise<number> {
@@ -94,14 +103,16 @@ export async function handleQuestions(request: Request, env: { AI?: Ai; DB: D1Da
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
   if (!env.AI) return json({ error: "ai_unavailable" }, 501);
   const cap = Number(env.QUESTIONS_NEURON_CAP ?? DEFAULT_QUESTIONS_NEURON_CAP);
-  const body = (await request.json().catch(() => null)) as { items?: QuestionItem[] } | null;
+  const body = (await request.json().catch(() => null)) as { items?: QuestionItem[]; model?: string; debug?: boolean } | null;
+  const model: QuestionModel = body?.model && body.model in QUESTION_MODELS ? (body.model as QuestionModel) : DEFAULT_QUESTION_MODEL;
+  const spec = QUESTION_MODELS[model];
   const items = (body?.items ?? []).filter((x) => x && typeof x.id === "string" && typeof x.text === "string");
   if (!items.length || items.length > ARTICLES_PER_CALL) {
     return json({ error: "invalid_items", message: `1-${ARTICLES_PER_CALL} items` }, 400);
   }
   const input = items.map((x, i) => `[${i + 1}]\n${x.text.slice(0, ARTICLE_CHARS)}`).join("\n\n");
   // Reserve the worst case first, so concurrent calls can never pass the cap.
-  const reserve = Math.ceil(neuronsOf({ input: Math.ceil((input.length + QUESTIONS_PROMPT.length) / 2), output: MAX_OUTPUT_TOKENS }) * 100);
+  const reserve = Math.ceil(neuronsOf(model, { input: Math.ceil((input.length + QUESTIONS_PROMPT.length) / 2), output: MAX_OUTPUT_TOKENS }) * 100);
   const after = await addSpent(env.DB, reserve);
   if (after > cap * 100) {
     const spent = await addSpent(env.DB, -reserve);
@@ -109,28 +120,35 @@ export async function handleQuestions(request: Request, env: { AI?: Ai; DB: D1Da
   }
   let output: unknown;
   try {
-    output = await env.AI.run(QUESTIONS_MODEL as Parameters<Ai["run"]>[0], {
-      instructions: QUESTIONS_PROMPT,
-      input,
-      reasoning: { effort: "low" },
-      max_output_tokens: MAX_OUTPUT_TOKENS,
-    } as never);
+    output = await env.AI.run(
+      spec.id as Parameters<Ai["run"]>[0],
+      (spec.api === "responses"
+        ? { instructions: QUESTIONS_PROMPT, input, reasoning: { effort: "low" }, max_output_tokens: MAX_OUTPUT_TOKENS }
+        : {
+            // One user turn (Gemma has no system role); Qwen3 without its thinking step.
+            messages: [{ role: "user", content: `${QUESTIONS_PROMPT}\n\n${input}${model === "qwen3" ? "\n\n/no_think" : ""}` }],
+            max_tokens: MAX_OUTPUT_TOKENS,
+            temperature: 0.3,
+          }) as never,
+    );
   } catch (error) {
     // A failed call may still have been billed: keep the reservation.
     const message = error instanceof Error ? error.message : String(error);
     return json({ error: "model_error", message: message.slice(0, 300) }, /quota|neuron|limit|429/i.test(message) ? 429 : 502);
   }
   const tokens = usageTokens(output, input.length + QUESTIONS_PROMPT.length);
-  const actual = Math.ceil(neuronsOf(tokens) * 100);
+  const actual = Math.ceil(neuronsOf(model, tokens) * 100);
   const spent = await addSpent(env.DB, actual - reserve);
-  const text = modelOutputText(output);
+  const text = modelOutputText(output).replace(/<think>[\s\S]*?<\/think>/g, "");
   const parsed = parseQuestions(text, items.length);
   return json({
     results: items.map((x, i) => ({ id: x.id, questions: parsed[i] })),
     tokens,
+    model,
     neurons: actual / 100,
     spent: spent / 100,
     cap,
+    ...(body?.debug ? { raw: text.slice(0, 3000) } : {}),
   });
 }
 
