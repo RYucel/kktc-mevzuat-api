@@ -35,6 +35,12 @@ export interface Store {
   first(sql: string, binds?: unknown[]): Promise<StoreRow | null>;
   /** Optional vector index (Worker with Workers AI + Vectorize bindings). */
   semantic?: SemanticIndex;
+  /**
+   * Optional second vector index: one vector per article made of its
+   * synthetic citizen questions only (OPUS-GOREVLER-5 item 6). A third
+   * channel in rank fusion when params.questions is set.
+   */
+  questions?: SemanticIndex;
   /** Optional answer reranker (Clef on Workers AI); used by answerQuestion. */
   rerank?: Reranker;
   /** Optional LLM query rewriter (Workers AI); used by answerQuestion. */
@@ -112,6 +118,12 @@ export interface SearchParams {
   semantic_probe_k?: number;
   /** Weight of the vector channel in rank fusion (lexical 1; default 1.5). */
   semantic_weight?: number;
+  /** Use the synthetic-question vectors as a third fusion channel (default false; measuring). */
+  questions?: boolean;
+  /** Weight of the question channel in rank fusion (default 1). */
+  questions_weight?: number;
+  /** Internal (retrieval measurement): receives the question-vector hits. */
+  questions_sink?: { doc_id: string; ref: string | null }[];
   /** /v1/answer: rewrite the question into legal terms and statute names with an LLM (default true). */
   rewrite?: boolean;
   /** /v1/answer: rewrite prompt version ("v1" default, "v2"). */

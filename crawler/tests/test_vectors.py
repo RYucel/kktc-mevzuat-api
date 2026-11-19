@@ -214,3 +214,17 @@ def test_questions_are_appended_to_their_article(tmp_path: Path) -> None:
     assert units[2]["text"] == target["text"] + "\nSık sorulanlar: Vergi ne zaman ödenir?"
     assert units[2]["id"] != target["id"], "the changed text is embedded again"
     assert [u["text"] for i, u in enumerate(units) if i != 2] == [u["text"] for i, u in enumerate(plain) if i != 2]
+
+
+def test_question_units_carry_only_the_questions(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    units = vectors.build_units(db)
+    target = units[3]
+    key = vectors.question_key(target["doc_id"], target["ref"], target["text"].split("\n", 1)[1])
+    qs = {key: ["Vergi ne zaman ödenir?", "Gecikirse ceza var mı?"]}
+    # Units already carrying the questions suffix map to the same key.
+    with_suffix = vectors.build_units(db, 1, qs)
+    out = vectors.question_units(with_suffix, qs)
+    assert len(out) == 1
+    assert out[0]["text"] == "Vergi ne zaman ödenir? Gecikirse ceza var mı?"
+    assert (out[0]["doc_id"], out[0]["ord"], out[0]["ref"]) == (target["doc_id"], target["ord"], target["ref"])

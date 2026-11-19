@@ -95,6 +95,31 @@ def load_questions(path: Optional[Path]) -> dict[str, list[str]]:
     return out
 
 
+def question_units(units: list[dict[str, Any]], questions: dict[str, list[str]], dims: int = NEXT_DIMS) -> list[dict[str, Any]]:
+    """One unit per article made of its synthetic questions only (the trial index, 128 dims).
+
+    Appended to the article text the questions moved vector article@10 only
+    88 -> 94 of 153 (19 Nov 2026); on their own they are not diluted by it.
+    """
+    out = []
+    for unit in units:
+        text = unit["text"].split(QUESTIONS_SUFFIX)[0]
+        if "\n" not in text:
+            continue
+        asked = questions.get(question_key(unit["doc_id"], unit["ref"], text.split("\n", 1)[1]))
+        if not asked:
+            continue
+        body = " ".join(asked)
+        out.append(
+            {
+                **{k: unit[k] for k in ("doc_id", "ord", "ref", "type", "source", "year")},
+                "id": hashlib.sha1(f"q|{MODEL}|{dims}|{unit['doc_id']}|{unit['ord']}|{body}".encode("utf-8")).hexdigest(),
+                "text": body,
+            }
+        )
+    return out
+
+
 def max_vectors(dims: int) -> int:
     return int(5_000_000 / dims * 0.95)
 

@@ -279,6 +279,8 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
       candidates: c.req.query("candidates") ? intParam(c.req.query("candidates"), "candidates", 16, 5, 20) : undefined,
       semantic_top_k: c.req.query("semantic_top_k") ? intParam(c.req.query("semantic_top_k"), "semantic_top_k", 30, 5, 50) : undefined,
       semantic_weight: c.req.query("semantic_weight") ? floatParam(c.req.query("semantic_weight"), "semantic_weight", 1, 0.25, 4) : undefined,
+      questions: ["1", "true", "yes"].includes((c.req.query("questions") ?? "").toLowerCase()),
+      questions_weight: c.req.query("questions_weight") ? floatParam(c.req.query("questions_weight"), "questions_weight", 1, 0.25, 4) : undefined,
       lawpick_n: c.req.query("lawpick_n") ? intParam(c.req.query("lawpick_n"), "lawpick_n", 20, 5, 30) : undefined,
       focus_two: ["1", "true", "yes"].includes((c.req.query("focus2") ?? "").toLowerCase()),
       window: !["0", "false", "no"].includes((c.req.query("window") ?? "").toLowerCase()),
@@ -504,6 +506,8 @@ export function createApp({ store, runtime = "unknown", vectors, adminToken, dec
         category_mode: categoryModeParam(c.req.query("category_mode")),
         semantic_top_k: c.req.query("semantic_top_k") ? intParam(c.req.query("semantic_top_k"), "semantic_top_k", 30, 5, 50) : undefined,
         semantic_weight: c.req.query("semantic_weight") ? floatParam(c.req.query("semantic_weight"), "semantic_weight", 1, 0.25, 4) : undefined,
+        questions: ["1", "true", "yes"].includes((c.req.query("questions") ?? "").toLowerCase()),
+        questions_weight: c.req.query("questions_weight") ? floatParam(c.req.query("questions_weight"), "questions_weight", 1, 0.25, 4) : undefined,
       }),
     );
   });

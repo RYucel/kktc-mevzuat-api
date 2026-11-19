@@ -76,11 +76,16 @@ jobs:
           if grep -qx vectors.json <<<"$assets"; then
             gh release download history --pattern vectors.json --dir data --clobber
           fi
-          for f in vector-units-next.jsonl.gz vectors-next.json; do
-            if grep -qx "$f" <<<"$assets"; then
-              gh release download history --pattern "$f" --dir data --clobber
-            fi
-          done
+          if grep -qx vectors-next.json <<<"$assets"; then
+            gh release download history --pattern vectors-next.json --dir data --clobber
+          fi
+          # Second index (128 dims): one vector per article made of its synthetic
+          # questions only (OPUS-GOREVLER-5 item 6), built from the live units.
+          if grep -qx questions.jsonl.gz <<<"$assets"; then
+            gh release download history --pattern questions.jsonl.gz --dir data --clobber
+            (cd crawler && python -m kktc vectors export-questions --units ../data/vector-units.jsonl.gz \
+              --questions ../data/questions.jsonl.gz --out ../data/vector-units-next.jsonl.gz --dims 128)
+          fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Check the Worker's vector endpoints

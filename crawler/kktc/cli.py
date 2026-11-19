@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import logging
 import sys
@@ -239,6 +240,14 @@ def cmd_vectors(args: argparse.Namespace) -> None:
         )
         print(json.dumps(stats, ensure_ascii=False, indent=2))
         return
+    if args.action == "export-questions":
+        units = vectors.question_units(vectors.load_units(Path(args.units)), vectors.load_questions(Path(args.questions)), args.dims)
+        out = Path(args.out)
+        with gzip.open(out, "wt", encoding="utf-8") as handle:
+            for unit in units:
+                handle.write(json.dumps(unit, ensure_ascii=False) + "\n")
+        print(json.dumps({"question_units": len(units), "est_tokens": sum(vectors.estimate_tokens(u["text"]) for u in units)}))
+        return
     if args.action == "admin-token":
         api_token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
         if not api_token:
@@ -332,7 +341,8 @@ def main(argv: list[str] | None = None) -> None:
     update.set_defaults(func=cmd_update)
 
     vec = sub.add_parser("vectors", help="semantic index: export units / sync to the Worker")
-    vec.add_argument("action", choices=["export", "sync", "admin-token"])
+    vec.add_argument("action", choices=["export", "export-questions", "sync", "admin-token"])
+    vec.add_argument("--out", default=str(DATA_DIR / "vector-units-next.jsonl.gz"), help="export-questions output")
     vec.add_argument("--db", default=str(DB_PATH))
     vec.add_argument("--units", default=str(DATA_DIR / "vector-units.jsonl.gz"))
     vec.add_argument("--manifest", default=str(DATA_DIR / "vectors.json"))
