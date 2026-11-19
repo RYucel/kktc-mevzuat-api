@@ -199,3 +199,18 @@ def test_sync_splits_a_batch_that_is_too_big() -> None:
     summary = vectors.sync(units, {"ids": {}}, post, budget_tokens=10**6)
     assert summary["upserted"] == 6 and summary["remaining"] == 0
     assert max(n for n in calls if n <= 2) <= 2
+
+
+def test_questions_are_appended_to_their_article(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    plain = vectors.build_units(db)
+    target = plain[2]
+    key = vectors.question_key(target["doc_id"], target["ref"], target["text"].split("\n", 1)[1])
+    path = tmp_path / "questions.jsonl.gz"
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        handle.write(json.dumps({"key": key, "doc_id": target["doc_id"], "ref": target["ref"], "questions": ["Vergi ne zaman ödenir?"]}) + "\n")
+        handle.write(json.dumps({"key": "x", "doc_id": "y", "ref": None, "questions": []}) + "\n")
+    units = vectors.build_units(db, 1, vectors.load_questions(path))
+    assert units[2]["text"] == target["text"] + "\nSık sorulanlar: Vergi ne zaman ödenir?"
+    assert units[2]["id"] != target["id"], "the changed text is embedded again"
+    assert [u["text"] for i, u in enumerate(units) if i != 2] == [u["text"] for i, u in enumerate(plain) if i != 2]

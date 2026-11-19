@@ -71,11 +71,35 @@ CONTEXT_CHARS = 200
 NEXT_DIMS = 128
 
 
+# Synthetic citizen questions per article (OPUS-GOREVLER-5 item 6, made by
+# scripts/gen-questions.mjs from the article text alone) are appended to the
+# article's unit, so an everyday question finds the article's vector.
+QUESTIONS_SUFFIX = "\nSık sorulanlar:"
+
+
+def question_key(doc_id: str, ref: Optional[str], body: str) -> str:
+    """Same as keyOf() in scripts/gen-questions.mjs (body: unit text after the first line)."""
+    return hashlib.sha1(f"{doc_id}|{ref or ''}|{body}".encode("utf-8")).hexdigest()
+
+
+def load_questions(path: Optional[Path]) -> dict[str, list[str]]:
+    if not path or not Path(path).exists():
+        return {}
+    out: dict[str, list[str]] = {}
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                row = json.loads(line)
+                if row.get("questions"):
+                    out[row["key"]] = [str(q) for q in row["questions"]][:3]
+    return out
+
+
 def max_vectors(dims: int) -> int:
     return int(5_000_000 / dims * 0.95)
 
 
-def build_units(db_path: Path, fmt: int = 1) -> list[dict[str, Any]]:
+def build_units(db_path: Path, fmt: int = 1, questions: Optional[dict[str, list[str]]] = None) -> list[dict[str, Any]]:
     """One unit per article (parts joined), preamble, or loose paragraph.
 
     ``ord`` is the D1 ordinal of the unit's first chunk; the Worker uses
@@ -131,6 +155,10 @@ def build_units(db_path: Path, fmt: int = 1) -> list[dict[str, Any]]:
             else:
                 head = f"{doc['title']} — {current['ref']}" if current["ref"] else doc["title"]
             text = f"{head}\n{' '.join(current['parts'])}"[:MAX_UNIT_CHARS].strip()
+            if questions and fmt == 1 and "\n" in text:
+                asked = questions.get(question_key(current["doc_id"], current["ref"], text.split("\n", 1)[1]))
+                if asked:
+                    text = f"{text}{QUESTIONS_SUFFIX} {' '.join(asked)}"
             units.append(
                 {
                     "id": _unit_id(current["doc_id"], current["ord"], text),
@@ -183,8 +211,11 @@ def prioritise(units: list[dict[str, Any]], limit: int = MAX_VECTORS) -> list[di
     return ordered[:limit]
 
 
-def export_units(db_path: Path, out_path: Path, fmt: int = 1, dims: int = DIMS) -> dict[str, Any]:
-    units = prioritise(build_units(db_path, fmt), max_vectors(dims))
+def export_units(
+    db_path: Path, out_path: Path, fmt: int = 1, dims: int = DIMS, questions_path: Optional[Path] = None
+) -> dict[str, Any]:
+    questions = load_questions(questions_path)
+    units = prioritise(build_units(db_path, fmt, questions), max_vectors(dims))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(out_path, "wt", encoding="utf-8") as handle:
         for unit in units:
@@ -196,6 +227,7 @@ def export_units(db_path: Path, out_path: Path, fmt: int = 1, dims: int = DIMS) 
         "by_type": {t: sum(1 for u in units if u["type"] == t) for t in LEGISLATION},
         "format": fmt,
         "dims": dims,
+        "with_questions": sum(1 for u in units if QUESTIONS_SUFFIX in u["text"]),
     }
     log.info("vectors: exported %s", stats)
     return stats
