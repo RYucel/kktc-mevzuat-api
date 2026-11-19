@@ -1,0 +1,61 @@
+name: Synthetic questions
+
+# Citizen questions per article (OPUS-GOREVLER-5 item 6) through the Worker's
+# /admin/questions (gpt-oss-20b). The whole job is capped there in neurons
+# (QUESTIONS_NEURON_CAP, default 240K = about $2.64); this workflow only
+# resumes where the last run stopped. Output: questions.jsonl.gz on the
+# "history" release, read by the data build (crawler/kktc/vectors.py).
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Bu çalıştırmada en çok kaç madde (0 = hepsi; önce küçük bir pilot)"
+        default: "40"
+      concurrency:
+        description: "Paralel çağrı"
+        default: "2"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: questions
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      BASE: ${{ vars.WORKER_URL || 'https://kktc-mevzuat-api.stevevaius.workers.dev' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive admin token
+        run: |
+          ADMIN=$(python3 -c "import hashlib,os;print(hashlib.sha256((os.environ['CLOUDFLARE_API_TOKEN']+':kktc-vectors').encode()).hexdigest())")
+          echo "::add-mask::$ADMIN"
+          echo "ADMIN_TOKEN=$ADMIN" >> "$GITHUB_ENV"
+      - name: Download units and earlier questions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          assets=$(gh release view history --json assets --jq '.assets[].name')
+          gh release download history --pattern vector-units.jsonl.gz --dir data --clobber
+          if grep -qx questions.jsonl.gz <<<"$assets"; then
+            gh release download history --pattern questions.jsonl.gz --dir data --clobber
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate
+        env:
+          LIMIT: ${{ inputs.limit }}
+          CONCURRENCY: ${{ inputs.concurrency }}
+        run: node scripts/gen-questions.mjs
+      - name: Save questions
+        if: ${{ always() && hashFiles('data/questions.jsonl.gz') != '' }}
+        run: gh release upload history data/questions.jsonl.gz --clobber

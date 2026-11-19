@@ -26,6 +26,7 @@ import {
   type VectorWriter,
 } from "@kktc/core";
 import { DEFAULT_GATE_PER_MINUTE, gateExempt, passGate } from "./gate";
+import { handleQuestions } from "./questions";
 
 export { TrafficGate } from "./gate";
 
@@ -57,6 +58,8 @@ export interface Env {
   REWRITE_ADMIN_DAILY_LIMIT?: string;
   /** /admin/decide calls per UTC day (default 300). */
   DECIDE_ADMIN_DAILY_LIMIT?: string;
+  /** Neurons the synthetic-question job may spend in all (default 240000, see questions.ts). */
+  QUESTIONS_NEURON_CAP?: string;
   /** Per-client request limit (wrangler.toml [[ratelimits]]). */
   RATE_LIMITER?: RateLimit;
   /** Global per-minute circuit breaker (Durable Object, see gate.ts). */
@@ -438,6 +441,15 @@ export default {
     const limited = await rateLimited(request, env);
     if (limited) return limited;
     const path = new URL(request.url).pathname;
+    if (path === "/admin/questions") {
+      if (!bearerIsAdmin(request, env)) {
+        return new Response(JSON.stringify({ error: { code: "unauthorized", message: "Yetkisiz." } }), {
+          status: 401,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      return handleQuestions(request, env);
+    }
     if (!gateExempt(path) && !bearerIsAdmin(request, env)) {
       const decision = await passGate(env.GATE, Number(env.GATE_PER_MINUTE ?? DEFAULT_GATE_PER_MINUTE));
       if (!decision.allowed) {
