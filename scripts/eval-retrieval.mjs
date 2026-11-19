@@ -82,6 +82,10 @@ for (const [n, c] of cases.entries()) {
       const semDocs = [...new Set(r.semantic.map((h) => h.doc_id))];
       const semDocRank = rank(semDocs, (id) => isDoc(id, c));
       const semArtRank = rank(r.semantic, (h) => isArticle(h.doc_id, h.ref, c));
+      // questions=1: the question-only vectors on their own (one per article).
+      const qHits = r.questions ?? null;
+      const qDocRank = qHits ? rank([...new Set(qHits.map((h) => h.doc_id))], (id) => isDoc(id, c)) : undefined;
+      const qArtRank = qHits ? rank(qHits, (h) => isArticle(h.doc_id, h.ref, c)) : undefined;
       const stage1Article = r.docs.slice(0, STAGE1_DOCS).some((d) => d.refs.some((ref) => isArticle(d.id, ref, c)));
       const lawRank = rank(r.law_articles ?? [], (ref) => isArticle(c.expect, ref, c));
       const result = {
@@ -89,6 +93,8 @@ for (const [n, c] of cases.entries()) {
         lexical_doc_rank: lexRank,
         semantic_doc_rank: semDocRank,
         semantic_article_rank: semArtRank,
+        questions_doc_rank: qDocRank,
+        questions_article_rank: qArtRank,
         stage1_article: stage1Article,
         law_article_rank: lawRank,
         // Within reach of Clef: the statute is among the stage-1 documents and the
@@ -139,6 +145,11 @@ for (const variant of variants) {
     pool10: count((x) => x.pool_k?.[10]),
     only_lex: count((x) => within(x.lexical_doc_rank, 10) && !within(x.semantic_doc_rank, 10)),
     only_sem: count((x) => !within(x.lexical_doc_rank, 10) && within(x.semantic_doc_rank, 10)),
+    has_q: v.some((x) => x.questions_doc_rank !== undefined),
+    qdoc10: count((x) => within(x.questions_doc_rank, 10)),
+    qart10: count((x) => within(x.questions_article_rank, 10)),
+    qart30: count((x) => within(x.questions_article_rank, 30)),
+    q_only: count((x) => within(x.questions_article_rank, 10) && !within(x.semantic_article_rank, 10)),
   };
   summary[variant] = s;
   md.push(
@@ -149,6 +160,14 @@ md.push("", "| Varyant | yasayı yalnız FTS buldu (@10) | yalnız vektör buldu
 for (const variant of variants) {
   const s = summary[variant];
   md.push(`| ${variant || "(canlı)"} | ${s.only_lex} | ${s.only_sem} | ${s.pool5} | ${s.pool8} | ${s.pool10} |`);
+}
+
+if (Object.values(summary).some((s) => s.has_q)) {
+  md.push("", "| Varyant | soru vektörü: yasa @10 | madde @10 | madde @30 | maddeyi yalnız soru vektörü buldu (@10) |", "|---|---|---|---|---|");
+  for (const variant of variants) {
+    const s = summary[variant];
+    if (s.has_q) md.push(`| ${variant} | ${s.qdoc10} | ${s.qart10} | ${s.qart30} | ${s.q_only} |`);
+  }
 }
 
 // Misses of the first variant: where the statute stood in each channel.
