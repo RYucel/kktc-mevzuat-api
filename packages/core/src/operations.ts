@@ -455,7 +455,7 @@ export async function searchDocuments(
           })
         : Promise.resolve([] as SemanticHit[]);
     try {
-      probeHits = await store.semantic.query(semanticText, { topK: probeK, type: params.type });
+      probeHits = await store.semantic.query(semanticText, { topK: probeK, type: params.type, adapt: params.adapter });
       hits = probeHits.slice(0, fuseK);
     } catch (error) {
       // The index is optional (e.g. not filled yet); lexical search still works.
@@ -2045,6 +2045,7 @@ export async function retrieveDebug(
     semantic_weight?: number;
     questions?: boolean;
     questions_weight?: number;
+    adapter?: boolean;
   } = {},
 ): Promise<{
   questions?: { doc_id: string; ref: string | null }[];
@@ -2083,6 +2084,7 @@ export async function retrieveDebug(
         semantic_weight: options.semantic_weight,
         questions: options.questions,
         questions_weight: options.questions_weight,
+        adapter: options.adapter,
         questions_sink: questionsSink,
       },
       origin,
