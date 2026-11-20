@@ -49,7 +49,8 @@ def post(path: str, body: dict, attempts: int = 4) -> dict:
     for attempt in range(attempts):
         req = urllib.request.Request(
             BASE + path, data=data, method="POST",
-            headers={"authorization": f"Bearer {TOKEN}", "content-type": "application/json"},
+            # Cloudflare answers Python-urllib's default user agent with 1010 (blocked signature).
+            headers={"authorization": f"Bearer {TOKEN}", "content-type": "application/json", "user-agent": "kktc-mevzuat-adapter/1.0"},
         )
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
