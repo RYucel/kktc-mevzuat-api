@@ -27,6 +27,11 @@ import {
 } from "@kktc/core";
 import { DEFAULT_GATE_PER_MINUTE, gateExempt, passGate } from "./gate";
 import { handleQuestions } from "./questions";
+import { applyAdapter, handleEmbedQueries, handleVectorGet } from "./adapter";
+import adapterWeights from "./adapter-weights.json";
+
+/** Trained query adapter (scripts/train_adapter.py), or null before one is deployed. */
+const ADAPTER = (adapterWeights as { w: number[][] | null }).w;
 
 export { TrafficGate } from "./gate";
 
@@ -404,7 +409,7 @@ class VectorizeSemantic implements SemanticIndex, VectorWriter {
     private readonly shared: QueryEmbeddings = new Map(),
   ) {}
 
-  async query(text: string, options: { topK: number; type?: string }): Promise<SemanticHit[]> {
+  async query(text: string, options: { topK: number; type?: string; adapt?: boolean }): Promise<SemanticHit[]> {
     // The API rejects longer questions; this keeps any other caller bounded too.
     const input = queryText(text.slice(0, 1000));
     let full = this.shared.get(input);
@@ -413,7 +418,8 @@ class VectorizeSemantic implements SemanticIndex, VectorWriter {
       this.shared.set(input, full);
       full.catch(() => this.shared.delete(input));
     }
-    const vector = truncateEmbedding(await full, this.dims);
+    let vector = truncateEmbedding(await full, this.dims);
+    if (options.adapt && ADAPTER && ADAPTER.length === this.dims) vector = applyAdapter(vector, ADAPTER);
     const result = await this.index.query(vector, {
       topK: Math.min(options.topK, 50),
       returnMetadata: "all",
@@ -457,6 +463,23 @@ export default {
     const limited = await rateLimited(request, env);
     if (limited) return limited;
     const path = new URL(request.url).pathname;
+    if ((path === "/admin/embed-queries" || path === "/admin/vectors/get") && request.method === "POST") {
+      if (!bearerIsAdmin(request, env)) {
+        return new Response(JSON.stringify({ error: { code: "unauthorized", message: "Yetkisiz." } }), {
+          status: 401,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
+      }
+      if (path === "/admin/vectors/get") return handleVectorGet(request, env.VECTORS);
+      if (!env.AI) return new Response(JSON.stringify({ error: "ai_unavailable" }), { status: 501 });
+      const ai = env.AI;
+      // ~1,000 calls of 64 questions cover the 42.9K synthetic questions; capped per day.
+      return handleEmbedQueries(
+        request,
+        (texts) => embedFull(ai, texts),
+        () => takeDaily(env.DB, "embed-admin", 1500),
+      );
+    }
     if (path === "/admin/questions") {
       if (!bearerIsAdmin(request, env)) {
         return new Response(JSON.stringify({ error: { code: "unauthorized", message: "Yetkisiz." } }), {

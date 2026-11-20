@@ -1,0 +1,78 @@
+name: Train query adapter
+
+# Query adapter (scripts/train_adapter.py): a 192x192 map on query embeddings
+# trained on the synthetic (question, article) pairs. Embedding the questions
+# costs ~2.6M Workers AI tokens once (free daily allocation); the vectors are
+# cached on the "history" release. Output: adapter.json on the release, to be
+# committed as apps/worker/src/adapter-weights.json when it helps.
+
+on:
+  workflow_dispatch:
+    inputs:
+      epochs:
+        default: "6"
+      tau:
+        default: "0.05"
+      lr:
+        default: "0.002"
+      reg:
+        default: "0.01"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: adapter
+  cancel-in-progress: false
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      BASE: ${{ vars.WORKER_URL || 'https://kktc-mevzuat-api.stevevaius.workers.dev' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install numpy -r crawler/requirements.txt
+      - name: Derive admin token
+        run: |
+          ADMIN=$(python3 -c "import hashlib,os;print(hashlib.sha256((os.environ['CLOUDFLARE_API_TOKEN']+':kktc-vectors').encode()).hexdigest())")
+          echo "::add-mask::$ADMIN"
+          echo "ADMIN_TOKEN=$ADMIN" >> "$GITHUB_ENV"
+      - name: Download units, questions and caches
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/adapter-cache
+          assets=$(gh release view history --json assets --jq '.assets[].name')
+          gh release download history --pattern vector-units.jsonl.gz --dir data --clobber
+          gh release download history --pattern questions.jsonl.gz --dir data --clobber
+          for f in adapter-articles.npz adapter-queries.npz; do
+            if grep -qx "$f" <<<"$assets"; then
+              gh release download history --pattern "$f" --dir data --clobber
+              mv "data/$f" "data/adapter-cache/${f#adapter-}"
+            fi
+          done
+      - name: Train
+        env:
+          EPOCHS: ${{ inputs.epochs }}
+          TAU: ${{ inputs.tau }}
+          LR: ${{ inputs.lr }}
+          REG: ${{ inputs.reg }}
+        run: python scripts/train_adapter.py
+      - name: Save caches and adapter
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          files=()
+          [[ -f data/adapter-cache/articles.npz ]] && cp data/adapter-cache/articles.npz data/adapter-articles.npz && files+=(data/adapter-articles.npz)
+          [[ -f data/adapter-cache/queries.npz ]] && cp data/adapter-cache/queries.npz data/adapter-queries.npz && files+=(data/adapter-queries.npz)
+          [[ -f data/adapter.json ]] && files+=(data/adapter.json)
+          (( ${#files[@]} )) && gh release upload history "${files[@]}" --clobber || true

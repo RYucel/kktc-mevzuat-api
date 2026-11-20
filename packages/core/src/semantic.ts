@@ -27,7 +27,8 @@ export interface SemanticHit {
 }
 
 export interface SemanticIndex {
-  query(text: string, options: { topK: number; type?: string }): Promise<SemanticHit[]>;
+  /** adapt: apply the trained query adapter (Worker, when weights are deployed). */
+  query(text: string, options: { topK: number; type?: string; adapt?: boolean }): Promise<SemanticHit[]>;
 }
 
 export interface VectorUnit {
