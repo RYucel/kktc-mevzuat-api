@@ -2045,7 +2045,7 @@ export async function retrieveDebug(
     semantic_weight?: number;
     questions?: boolean;
     questions_weight?: number;
-    adapter?: boolean;
+    adapter?: number;
   } = {},
 ): Promise<{
   questions?: { doc_id: string; ref: string | null }[];

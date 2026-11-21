@@ -12,17 +12,26 @@ import { queryText, truncateEmbedding } from "@kktc/core";
 
 export const ADAPTER_DIMS = 192;
 
-/** y = W x, L2-normalised (cosine index: only the direction matters). */
-export function applyAdapter(vector: number[], w: number[][]): number[] {
-  const out = new Array<number>(w.length).fill(0);
+/**
+ * y = alpha * W x + (1 - alpha) * x, L2-normalised (cosine index: only the
+ * direction matters). alpha 1 is the trained map, 0 the plain query.
+ */
+export function applyAdapter(vector: number[], w: number[][], alpha = 1): number[] {
+  const mapped = new Array<number>(w.length).fill(0);
   for (let i = 0; i < w.length; i++) {
     const row = w[i];
     let s = 0;
     for (let j = 0; j < row.length; j++) s += row[j] * vector[j];
-    out[i] = s;
+    mapped[i] = s;
   }
-  const norm = Math.sqrt(out.reduce((a, v) => a + v * v, 0)) || 1;
-  return out.map((v) => v / norm);
+  // Both parts unit length before blending (W was trained without a norm).
+  const unit = (v: number[]) => {
+    const n = Math.sqrt(v.reduce((a, x) => a + x * x, 0)) || 1;
+    return v.map((x) => x / n);
+  };
+  const a = unit(mapped);
+  const b = unit(vector);
+  return unit(a.map((x, i) => alpha * x + (1 - alpha) * b[i]));
 }
 
 const json = (body: unknown, status = 200) =>
