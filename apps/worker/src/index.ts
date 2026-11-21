@@ -409,7 +409,7 @@ class VectorizeSemantic implements SemanticIndex, VectorWriter {
     private readonly shared: QueryEmbeddings = new Map(),
   ) {}
 
-  async query(text: string, options: { topK: number; type?: string; adapt?: boolean }): Promise<SemanticHit[]> {
+  async query(text: string, options: { topK: number; type?: string; adapt?: number }): Promise<SemanticHit[]> {
     // The API rejects longer questions; this keeps any other caller bounded too.
     const input = queryText(text.slice(0, 1000));
     let full = this.shared.get(input);
@@ -419,7 +419,7 @@ class VectorizeSemantic implements SemanticIndex, VectorWriter {
       full.catch(() => this.shared.delete(input));
     }
     let vector = truncateEmbedding(await full, this.dims);
-    if (options.adapt && ADAPTER && ADAPTER.length === this.dims) vector = applyAdapter(vector, ADAPTER);
+    if (options.adapt && ADAPTER && ADAPTER.length === this.dims) vector = applyAdapter(vector, ADAPTER, options.adapt);
     const result = await this.index.query(vector, {
       topK: Math.min(options.topK, 50),
       returnMetadata: "all",
