@@ -136,9 +136,12 @@ const SEMANTIC_WEIGHT = 1.5;
  * among Clef's candidates" 7 vs 13. Below the +8 criterion (+6 both nights);
  * Steve chose to adopt it on 22 Nov, to be switched off if the holdout got
  * worse. Holdout (57 answerable), same day: right article @1 73.7% vs 68.4%,
- * but high-but-wrong 4/16 vs 1/10, so it is off again (adapter=0.7 to use it).
+ * but high-but-wrong 4/16 vs 1/10, so it was off again. Second holdout
+ * (holdout2, 36 answerable, written 22 Nov): 77.8% vs 61.1%, high-but-wrong
+ * 0/14 vs 1/12. Over the three sets +15 right first articles, high-but-wrong
+ * 8 vs 8; Steve chose to turn it on (22 Nov). adapter=0 switches it off.
  */
-const ADAPTER_DEFAULT = 0;
+const ADAPTER_DEFAULT = 0.7;
 /** Articles per document at most (the public API allows 3; the answer focus step more). */
 const MAX_PASSAGES = 20;
 /**
