@@ -128,6 +128,15 @@ const SEMANTIC_TOP_K = 30;
  * 10 -> 7 (Clef 17.4 neurons per question, unchanged).
  */
 const SEMANTIC_WEIGHT = 1.5;
+/**
+ * Query adapter blend (apps/worker/src/adapter.ts; trained on synthetic
+ * questions only). eval-answer, 153 questions, against no adapter:
+ * 21 Nov adapter=1: right article @1 71.7% vs 67.3%, high-but-wrong 7 vs 6;
+ * 22 Nov adapter=0.7: 71.2% vs 67.3%, high-but-wrong 4 vs 6, "statute not
+ * among Clef's candidates" 7 vs 13. Below the +8 criterion (+6 both nights);
+ * Steve chose to adopt it on 22 Nov. adapter=0 switches it off.
+ */
+const ADAPTER_DEFAULT = 0.7;
 /** Articles per document at most (the public API allows 3; the answer focus step more). */
 const MAX_PASSAGES = 20;
 /**
@@ -455,7 +464,7 @@ export async function searchDocuments(
           })
         : Promise.resolve([] as SemanticHit[]);
     try {
-      probeHits = await store.semantic.query(semanticText, { topK: probeK, type: params.type, adapt: params.adapter });
+      probeHits = await store.semantic.query(semanticText, { topK: probeK, type: params.type, adapt: params.adapter ?? ADAPTER_DEFAULT });
       hits = probeHits.slice(0, fuseK);
     } catch (error) {
       // The index is optional (e.g. not filled yet); lexical search still works.

@@ -118,7 +118,7 @@ export interface SearchParams {
   semantic_probe_k?: number;
   /** Weight of the vector channel in rank fusion (lexical 1; default 1.5). */
   semantic_weight?: number;
-  /** Trained query adapter before the article-vector lookup: 0 off, 1 full, between: blend with the plain query (measuring). */
+  /** Trained query adapter before the article-vector lookup: 0 off, 1 full, between: blend with the plain query (default 0.7). */
   adapter?: number;
   /** Use the synthetic-question vectors as a third fusion channel (default false; measuring). */
   questions?: boolean;
