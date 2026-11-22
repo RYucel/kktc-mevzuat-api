@@ -1,0 +1,328 @@
+{
+ "_comment": "İkinci sınama seti (holdout2), 22.11.2026: Steve'in isteğiyle Claude yazdı. Önce gündelik bir durum seçildi, sonra cevabı veren madde yasa metni okunarak bulundu (API'ye sorulmadan; bu setteki yasalar diğer üç sette yok). must: maddeden birebir ifade. Kurallar ayarlanırken bakılmaz; kaçan sorularından kural yazılmaz.",
+ "cases": [
+  {
+   "q": "Arabanın arka koltuğunda oturan yolcunun da emniyet kemeri takması gerekir mi?",
+   "expect": "yasa-29-2012",
+   "ref": "Madde 5",
+   "must": [
+    "emniyet kemerinin kullanılması zorunludur"
+   ]
+  },
+  {
+   "q": "Küçük bir çocuk arabanın ön koltuğunda oturabilir mi?",
+   "expect": "yasa-29-2012",
+   "ref": "Madde 5",
+   "must": [
+    "ön koltukta oturmamak şartıyla"
+   ]
+  },
+  {
+   "q": "Sağlık sorunum yüzünden emniyet kemeri takamıyorum, ne yapmam gerekir?",
+   "expect": "yasa-29-2012",
+   "ref": "Madde 9",
+   "must": [
+    "Sağlık Kurulu Raporu"
+   ]
+  },
+  {
+   "q": "Gece kulübü işletmek için en az kaç yaşında olmak gerekir?",
+   "expect": "yasa-7-2000",
+   "ref": "Madde 6",
+   "must": [
+    "25 yaşını doldurmuş"
+   ]
+  },
+  {
+   "q": "Bir otel önündeki plaja girmem için benden para isteyebilir mi?",
+   "expect": "yasa-26-1993",
+   "ref": "Madde 4",
+   "must": [
+    "ücret talep edilemez"
+   ]
+  },
+  {
+   "q": "1 Ağustos resmi tatil günü mü?",
+   "expect": "yasa-49-1984",
+   "ref": "Ek",
+   "must": [
+    "1 Ağustos (Toplumsal Direniş Bayramı"
+   ]
+  },
+  {
+   "q": "Sendika greve çıkmadan kaç gün önce işverene haber vermeli?",
+   "expect": "yasa-42-1996",
+   "ref": "Madde 16",
+   "must": [
+    "en az dört işgünü önceden"
+   ]
+  },
+  {
+   "q": "Toplu iş sözleşmesi en fazla kaç yıllığına yapılabilir?",
+   "expect": "yasa-42-1996",
+   "ref": "Madde 7",
+   "must": [
+    "iki yıldan uzun süreli olamaz"
+   ]
+  },
+  {
+   "q": "İşveren beni sendikadan istifa etmem şartıyla işe alabilir mi?",
+   "expect": "yasa-13-1971",
+   "ref": "Madde 49",
+   "must": [
+    "sendika üyeliğinden istifa etmesi şartına bağlamak"
+   ]
+  },
+  {
+   "q": "Elektronik imza ile imzaladığım belge ıslak imzalı belge kadar geçerli mi?",
+   "expect": "yasa-93-2007",
+   "ref": "Madde 6",
+   "must": [
+    "elle atılan imza ile aynı hukuki sonucu doğurur"
+   ]
+  },
+  {
+   "q": "Devlet dairesinde haksızlığa uğradım, ombudsmana nasıl başvurabilirim?",
+   "expect": "yasa-38-1996",
+   "ref": "Madde 15",
+   "must": [
+    "formu doldurmak ve imzalamak"
+   ]
+  },
+  {
+   "q": "Köy muhtarı kaç yılda bir seçilir?",
+   "expect": "yasa-43-2009",
+   "ref": "Madde 7",
+   "must": [
+    "dört yılda bir"
+   ]
+  },
+  {
+   "q": "Maaşlı biri olarak yaptığım alışverişlerden yüzde kaç vergi iadesi alabilirim?",
+   "expect": "yasa-31-1996",
+   "ref": "Madde 4",
+   "must": [
+    "%5 Katma Değer Vergisi iadesi oranı"
+   ]
+  },
+  {
+   "q": "Tarlamda bulduğum eski eseri devlete bildirirsem ödül alır mıyım?",
+   "expect": "yasa-60-1994",
+   "ref": "Madde 41",
+   "must": [
+    "yüzdelik esasına göre"
+   ]
+  },
+  {
+   "q": "Kiradaki evin emlak vergisini kiracı mı yoksa ev sahibi mi öder?",
+   "expect": "yasa-50-1995",
+   "ref": "Madde 5",
+   "must": [
+    "o taşınmaz malın sahibi ödemekle yükümlüdür"
+   ]
+  },
+  {
+   "q": "Emlak vergisi hangi aylarda ödenir?",
+   "expect": "yasa-50-1995",
+   "ref": "Madde 24",
+   "must": [
+    "birinci taksiti Nisan, ikinci taksiti Eylül"
+   ]
+  },
+  {
+   "q": "Televizyonda iki reklam arası arasında en az ne kadar süre olmalı?",
+   "expect": "yasa-39-1997",
+   "ref": "Madde 31",
+   "must": [
+    "en az yirmi dakika"
+   ]
+  },
+  {
+   "q": "Çocuğumu kaç yaşına kadar okula göndermek zorundayım?",
+   "expect": "yasa-17-1986",
+   "ref": "Madde 9",
+   "must": [
+    "Onbeş yaşına kadar"
+   ]
+  },
+  {
+   "q": "Devlet okulundaki bir öğretmen akşamları özel dershanede çalışabilir mi?",
+   "expect": "yasa-25-1985",
+   "ref": "Madde 76",
+   "must": [
+    "özel dershane açamazlar"
+   ]
+  },
+  {
+   "q": "Yurt dışından kaç yaşındaki bir otomobili ithal edebilirim?",
+   "expect": "tuzuk-motorlu-tasit-araclari-yas-sinirlandirilmasi-tuzugu",
+   "ref": "Madde 5",
+   "must": [
+    "beş yaşını doldurmuş olması halinde ithal izni verilmez"
+   ]
+  },
+  {
+   "q": "Tarlamdaki otları ve çalıları yakacağım, günün hangi saatlerinde yakabilirim?",
+   "expect": "tuzuk-arazi-yanginlari-ile-mucadele-tuzugu",
+   "ref": "Madde 5",
+   "must": [
+    "sabah saat 5 ile 10 arasında"
+   ]
+  },
+  {
+   "q": "Av yasağı döneminde av köpeğimi doğada gezdirebilir miyim?",
+   "expect": "tuzuk-kapali-mevsimde-dogada-kopek-gezdirme-ile-ilgili-kurallar-ve",
+   "ref": "Madde 5",
+   "must": [
+    "01 Şubat tarihinden"
+   ]
+  },
+  {
+   "q": "Kredi kartı borcumun en az ne kadarını ödemem gerekir?",
+   "expect": "tuzuk-banka-kartlari-ve-kredi-kartlarinin-kullanimina-iliskin-usul",
+   "ref": "Madde 5",
+   "must": [
+    "% 20 (yüzde yirmi)"
+   ]
+  },
+  {
+   "q": "Kredi kartı limitimin ne kadarını nakit olarak çekebilirim?",
+   "expect": "tuzuk-banka-kartlari-ve-kredi-kartlarinin-kullanimina-iliskin-usul",
+   "ref": "Madde 11",
+   "must": [
+    "%50 (yüzde elli)"
+   ]
+  },
+  {
+   "q": "Yabancı biri askeri yasak bölgede ev satın alabilir mi?",
+   "expect": "tuzuk-yabancilarin-tasinmaz-mal-edinmelerine-konan-sinirlamalar-tu",
+   "ref": "Madde 4",
+   "must": [
+    "yabancılar taşınmaz mal edinemezler"
+   ]
+  },
+  {
+   "q": "Müzeler pazar günleri vatandaşlar için ücretsiz mi?",
+   "expect": "tuzuk-muze-ve-oren-yerlerinin-giris-ucretleri-ve-acik-oldugu-saatl",
+   "refs": [
+    "Madde 6",
+    "Madde 7"
+   ],
+   "must": [
+    "Pazar günleri için Kuzey Kıbrıs Türk Cumhuriyeti vatandaşları"
+   ]
+  },
+  {
+   "q": "Apartmanda üst kattaki komşunun arızası için ustanın benim daireme girmesine izin vermek zorunda mıyım?",
+   "expect": "tuzuk-kat-mulkiyeti-ve-kat-irtifaki-tuzugu",
+   "ref": "Madde 10",
+   "must": [
+    "girilmesi gerekiyorsa"
+   ]
+  },
+  {
+   "q": "Döviz bürosu açmak için önce hangi izni almak gerekir?",
+   "expect": "tuzuk-doviz-burolari-kurulus-ve-faaliyet-esaslari-tuzugu",
+   "ref": "Madde 8",
+   "must": [
+    "ön izin almaları zorunludur"
+   ]
+  },
+  {
+   "q": "Tapuda devri yapılmadan sadece sözleşmeyle ev satışı geçerli olur mu?",
+   "expect": "yasa-11-1978",
+   "ref": "Madde 5",
+   "must": [
+    "devir veya ipoteği geçerli değildir"
+   ]
+  },
+  {
+   "q": "Çalışabilecek durumda olan biri devletten sosyal yardım alabilir mi?",
+   "expect": "yasa-72-1989",
+   "ref": "Madde 6",
+   "must": [
+    "Çalışabilecek durumda oldukları halde çalışmayanlara"
+   ]
+  },
+  {
+   "q": "Yaşlı ve yoksul biri hangi şartlarla sosyal yardım alabilir?",
+   "expect": "yasa-72-1989",
+   "ref": "Madde 5",
+   "must": [
+    "Altmış yaşını tamamlamış"
+   ]
+  },
+  {
+   "q": "Tescil ettirdiğim ticaret markası kaç yıl korunur?",
+   "expect": "yasa-fasil-268",
+   "ref": "Madde 22",
+   "must": [
+    "on yıllık bir süre için"
+   ]
+  },
+  {
+   "q": "Piyasada tek başına güçlü olan bir şirket haksız fiyat dayatabilir mi?",
+   "expect": "yasa-36-2009",
+   "ref": "Madde 6",
+   "must": [
+    "hakim konumunu kötüye kullanması yasaktır"
+   ]
+  },
+  {
+   "q": "Özel bir yaşlı bakımevi açmak için kimden izin almam gerekir?",
+   "expect": "yasa-32-2006",
+   "ref": "Madde 5",
+   "must": [
+    "Daireden izin alınması gerekir"
+   ]
+  },
+  {
+   "q": "Bir doktor izin almadan kendi muayenehanesini açabilir mi?",
+   "expect": "yasa-37-2012",
+   "ref": "Madde 5",
+   "must": [
+    "Özel Muayenehane açamaz"
+   ]
+  },
+  {
+   "q": "Aldığım balıkçılık izni ne zamana kadar geçerlidir?",
+   "expect": "yasa-27-2000",
+   "ref": "Madde 7",
+   "must": [
+    "mali yılın sonuna kadar geçerlidir"
+   ]
+  },
+  {
+   "q": "Almanya'da emeklilik yaşı kaçtır?",
+   "unanswerable": true
+  },
+  {
+   "q": "Fransa'da asgari ücret ne kadar?",
+   "unanswerable": true
+  },
+  {
+   "q": "Kanada vatandaşlığı için kaç yıl ikamet gerekir?",
+   "unanswerable": true
+  },
+  {
+   "q": "İtalya'da trafik cezasına nasıl itiraz edilir?",
+   "unanswerable": true
+  },
+  {
+   "q": "Bir kek için kaç yumurta kullanılır?",
+   "unanswerable": true
+  },
+  {
+   "q": "Ay'a ilk kim ayak bastı?",
+   "unanswerable": true
+  },
+  {
+   "q": "Avustralya'da ehliyet kaç yaşında alınır?",
+   "unanswerable": true
+  },
+  {
+   "q": "Python'da bir liste nasıl sıralanır?",
+   "unanswerable": true
+  }
+ ]
+}
