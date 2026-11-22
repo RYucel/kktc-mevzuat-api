@@ -42,6 +42,8 @@ if (sets.includes("questions")) cases.push(...load("eval-questions.json").map((c
 if (sets.includes("keywords")) cases.push(...load("eval-keywords.json").map((c) => ({ ...c, set: "keywords" })));
 // The holdout set is run only after a change is decided, never to tune it.
 if (sets.includes("holdout")) cases.push(...load("eval-holdout.json").map((c) => ({ ...c, set: c.set ? `holdout-${c.set}` : "holdout" })));
+// Second holdout (22 Nov 2026), same rules.
+if (sets.includes("holdout2")) cases.push(...load("eval-holdout2.json").map((c) => ({ ...c, set: "holdout2" })));
 const seen = new Set();
 cases = cases.filter((c) => (seen.has(c.q) ? false : seen.add(c.q)));
 
