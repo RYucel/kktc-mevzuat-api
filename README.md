@@ -111,6 +111,22 @@ Eski `.doc` dosyaları için `soffice` (LibreOffice) veya `catdoc` kuruluysa met
 kurulu değilse belge künye + resmî dosya bağlantısıyla indekslenir (`text_status=metadata`).
 2015 öncesi taranmış PDF'ler OCR gerektirir; varsayılan olarak künye + bağlantı ile indekslenir.
 
+### Hugging Face veri seti
+
+Aynı veritabanı haftalık olarak bir Hugging Face veri setine de dönüştürülür
+(`mevzuat`, `kararlar`, `maddeler`; Parquet). `maddeler` sentetik vatandaş sorularını da taşır,
+embedding eğitimi için hazır (soru, madde) çiftleri verir.
+
+```bash
+python -m pip install -r crawler/requirements-hf.txt
+cd crawler
+python -m kktc hf export --questions ../data/questions.jsonl.gz   # dist/hf/
+HF_TOKEN=... python -m kktc hf push --repo stevevaius/kktc-mevzuat --private
+```
+
+`data.yml` iş akışı `HF_TOKEN` sırrı tanımlıysa bunu her çalıştırmada yapar
+(depo adı: `HF_DATASET_REPO` değişkeni, varsayılan `stevevaius/kktc-mevzuat`).
+
 ## API
 
 Canlı API örnekleri:
