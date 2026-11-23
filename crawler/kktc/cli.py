@@ -6,6 +6,7 @@ import argparse
 import gzip
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -272,6 +273,21 @@ def cmd_vectors(args: argparse.Namespace) -> None:
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
 
+
+def cmd_hf(args: argparse.Namespace) -> None:
+    import os
+
+    from . import hf_export
+
+    if args.action == "export":
+        stats = hf_export.export(Path(args.db), Path(args.out), Path(args.questions) if args.questions else None)
+        print(json.dumps(stats, ensure_ascii=False, indent=2))
+        return
+    if not args.repo:
+        raise SystemExit("--repo is required, e.g. --repo stevevaius/kktc-mevzuat")
+    print(hf_export.push(Path(args.out), args.repo, private=args.private, token=os.environ.get("HF_TOKEN")))
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="kktc",
@@ -358,6 +374,15 @@ def main(argv: list[str] | None = None) -> None:
         help="max input tokens to embed this run (Workers AI free tier: ~9M/day)",
     )
     vec.set_defaults(func=cmd_vectors)
+
+    hf = sub.add_parser("hf", help="Hugging Face dataset: export Parquet / push to the Hub")
+    hf.add_argument("action", choices=["export", "push"])
+    hf.add_argument("--db", default=str(DB_PATH))
+    hf.add_argument("--out", default=str(DIST_DIR / "hf"))
+    hf.add_argument("--questions", default="", help="questions.jsonl.gz (synthetic questions per article)")
+    hf.add_argument("--repo", default=os.environ.get("HF_DATASET_REPO", ""))
+    hf.add_argument("--private", action="store_true", help="create the dataset repo as private (first push only)")
+    hf.set_defaults(func=cmd_hf)
 
     stats = sub.add_parser("stats", help="show index statistics")
     stats.add_argument("--db", default=str(DB_PATH))

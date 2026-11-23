@@ -33,6 +33,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       PYTHONIOENCODING: utf-8
       GH_TOKEN: ${{ github.token }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
       KKTC_CONTACT: ${{ github.server_url }}/${{ github.repository }}
 
     steps:
@@ -156,6 +157,25 @@ jobs:
           fi
           python -m kktc vectors export $q
           # The second index (128 dims) holds the questions alone; vectors.yml builds its units.
+
+      # Hugging Face dataset (mevzuat / kararlar / maddeler), from the same
+      # kktc.db as D1. Skipped without the HF_TOKEN secret; a failed push does
+      # not stop the D1 import. --private only matters when the repo is first
+      # created: make it public on the Hub once you have checked it.
+      - name: Publish Hugging Face dataset
+        if: ${{ env.HF_TOKEN != '' }}
+        continue-on-error: true
+        working-directory: crawler
+        env:
+          HF_DATASET_REPO: ${{ vars.HF_DATASET_REPO || 'stevevaius/kktc-mevzuat' }}
+        run: |
+          python -m pip install -r requirements-hf.txt
+          q=""
+          [[ -f ../data/questions.jsonl.gz ]] && q="--questions ../data/questions.jsonl.gz"
+          python -m kktc hf export $q
+          python -m kktc hf push --private
+          echo "### Hugging Face" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://huggingface.co/datasets/$HF_DATASET_REPO" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save version history
         shell: bash
