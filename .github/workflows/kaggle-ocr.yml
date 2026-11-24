@@ -1,0 +1,104 @@
+name: Kaggle OCR (tam arşiv)
+
+# Metni olmayan mevzuat PDF'lerini Kaggle'da MoganOCR ile okuyan notebook'u her gün yeniden başlatır.
+# Kaggle'ın kendi zamanlayıcısı GPU'ya izin vermediği için tur buradan, Kaggle API ile başlatılır.
+# Notebook kaldığı yerden devam eder (HF'de biten belgeleri atlar) ve ~10,5 saatte kendini kapatır.
+#
+# Gereken secret: KAGGLE_API_TOKEN (kaggle.com/settings → API → Generate New Token; KGAT_ ile başlar).
+#
+# Her çalıştırmada:
+#   - önceki tur hâlâ sürüyorsa      → hiçbir şey yapmaz
+#   - önceki tur "arşiv bitti" dediyse → bu iş akışını kapatır
+#   - önceki tur hata verdiyse        → yeni tur başlatmaz, iş akışı kırmızı biter (GPU boşa gitmesin);
+#                                       düzeltince "Run workflow" → force ile elle başlatılır
+#   - aksi halde                       → notebook'un son kayıtlı sürümünü GPU ile yeniden çalıştırır
+
+on:
+  schedule:
+    # Her gün 03:17 UTC (Kıbrıs 05:17/06:17)
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Önceki tur hata vermiş olsa da yeni tur başlat"
+        type: boolean
+        default: false
+
+permissions:
+  actions: write   # iş bitince bu iş akışını kapatabilmek için
+
+concurrency:
+  group: kaggle-ocr
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KERNEL: stevevaiuscy/notebook8c1a285699
+      DONE_MARKER: "OCR_ARCHIVE_COMPLETE"   # notebook'un koruma hücresi arşiv bitince bunu yazar (log JSON'unda Türkçe harfler kaçışlı olabilir)
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Kaggle CLI
+        run: |
+          if [ -z "$KAGGLE_API_TOKEN" ]; then
+            echo "::error::KAGGLE_API_TOKEN secret'ı tanımlı değil"; exit 1
+          fi
+          pip install -q "kaggle>=1.8"   # KGAT_ token'ları 1.8 ve sonrası destekliyor
+
+      - name: Önceki turun durumu
+        id: prev
+        run: |
+          status=$(kaggle kernels status "$KERNEL" 2>&1 | tr 'A-Z' 'a-z')
+          echo "$status"
+          case "$status" in
+            *running*|*queued*) echo "state=running" >> "$GITHUB_OUTPUT" ;;
+            *error*|*cancel*)   echo "state=error"   >> "$GITHUB_OUTPUT" ;;
+            *)                  echo "state=ok"      >> "$GITHUB_OUTPUT" ;;
+          esac
+          # Son turun kaydı: arşiv bitti mi?
+          mkdir -p out
+          kaggle kernels output "$KERNEL" -p out --file-pattern '.*\.log$' >/dev/null 2>&1 \
+            || kaggle kernels output "$KERNEL" -p out >/dev/null 2>&1 || true
+          if grep -rqs "$DONE_MARKER" out; then
+            echo "done=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Arşiv bittiyse iş akışını kapat
+        if: steps.prev.outputs.done == 'true'
+        run: |
+          echo "Arşivin tamamı OCR'landı; zamanlanmış iş akışı kapatılıyor."
+          gh workflow disable kaggle-ocr.yml --repo "$GITHUB_REPOSITORY"
+
+      - name: Önceki tur sürüyor
+        if: steps.prev.outputs.done != 'true' && steps.prev.outputs.state == 'running'
+        run: echo "Önceki tur hâlâ çalışıyor; bugün yeni tur başlatılmadı."
+
+      - name: Önceki tur hata verdi
+        if: >-
+          steps.prev.outputs.done != 'true' && steps.prev.outputs.state == 'error'
+          && !(github.event_name == 'workflow_dispatch' && inputs.force)
+        run: |
+          echo "::error::Kaggle'daki son tur hata vermiş. Yeni tur başlatılmadı (GPU kotası boşa gitmesin)."
+          echo "Kaggle'da hatayı düzeltip bu iş akışını 'Run workflow' → force ile elle başlat."
+          exit 1
+
+      - name: Yeni tur başlat
+        if: >-
+          steps.prev.outputs.done != 'true' && steps.prev.outputs.state != 'running'
+          && (steps.prev.outputs.state == 'ok' || (github.event_name == 'workflow_dispatch' && inputs.force))
+        run: |
+          kaggle kernels pull "$KERNEL" -p nb -m
+          # GPU (T4 x2) ve internet açık kalsın; notebook vLLM ile GPU'da çalışıyor.
+          python - <<'EOF'
+          import json, pathlib
+          p = pathlib.Path("nb/kernel-metadata.json")
+          m = json.loads(p.read_text())
+          m.update(enable_gpu=True, enable_tpu=False, enable_internet=True, is_private=True)
+          m["machine_shape"] = "NvidiaTeslaT4"  # T4 x2; P100'ü vLLM desteklemiyor
+          p.write_text(json.dumps(m, indent=2, ensure_ascii=False))
+          print(json.dumps(m, indent=2, ensure_ascii=False))
+          EOF
+          kaggle kernels push -p nb
