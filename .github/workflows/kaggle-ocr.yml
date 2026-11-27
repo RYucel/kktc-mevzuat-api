@@ -23,6 +23,10 @@ on:
         description: "Önceki tur hata vermiş olsa da yeni tur başlat"
         type: boolean
         default: false
+      diagnose:
+        description: "Yalnızca son turun durumunu ve günlüğünü yazdır; yeni tur başlatma"
+        type: boolean
+        default: false
 
 permissions:
   actions: write   # iş bitince bu iş akışını kapatabilmek için
@@ -65,20 +69,34 @@ jobs:
           if grep -rqs "$DONE_MARKER" out; then
             echo "done=true" >> "$GITHUB_OUTPUT"
           fi
+          # Son turun günlüğünün sonu: hata verdiyse nedeni burada görünsün (Kaggle sayfasına gitmeden)
+          python - <<'EOF'
+          import json, pathlib
+          for f in sorted(pathlib.Path("out").rglob("*.log")):
+              raw = f.read_text(encoding="utf-8", errors="replace")
+              try:  # notebook günlüğü JSON: [{"stream_name","time","data"}, ...]
+                  lines = "".join(x.get("data", "") for x in json.loads(raw)).splitlines()
+              except Exception:
+                  lines = raw.splitlines()
+              lines = [l for l in lines if "Attempted to load weight" not in l]
+              print(f"::group::{f} (son 80 satır)")
+              print("\n".join(l[:400] for l in lines[-80:]))
+              print("::endgroup::")
+          EOF
 
       - name: Arşiv bittiyse iş akışını kapat
-        if: steps.prev.outputs.done == 'true'
+        if: steps.prev.outputs.done == 'true' && !inputs.diagnose
         run: |
           echo "Arşivin tamamı OCR'landı; zamanlanmış iş akışı kapatılıyor."
           gh workflow disable kaggle-ocr.yml --repo "$GITHUB_REPOSITORY"
 
       - name: Önceki tur sürüyor
-        if: steps.prev.outputs.done != 'true' && steps.prev.outputs.state == 'running'
+        if: steps.prev.outputs.done != 'true' && steps.prev.outputs.state == 'running' && !inputs.diagnose
         run: echo "Önceki tur hâlâ çalışıyor; bugün yeni tur başlatılmadı."
 
       - name: Önceki tur hata verdi
         if: >-
-          steps.prev.outputs.done != 'true' && steps.prev.outputs.state == 'error'
+          !inputs.diagnose && steps.prev.outputs.done != 'true' && steps.prev.outputs.state == 'error'
           && !(github.event_name == 'workflow_dispatch' && inputs.force)
         run: |
           echo "::error::Kaggle'daki son tur hata vermiş. Yeni tur başlatılmadı (GPU kotası boşa gitmesin)."
@@ -87,7 +105,7 @@ jobs:
 
       - name: Yeni tur başlat
         if: >-
-          steps.prev.outputs.done != 'true' && steps.prev.outputs.state != 'running'
+          !inputs.diagnose && steps.prev.outputs.done != 'true' && steps.prev.outputs.state != 'running'
           && (steps.prev.outputs.state == 'ok' || (github.event_name == 'workflow_dispatch' && inputs.force))
         run: |
           kaggle kernels pull "$KERNEL" -p nb -m
